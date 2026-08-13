@@ -9,8 +9,11 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Migrations need a direct (non-pooled) connection: advisory locks are
-    // unreliable through connection poolers like Neon's pgbouncer.
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    // The Prisma CLI (migrate deploy) needs a direct connection: advisory
+    // locks don't work through connection poolers like Neon's PgBouncer.
+    url:
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL_UNPOOLED"] ??
+      process.env["DATABASE_URL"],
   },
 });

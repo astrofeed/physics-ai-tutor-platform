@@ -260,6 +260,29 @@ export async function POST(req: Request) {
           });
         }
 
+        // Generate AI title for new conversations before closing the stream, so
+        // the client receives the title event and serverless runtimes don't kill
+        // the work after the response ends.
+        if (!conversationId && fullContent && (process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY)) {
+          try {
+            const generatedTitle = await generateConversationTitle(message, fullContent);
+            if (generatedTitle) {
+              await prisma.conversation.update({
+                where: { id: convId },
+                data: { title: generatedTitle },
+              });
+              send({ type: "title", title: generatedTitle, conversationId: convId });
+            }
+          } catch (titleError) {
+            logger.warn("Failed to generate conversation title", {
+              route: "/api/chat",
+              userId,
+              conversationId: convId,
+              error: titleError instanceof Error ? titleError.message : String(titleError),
+            });
+          }
+        }
+
         send({ type: "done" });
         if (!clientAborted) {
           try {
@@ -267,28 +290,6 @@ export async function POST(req: Request) {
           } catch {
             clientAborted = true;
           }
-        }
-
-        // Generate AI title for new conversations (fire-and-forget, non-blocking)
-        if (!conversationId && fullContent && (process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY)) {
-          (async () => {
-            try {
-              const generatedTitle = await generateConversationTitle(message, fullContent);
-              if (generatedTitle) {
-                await prisma.conversation.update({
-                  where: { id: convId },
-                  data: { title: generatedTitle },
-                });
-              }
-            } catch (titleError) {
-              logger.warn("Failed to generate conversation title", {
-                route: "/api/chat",
-                userId,
-                conversationId: convId,
-                error: titleError instanceof Error ? titleError.message : String(titleError),
-              });
-            }
-          })();
         }
       },
     });
