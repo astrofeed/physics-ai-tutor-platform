@@ -15,7 +15,6 @@ const config: Config = {
   		fontFamily: {
   			sans: ['var(--font-geist-sans)', ...defaultTheme.fontFamily.sans],
   			mono: ['var(--font-geist-mono)', ...defaultTheme.fontFamily.mono],
-  			display: ['var(--font-display)', ...defaultTheme.fontFamily.serif],
   		},
   		colors: {
   			background: 'hsl(var(--background))',

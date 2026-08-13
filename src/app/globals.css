@@ -38,10 +38,9 @@ body {
 }
 
 @layer base {
-  h1, h2, .font-display {
-    font-family: var(--font-display), Georgia, "Times New Roman", serif;
-    letter-spacing: -0.015em;
-    font-weight: 500;
+  h1, h2 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
   }
 
   *:focus-visible {

@@ -1197,7 +1197,7 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 Visual language is editorial, not "AI dashboard": warm off-white surfaces, stone neutrals, a muted navy primary, hairline borders, `0.375rem` radius, and almost no gradients or shadows.
 
 - Theme tokens live in `src/app/globals.css`; `tailwind.config.ts` maps `gray`/`neutral` to Tailwind `stone` so legacy `text-neutral-*` classes stay on-palette.
-- Display typography: Newsreader via `next/font/google` (`--font-display`), applied automatically to `h1`/`h2` and available as `font-display`. Body text stays on Geist.
+- Typography stays on Geist throughout; hierarchy comes from size, weight (`font-semibold`) and negative tracking on `h1`/`h2`, not from a second typeface.
 - `.eyebrow` — small uppercase label above headings and stat figures.
 - `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
 - Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`). Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`.

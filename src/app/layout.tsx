@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Newsreader } from "next/font/google";
 import SessionProvider from "@/components/providers/SessionProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
@@ -16,12 +15,6 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
-const display = Newsreader({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
 
 export const metadata: Metadata = {
   title: "PhysTutor - AI Physics Tutoring Platform",
@@ -36,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${display.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <SessionProvider>{children}</SessionProvider>
