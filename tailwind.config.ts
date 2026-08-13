@@ -16,11 +16,52 @@ const config: Config = {
   			sans: ['var(--font-geist-sans)', ...defaultTheme.fontFamily.sans],
   			mono: ['var(--font-geist-mono)', ...defaultTheme.fontFamily.mono],
   		},
+  		// Modular type scale (ratio 1.25 from a 15px body), each step carrying its
+  		// own line-height and tracking so sizes cannot be mixed and matched wrongly.
+  		fontSize: {
+  			label: ['0.6875rem', { lineHeight: '1.2', letterSpacing: '0.14em' }],
+  			caption: ['0.75rem', { lineHeight: '1.45' }],
+  			body: ['0.9375rem', { lineHeight: '1.6' }],
+  			'body-lg': ['1.0625rem', { lineHeight: '1.65' }],
+  			subheading: ['1.1875rem', { lineHeight: '1.35', letterSpacing: '-0.01em' }],
+  			heading: ['1.4375rem', { lineHeight: '1.3', letterSpacing: '-0.015em' }],
+  			title: ['1.75rem', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
+  			display: ['2.25rem', { lineHeight: '1.1', letterSpacing: '-0.025em' }],
+  		},
+  		spacing: {
+  			gutter: '1.5rem',
+  			section: '2.5rem',
+  		},
+  		maxWidth: {
+  			// 65 characters keeps prose inside the readable measure
+  			measure: '65ch',
+  			shell: '78rem',
+  		},
+  		boxShadow: {
+  			hairline: '0 1px 0 0 hsl(var(--border))',
+  			raised: '0 1px 2px -1px hsl(30 8% 12% / 0.10), 0 2px 8px -4px hsl(30 8% 12% / 0.08)',
+  			overlay: '0 8px 24px -12px hsl(30 8% 12% / 0.24)',
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			gray: colors.stone,
   			neutral: colors.stone,
+  			// Hand-built navy scale: cooler than the neutrals so it reads as ink on
+  			// warm paper. Used for primary actions, links and chart series 1.
+  			brand: {
+  				'50': '#f4f6f9',
+  				'100': '#e6eaf1',
+  				'200': '#c9d2e0',
+  				'300': '#a4b2c9',
+  				'400': '#7689a8',
+  				'500': '#52678a',
+  				'600': '#3d4f6d',
+  				'700': '#2f3d55',
+  				'800': '#253044',
+  				'900': '#1d2634',
+  				'950': '#131922'
+  			},
   			accent: {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'

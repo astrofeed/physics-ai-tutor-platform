@@ -61,10 +61,10 @@ export default function AdminAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
+    <div className="page-sections">
+      <div className="page-header">
         <p className="eyebrow">Platform</p>
-        <h1 className="mt-1.5 text-[28px] leading-tight text-gray-900 dark:text-gray-100">Admin analytics</h1>
+        <h1 className="page-title">Admin analytics</h1>
       </div>
 
       <StatBand

@@ -149,10 +149,10 @@ export default function DashboardClient({
   })();
 
   return (
-    <div className="space-y-8 sm:space-y-12 pb-8">
-      <div className="pt-1">
+    <div className="page-sections pb-8">
+      <div className="page-header">
         <p className="eyebrow">{date}</p>
-        <h1 className="mt-1.5 text-[28px] md:text-[34px] leading-tight text-gray-900 dark:text-gray-100">
+        <h1 className="page-title md:text-display">
           Good to see you, {userName}
         </h1>
       </div>
@@ -161,7 +161,7 @@ export default function DashboardClient({
 
       <div>
         <SectionHeading title="Jump back in" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border border border-border rounded-lg overflow-hidden">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
           {filteredQuickStart.slice(0, 6).map((item) => (
             <Link
               key={item.href + item.label}
@@ -180,7 +180,7 @@ export default function DashboardClient({
 
       <div>
         <SectionHeading title="Recent activity" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-gutter lg:grid-cols-2">
           <RecentConversationsCard conversations={recentConversations} />
           {isStaffRole ? (
             <OpenAppealsCard appeals={openAppeals} />

@@ -133,10 +133,13 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div>
+    <div className="page-sections">
+      <div className="page-header">
         <p className="eyebrow">Your record</p>
-        <h1 className="mt-1.5 text-[28px] leading-tight text-gray-900 dark:text-gray-100">Learning analytics</h1>
+        <h1 className="page-title">Learning analytics</h1>
+        <p className="page-lede">
+          Measured from your own visits, messages and submissions.
+        </p>
       </div>
 
       <StatBand
@@ -162,7 +165,7 @@ export default function AnalyticsPage() {
       />
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-gutter lg:grid-cols-2">
         {/* Weekly Activity */}
         <Card>
           <CardHeader>

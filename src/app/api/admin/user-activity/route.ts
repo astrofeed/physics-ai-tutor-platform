@@ -7,20 +7,13 @@ import {
   ACTIVITY_FILTER_CATEGORIES,
   SESSION_GAP_MS,
 } from "@/lib/activity";
-import { CATEGORY_LABELS } from "@/lib/constants";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_COLORS,
+  CATEGORY_COLOR_FALLBACK,
+} from "@/lib/constants";
 
 const ALL_CATEGORIES: string[] = [...ACTIVITY_CATEGORIES];
-
-const CATEGORY_COLORS: Record<string, string> = {
-  AI_CHAT: "#6366f1",
-  ASSIGNMENT_VIEW: "#8b5cf6",
-  ASSIGNMENT_SUBMIT: "#a78bfa",
-  GRADING: "#10b981",
-  SIMULATION: "#f59e0b",
-  PROBLEM_GEN: "#ec4899",
-  ANALYTICS_VIEW: "#06b6d4",
-  ADMIN_ACTION: "#64748b",
-};
 
 /**
  * Build SQL WHERE conditions based on filter parameters.
@@ -278,7 +271,7 @@ export async function GET(req: Request) {
       label: CATEGORY_LABELS[g.category] || g.category,
       totalMs: g._sum.durationMs || 0,
       count: g._count.id,
-      color: CATEGORY_COLORS[g.category] || "#94a3b8",
+      color: CATEGORY_COLORS[g.category] || CATEGORY_COLOR_FALLBACK,
     })).sort((a, b) => b.totalMs - a.totalMs);
 
     // Time by role — from aggregated DB results
@@ -299,7 +292,7 @@ export async function GET(req: Request) {
       id: a.id,
       category: a.category,
       categoryLabel: CATEGORY_LABELS[a.category] || a.category,
-      categoryColor: CATEGORY_COLORS[a.category] || "#94a3b8",
+      categoryColor: CATEGORY_COLORS[a.category] || CATEGORY_COLOR_FALLBACK,
       detail: a.detail,
       durationMs: a.durationMs,
       createdAt: a.createdAt.toISOString(),

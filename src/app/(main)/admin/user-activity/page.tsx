@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTheme } from "next-themes";
 import { CATEGORY_LABELS, ROLE_BADGE_COLORS } from "@/lib/constants";
 import { formatDuration, timeAgo } from "@/lib/utils";
 import { SESSION_GAP_MS } from "@/lib/activity";
@@ -112,8 +111,6 @@ export default function AdminUserActivityPage() {
     "activity"
   );
   const [csvLoading, setCsvLoading] = useState(false);
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -223,12 +220,11 @@ export default function AdminUserActivityPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight dark:text-gray-100">
-          User Activity
-        </h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+    <div className="page-sections">
+      <div className="page-header">
+        <p className="eyebrow">Platform</p>
+        <h1 className="page-title">User activity</h1>
+        <p className="page-lede">
           Monitor how users engage with platform features
         </p>
       </div>
@@ -331,11 +327,10 @@ export default function AdminUserActivityPage() {
           <ActivityChart
             dailyTrend={data.dailyTrend}
             trendCategories={data.trendCategories}
-            isDark={isDark}
           />
 
           {/* Two-column: Top Users + Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-gutter lg:grid-cols-2">
             {/* Top Users */}
             <Card className="flex flex-col">
               <CardHeader>

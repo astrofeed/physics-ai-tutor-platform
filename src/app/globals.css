@@ -28,19 +28,62 @@ body {
 
   /* Small caps label used above sections and stat figures */
   .eyebrow {
-    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400;
+    @apply text-label font-medium uppercase text-gray-500 dark:text-gray-400;
   }
 
   /* Hairline-ruled band of figures — replaces stacks of identical stat cards */
   .stat-band {
     @apply grid gap-px overflow-hidden rounded-lg border border-border bg-border;
   }
+
+  /* Page shell: one centred column with a fixed measure, so wide screens get
+     margins instead of stretched dashboards. */
+  .page-shell {
+    @apply mx-auto w-full max-w-shell;
+  }
+
+  /* Vertical rhythm between page sections (24px inside, 40px between) */
+  .page-sections {
+    @apply space-y-section;
+  }
+
+  .page-header {
+    @apply border-b border-border pb-5;
+  }
+
+  .page-title {
+    @apply mt-1.5 text-title text-gray-900 dark:text-gray-100;
+  }
+
+  .page-lede {
+    @apply mt-2 max-w-measure text-body text-muted-foreground;
+  }
+
+  .section-title {
+    @apply text-subheading font-semibold text-gray-900 dark:text-gray-100;
+  }
+
+  /* 12-column grid for page-level composition; components keep using flex */
+  .grid-12 {
+    @apply grid grid-cols-4 gap-gutter md:grid-cols-8 lg:grid-cols-12;
+  }
+
+  .measure {
+    @apply max-w-measure;
+  }
 }
 
 @layer base {
-  h1, h2 {
-    letter-spacing: -0.02em;
-    font-weight: 600;
+  h1 {
+    @apply text-title font-semibold;
+  }
+
+  h2 {
+    @apply text-heading font-semibold;
+  }
+
+  h3 {
+    @apply text-subheading font-semibold;
   }
 
   *:focus-visible {

@@ -1196,11 +1196,16 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 
 Visual language is editorial, not "AI dashboard": warm off-white surfaces, stone neutrals, a muted navy primary, hairline borders, `0.375rem` radius, and almost no gradients or shadows.
 
-- Theme tokens live in `src/app/globals.css`; `tailwind.config.ts` maps `gray`/`neutral` to Tailwind `stone` so legacy `text-neutral-*` classes stay on-palette.
-- Typography stays on Geist throughout; hierarchy comes from size, weight (`font-semibold`) and negative tracking on `h1`/`h2`, not from a second typeface.
+Full spec: [`docs/design-system.md`](./docs/design-system.md). Read it before adding UI.
+
+- Theme tokens live in `src/app/globals.css`; `tailwind.config.ts` maps `gray`/`neutral` to Tailwind `stone` so legacy `text-neutral-*` classes stay on-palette, and adds the `brand-50..950` navy scale.
+- Typography stays on Geist throughout. Sizes come from the named scale in `tailwind.config.ts` (`text-label`/`caption`/`body`/`body-lg`/`subheading`/`heading`/`title`/`display`), each of which carries its own line-height and tracking. `h1`/`h2`/`h3` are sized in the base layer — do not restate sizes per page, and do not add arbitrary `text-[28px]` values.
+- Layout: `MainLayoutClient` wraps routes in `.page-shell` (`max-w-shell`, centred, `px-gutter py-8`); `FULL_BLEED_ROUTES` (`/chat`, `/simulations`) opt out. Pages compose with `.page-sections` → `.page-header` / `.page-title` / `.page-lede`, `gap-gutter` between cards, `.measure` for prose, `.grid-12` for asymmetric page grids. Pages must not set their own outer padding.
+- Elevation is limited to `shadow-hairline` / `shadow-raised` / `shadow-overlay`.
 - `.eyebrow` — small uppercase label above headings and stat figures.
 - `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
-- Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`). Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`.
+- Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`) and, for activity categories, `CATEGORY_COLORS` in `src/lib/constants.ts`. Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`, and do not branch chart colors on `resolvedTheme`; tokens already handle dark mode.
+- Dashboard cards use `.card-minimal` with a hairline header rule, `.section-title`, and text-first empty states. No icon-in-circle accents, no `rounded-xl`/`rounded-2xl`, no `shadow-sm` floating cards.
 - Labels must say what is actually measured: "visits" for `UserActivity` rows, "messages" for chat messages, "events" for the mixed heatmap, and "sessions" only for gap-derived sessions (see below).
 
 ## Activity & Usage Metrics
@@ -1441,7 +1446,7 @@ Duplicated pure functions and constant maps are consolidated into shared modules
 - **`src/lib/diagram-utils.ts`** — `getDiagramContent(diagram)`: Extracts diagram content from various formats (Prisma JSON, raw SVG string, etc.). Used by assignment detail and edit pages.
 - **`src/lib/constants.ts`** — Shared constant maps:
   - `CATEGORY_LABELS`: Activity category display labels (e.g., `AI_CHAT` → `"AI Chat"`)
-  - `CATEGORY_COLORS`: Activity category hex colors for charts
+  - `CATEGORY_COLORS`: Activity category chart colors as theme tokens (`hsl(var(--chart-N))`), plus `CATEGORY_COLOR_FALLBACK`. Single source of truth — the admin activity API imports it instead of redeclaring its own map.
   - `ROLE_BADGE_COLORS`: Tailwind classes for role badges (ADMIN, PROFESSOR, TA, STUDENT)
 - **`src/lib/utils.ts`** — Added shared utility functions:
   - `formatDuration(ms)`: Formats milliseconds as human-readable duration (`"<1s"`, `"5m 30s"`, `"1h 30m"`)
