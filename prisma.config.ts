@@ -11,6 +11,9 @@ export default defineConfig({
   datasource: {
     // The Prisma CLI (migrate deploy) needs a direct connection: advisory
     // locks don't work through connection poolers like Neon's PgBouncer.
-    url: process.env["DATABASE_URL_UNPOOLED"] ?? process.env["DATABASE_URL"],
+    url:
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL_UNPOOLED"] ??
+      process.env["DATABASE_URL"],
   },
 });
