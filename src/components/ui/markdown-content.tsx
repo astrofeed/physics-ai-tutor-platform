@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import { Check, Copy, Play, Edit3, Save } from "lucide-react";
@@ -298,7 +299,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
   return (
     <div ref={contentRef} className={`min-w-0 ${className ?? ""}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
           p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -359,6 +360,26 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
             </blockquote>
           ),
           hr: () => <hr className="my-3 border-gray-200 dark:border-gray-700" />,
+          table: ({ children }) => (
+            <div className="my-3 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+              <table className="w-full border-collapse text-sm">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">{children}</tbody>
+          ),
+          tr: ({ children }) => <tr>{children}</tr>,
+          th: ({ children }) => (
+            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 align-top">{children}</td>
+          ),
         }}
       >
         {normalizeLatex(content)}
