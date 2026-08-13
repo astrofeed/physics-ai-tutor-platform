@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useEffect } from "react";
 import { Send, ImageIcon, X, Square, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,12 @@ export function ChatInput({
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!loading) {
+      textareaRef.current?.focus();
+    }
+  }, [loading]);
 
   const autoResizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
