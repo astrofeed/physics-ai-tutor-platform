@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { resolveTimezone, toDateKey } from "@/lib/activity";
+import { resolveTimezone, summarizeSessions, toDateKey } from "@/lib/activity";
 
 export async function GET(req: Request) {
   try {
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     // Extra day of slack so the oldest local day is fully covered
     const weekAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
 
-    const [submissions, messages, conversations, totalMessages, trackedTime] = await Promise.all([
+    const [submissions, messages, conversations, totalMessages, activities] = await Promise.all([
       prisma.submission.findMany({
         where: { userId },
         include: {
@@ -38,9 +38,10 @@ export async function GET(req: Request) {
       }),
       prisma.conversation.count({ where: { userId } }),
       prisma.message.count({ where: { conversation: { userId } } }),
-      prisma.userActivity.aggregate({
+      prisma.userActivity.findMany({
         where: { userId },
-        _sum: { durationMs: true },
+        select: { createdAt: true, durationMs: true },
+        orderBy: { createdAt: "asc" },
       }),
     ]);
 
@@ -76,7 +77,14 @@ export async function GET(req: Request) {
     const averagePercent = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100) : 0;
 
     // Measured foreground time on tracked pages — not an estimate from message counts
-    const trackedStudyMinutes = Math.round((trackedTime._sum.durationMs || 0) / 60000);
+    const trackedStudyMinutes = Math.round(
+      activities.reduce((sum, a) => sum + Math.max(a.durationMs ?? 0, 0), 0) / 60000
+    );
+
+    // Visits grouped into sessions by inactivity gap
+    const sessions = summarizeSessions(activities);
+    const avgSessionMinutes =
+      sessions.count > 0 ? Math.round(sessions.totalMs / sessions.count / 60000) : 0;
 
     return NextResponse.json({
       overview: {
@@ -85,6 +93,8 @@ export async function GET(req: Request) {
         totalConversations: conversations,
         totalSubmissions: submissions.length,
         trackedStudyMinutes,
+        sessionCount: sessions.count,
+        avgSessionMinutes,
       },
       weeklyActivity: Object.entries(dailyActivity).map(([date, count]) => ({
         date,

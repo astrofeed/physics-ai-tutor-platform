@@ -29,6 +29,8 @@ interface AnalyticsData {
     totalConversations: number;
     totalSubmissions: number;
     trackedStudyMinutes: number;
+    sessionCount: number;
+    avgSessionMinutes: number;
   };
   weeklyActivity: { date: string; day: string; messages: number }[];
   scoreHistory: {
@@ -140,11 +142,20 @@ export default function AnalyticsPage() {
       <StatBand
         items={[
           { label: "Average score", value: `${data.overview.averagePercent}%`, hint: "Graded submissions" },
-          { label: "Messages", value: data.overview.totalMessages, hint: `${data.overview.totalConversations} conversations` },
+          {
+            label: "Study sessions",
+            value: data.overview.sessionCount,
+            hint: `${formatStudyTime(data.overview.avgSessionMinutes)} long on average, first to last visit`,
+          },
           {
             label: "Time on platform",
             value: formatStudyTime(data.overview.trackedStudyMinutes),
-            hint: "Measured while pages were open",
+            hint: "Foreground time only, idle excluded",
+          },
+          {
+            label: "Messages",
+            value: data.overview.totalMessages,
+            hint: `${data.overview.totalConversations} conversations`,
           },
           { label: "Submissions", value: data.overview.totalSubmissions, hint: "Assignments handed in" },
         ]}

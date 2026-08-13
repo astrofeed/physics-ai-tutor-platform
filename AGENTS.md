@@ -1201,7 +1201,7 @@ Visual language is editorial, not "AI dashboard": warm off-white surfaces, stone
 - `.eyebrow` — small uppercase label above headings and stat figures.
 - `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
 - Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`). Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`.
-- Labels must say what is actually measured (visits / messages / events), never "sessions".
+- Labels must say what is actually measured: "visits" for `UserActivity` rows, "messages" for chat messages, "events" for the mixed heatmap, and "sessions" only for gap-derived sessions (see below).
 
 ## Activity & Usage Metrics
 
@@ -1209,7 +1209,8 @@ Shared activity contracts live in `src/lib/activity.ts` (categories, filter grou
 
 - **Time**: `useTrackTime` (`src/lib/use-track-time.ts`) measures *foreground* time only — the clock pauses on `visibilitychange`, flushes every 60s / on `pagehide` / on unmount, and each flush sends the running total which `POST /api/activity` overwrites (idempotent). Durations are validated finite + non-negative with Zod and capped at `MAX_ACTIVITY_DURATION_MS` (2h per visit).
 - `/api/analytics` returns `trackedStudyMinutes` — the sum of recorded `UserActivity.durationMs`. The previous `estimatedStudyMinutes` (`totalMessages * 1.5`) heuristic was removed; never estimate time from message counts.
-- **Counts**: `UserActivity` rows are page visits, not sessions. The heatmap intentionally mixes activity rows, user chat messages, and submissions, so it is labeled "events recorded per day". There is currently no session model (no inactivity-gap grouping).
+- **Counts**: `UserActivity` rows are page visits. The heatmap intentionally mixes activity rows, user chat messages, and submissions, so it is labeled "events recorded per day" — never call that total a session count.
+- **Sessions**: derived from visit timestamps, not stored. `summarizeSessions()` in `src/lib/activity.ts` walks a single user's visits in order and starts a new session when a visit begins more than `SESSION_GAP_MS` (30 min) after the previous visit ended; a session's length spans its first visit's start to its last visit's end, so overlapping tabs are not double counted. `/api/analytics` uses that helper; `/api/admin/user-activity` computes the same rule in SQL with window functions (`sessionCount`, `avgSessionMs`) so it stays a single aggregate query. Sessions must always be grouped per user before splitting on the gap.
 - **Timezone**: any user-facing day bucketing must go through `toDateKey(date, tz)` with `resolveTimezone(searchParams.get("tz"))`; clients pass `?tz=` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
 
 ## Testing

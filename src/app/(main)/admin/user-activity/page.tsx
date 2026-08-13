@@ -15,6 +15,7 @@ import {
 import { useTheme } from "next-themes";
 import { CATEGORY_LABELS, ROLE_BADGE_COLORS } from "@/lib/constants";
 import { formatDuration, timeAgo } from "@/lib/utils";
+import { SESSION_GAP_MS } from "@/lib/activity";
 import { ActivityChart } from "@/components/admin/ActivityChart";
 import { UsageBreakdown } from "@/components/admin/UsageBreakdown";
 
@@ -47,6 +48,8 @@ interface ActivityData {
   summary: {
     totalActivities: number;
     uniqueUsers: number;
+    sessionCount: number;
+    avgSessionMs: number;
     totalTimeMs: number;
     avgDailyActivities: number;
   };
@@ -128,7 +131,8 @@ export default function AdminUserActivityPage() {
         setData(json);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[admin/user-activity] Failed to load activity data:", err);
         setData(null);
         setLoading(false);
       });
@@ -302,9 +306,13 @@ export default function AdminUserActivityPage() {
           <StatBand
             items={[
               {
-                label: "Recorded events",
-                value: data.summary.totalActivities.toLocaleString(),
-                hint: "Page visits, not sessions",
+                label: "Sessions",
+                value: data.summary.sessionCount.toLocaleString(),
+                hint: `Split after ${SESSION_GAP_MS / 60000} min idle`,
+              },
+              {
+                label: "Average session",
+                value: data.summary.avgSessionMs > 0 ? formatDuration(data.summary.avgSessionMs) : "--",
               },
               { label: "Unique users", value: data.summary.uniqueUsers },
               {
@@ -312,7 +320,11 @@ export default function AdminUserActivityPage() {
                 value: data.summary.totalTimeMs > 0 ? formatDuration(data.summary.totalTimeMs) : "--",
                 hint: "Foreground time on tracked pages",
               },
-              { label: "Events per day", value: data.summary.avgDailyActivities, hint: "Average" },
+              {
+                label: "Recorded events",
+                value: data.summary.totalActivities.toLocaleString(),
+                hint: `${data.summary.avgDailyActivities}/day average`,
+              },
             ]}
           />
 

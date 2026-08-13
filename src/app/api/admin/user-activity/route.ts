@@ -2,34 +2,14 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_FILTER_CATEGORIES,
+  SESSION_GAP_MS,
+} from "@/lib/activity";
+import { CATEGORY_LABELS } from "@/lib/constants";
 
-const FILTER_CATEGORIES: Record<string, string[]> = {
-  chat: ["AI_CHAT"],
-  simulation: ["SIMULATION"],
-  submission: ["ASSIGNMENT_SUBMIT", "ASSIGNMENT_VIEW"],
-};
-
-const ALL_CATEGORIES = [
-  "AI_CHAT",
-  "ASSIGNMENT_VIEW",
-  "ASSIGNMENT_SUBMIT",
-  "GRADING",
-  "SIMULATION",
-  "PROBLEM_GEN",
-  "ANALYTICS_VIEW",
-  "ADMIN_ACTION",
-];
-
-const CATEGORY_LABELS: Record<string, string> = {
-  AI_CHAT: "AI Chat",
-  ASSIGNMENT_VIEW: "View Assignments",
-  ASSIGNMENT_SUBMIT: "Submit Work",
-  GRADING: "Grading",
-  SIMULATION: "Simulations",
-  PROBLEM_GEN: "Problem Gen",
-  ANALYTICS_VIEW: "Analytics",
-  ADMIN_ACTION: "Admin",
-};
+const ALL_CATEGORIES: string[] = [...ACTIVITY_CATEGORIES];
 
 const CATEGORY_COLORS: Record<string, string> = {
   AI_CHAT: "#6366f1",
@@ -61,13 +41,13 @@ function buildWhereConditions(
 
   if (filter !== "all") {
     if (filter === "other") {
-      const excludeCats = Object.values(FILTER_CATEGORIES).flat();
+      const excludeCats = Object.values(ACTIVITY_FILTER_CATEGORIES).flat();
       conditions.push(
         Prisma.sql`ua."category" NOT IN (${Prisma.join(excludeCats)})`,
       );
-    } else if (FILTER_CATEGORIES[filter]) {
+    } else if (ACTIVITY_FILTER_CATEGORIES[filter]) {
       conditions.push(
-        Prisma.sql`ua."category" IN (${Prisma.join(FILTER_CATEGORIES[filter])})`,
+        Prisma.sql`ua."category" IN (${Prisma.join(ACTIVITY_FILTER_CATEGORIES[filter])})`,
       );
     }
   }
@@ -102,10 +82,10 @@ export async function GET(req: Request) {
     // Category filter
     if (filter !== "all") {
       if (filter === "other") {
-        const excludeCats = Object.values(FILTER_CATEGORIES).flat();
+        const excludeCats = Object.values(ACTIVITY_FILTER_CATEGORIES).flat();
         where.category = { notIn: excludeCats };
-      } else if (FILTER_CATEGORIES[filter]) {
-        where.category = { in: FILTER_CATEGORIES[filter] };
+      } else if (ACTIVITY_FILTER_CATEGORIES[filter]) {
+        where.category = { in: ACTIVITY_FILTER_CATEGORIES[filter] };
       }
     }
 
@@ -151,7 +131,7 @@ export async function GET(req: Request) {
       : Prisma.sql`FROM "UserActivity" ua`;
 
     // Run queries in parallel
-    const [dailyTrendRaw, roleBreakdownRaw, categoryGroups, totalCount, totalDuration, uniqueUsers, recentActivities, topUsersRaw] = await Promise.all([
+    const [dailyTrendRaw, roleBreakdownRaw, categoryGroups, totalCount, totalDuration, uniqueUsers, recentActivities, topUsersRaw, sessionRows] = await Promise.all([
       // Daily trend aggregated in the database (category + day + count)
       prisma.$queryRaw<Array<{ date: Date; category: string; count: number }>>`
         SELECT DATE_TRUNC('day', ua."createdAt") as date, ua."category", COUNT(*)::int as count
@@ -201,7 +181,41 @@ export async function GET(req: Request) {
         _count: { id: true },
         _sum: { durationMs: true },
       }),
+      // Sessions per user: a visit starts a new session when it begins more than
+      // SESSION_GAP_MS after the previous visit of the same user ended.
+      prisma.$queryRaw<Array<{ sessions: number; total_ms: number }>>`
+        WITH gaps AS (
+          SELECT
+            ua."userId",
+            ua."createdAt" AS started_at,
+            ua."createdAt" + (COALESCE(ua."durationMs", 0) * INTERVAL '1 millisecond') AS ended_at,
+            MAX(ua."createdAt" + (COALESCE(ua."durationMs", 0) * INTERVAL '1 millisecond'))
+              OVER (PARTITION BY ua."userId" ORDER BY ua."createdAt"
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_end
+          ${joinClause}
+          ${whereClause}
+        ), marked AS (
+          SELECT *,
+            CASE WHEN prev_end IS NULL
+                   OR started_at - prev_end > (${SESSION_GAP_MS} * INTERVAL '1 millisecond')
+                 THEN 1 ELSE 0 END AS is_start
+          FROM gaps
+        ), numbered AS (
+          SELECT *, SUM(is_start) OVER (PARTITION BY "userId" ORDER BY started_at) AS session_no
+          FROM marked
+        ), sessions AS (
+          SELECT "userId", session_no,
+            EXTRACT(EPOCH FROM (MAX(ended_at) - MIN(started_at))) * 1000 AS session_ms
+          FROM numbered
+          GROUP BY "userId", session_no
+        )
+        SELECT COUNT(*)::int AS sessions, COALESCE(SUM(session_ms), 0)::bigint AS total_ms
+        FROM sessions
+      `,
     ]);
+
+    const sessionCount = Number(sessionRows[0]?.sessions ?? 0);
+    const sessionTotalMs = Number(sessionRows[0]?.total_ms ?? 0);
 
     // Summary from DB aggregations
     const summary = {
@@ -209,6 +223,8 @@ export async function GET(req: Request) {
       uniqueUsers,
       totalTimeMs: totalDuration._sum.durationMs || 0,
       avgDailyActivities: days > 0 ? Math.round(totalCount / days) : totalCount,
+      sessionCount,
+      avgSessionMs: sessionCount > 0 ? Math.round(sessionTotalMs / sessionCount) : 0,
     };
 
     // Daily trend — build date->category->count map from aggregated results
@@ -235,10 +251,10 @@ export async function GET(req: Request) {
     let trendCategories = ALL_CATEGORIES;
     if (filter !== "all") {
       if (filter === "other") {
-        const excludeCats = Object.values(FILTER_CATEGORIES).flat();
+        const excludeCats: string[] = Object.values(ACTIVITY_FILTER_CATEGORIES).flat();
         trendCategories = ALL_CATEGORIES.filter((c) => !excludeCats.includes(c));
-      } else if (FILTER_CATEGORIES[filter]) {
-        trendCategories = FILTER_CATEGORIES[filter];
+      } else if (ACTIVITY_FILTER_CATEGORIES[filter]) {
+        trendCategories = ACTIVITY_FILTER_CATEGORIES[filter];
       }
     }
 
