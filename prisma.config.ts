@@ -15,5 +15,7 @@ export default defineConfig({
       process.env["DIRECT_URL"] ??
       process.env["DATABASE_URL_UNPOOLED"] ??
       process.env["DATABASE_URL"],
+    // Only needed for local `prisma migrate diff --from-migrations` runs.
+    shadowDatabaseUrl: process.env["SHADOW_DATABASE_URL"],
   },
 });

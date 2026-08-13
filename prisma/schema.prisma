@@ -59,6 +59,7 @@ model User {
   activities      UserActivity[]
   createdEmailTemplates  EmailTemplate[]
   createdScheduledEmails ScheduledEmail[]
+  passwordResetTokens    PasswordResetToken[]
 }
 
 model Account {
@@ -86,6 +87,19 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
