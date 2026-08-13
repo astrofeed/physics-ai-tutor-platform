@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { Message, Conversation } from "@/components/chat/types";
 
 interface UseChatStreamOptions {
@@ -16,6 +16,14 @@ interface PendingRetry {
   imageUrls?: string[];
 }
 
+interface InFlightStream {
+  convId: string | null;
+  userMessage: Message;
+  assistantMsgId: string;
+  content: string;
+  thinking: string;
+}
+
 export function useChatStream({
   activeConversationId,
   setActiveConversationId,
@@ -27,6 +35,23 @@ export function useChatStream({
   const [loading, setLoading] = useState(false);
   const [pendingRetry, setPendingRetry] = useState<PendingRetry | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeConvRef = useRef(activeConversationId);
+  const streamRef = useRef<InFlightStream | null>(null);
+
+  useEffect(() => {
+    activeConvRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  // Returns the messages of a stream still running for this conversation so a
+  // re-opened conversation can show and keep receiving the in-progress reply.
+  const getInFlightMessages = useCallback((convId: string): Message[] => {
+    const stream = streamRef.current;
+    if (!stream || stream.convId !== convId) return [];
+    return [
+      stream.userMessage,
+      { id: stream.assistantMsgId, role: "assistant", content: stream.content, thinking: stream.thinking },
+    ];
+  }, []);
 
   const stopGeneration = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -46,6 +71,13 @@ export function useChatStream({
       setLoading(true);
 
       const assistantMsgId = (Date.now() + 1).toString();
+      streamRef.current = {
+        convId: activeConversationId,
+        userMessage,
+        assistantMsgId,
+        content: "",
+        thinking: "",
+      };
 
       // Add empty assistant message that will be streamed into
       setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "", thinking: "" }]);
@@ -93,7 +125,10 @@ export function useChatStream({
             try {
               const event = JSON.parse(jsonStr);
               if (event.type === "meta" && event.conversationId && !activeConversationId) {
-                setActiveConversationId(event.conversationId);
+                if (streamRef.current) streamRef.current.convId = event.conversationId;
+                if (activeConvRef.current === null) {
+                  setActiveConversationId(event.conversationId);
+                }
                 setConversations((prev) => [
                   {
                     id: event.conversationId,
@@ -111,18 +146,22 @@ export function useChatStream({
                   )
                 );
               } else if (event.type === "thinking") {
+                if (streamRef.current) streamRef.current.thinking += event.content;
+                const thinking = streamRef.current?.thinking;
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
-                      ? { ...msg, thinking: (msg.thinking || "") + event.content }
+                      ? { ...msg, thinking: thinking ?? (msg.thinking || "") + event.content }
                       : msg
                   )
                 );
               } else if (event.type === "delta") {
+                if (streamRef.current) streamRef.current.content += event.content;
+                const content = streamRef.current?.content;
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
-                      ? { ...msg, content: msg.content + event.content }
+                      ? { ...msg, content: content ?? msg.content + event.content }
                       : msg
                   )
                 );
@@ -159,6 +198,7 @@ export function useChatStream({
           onRestoreInput(messageText);
         }
       } finally {
+        streamRef.current = null;
         abortControllerRef.current = null;
         setLoading(false);
       }
@@ -191,6 +231,7 @@ export function useChatStream({
     sendMessage,
     stopGeneration,
     retryLast,
+    getInFlightMessages,
     canRetry: pendingRetry !== null && !loading,
   };
 }
