@@ -42,7 +42,7 @@ export function ChatMessageList({
   onCopyMessage,
 }: ChatMessageListProps) {
   return (
-    <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto">
+    <div ref={scrollContainerRef} id="chat-print-area" className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">

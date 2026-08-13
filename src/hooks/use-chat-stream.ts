@@ -1,0 +1,197 @@
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import type { Message, Conversation } from "@/components/chat/types";
+
+interface UseChatStreamOptions {
+  activeConversationId: string | null;
+  setActiveConversationId: (id: string | null) => void;
+  setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
+  model: string;
+  chatMode: "normal" | "socratic";
+  onRestoreInput: (text: string) => void;
+}
+
+interface PendingRetry {
+  text: string;
+  imageUrls?: string[];
+}
+
+export function useChatStream({
+  activeConversationId,
+  setActiveConversationId,
+  setConversations,
+  model,
+  chatMode,
+  onRestoreInput,
+}: UseChatStreamOptions) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pendingRetry, setPendingRetry] = useState<PendingRetry | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const stopGeneration = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  const sendMessage = useCallback(
+    async (messageText: string, uploadedUrls: string[]) => {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content: messageText,
+        imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setPendingRetry(null);
+      setLoading(true);
+
+      const assistantMsgId = (Date.now() + 1).toString();
+
+      // Add empty assistant message that will be streamed into
+      setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "", thinking: "" }]);
+
+      let requestFailedBeforeStream = false;
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId: activeConversationId,
+            message: messageText,
+            imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+            model,
+            mode: chatMode,
+          }),
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ error: "Chat request failed" }));
+          requestFailedBeforeStream = true;
+          throw new Error(errData.error || "Chat request failed");
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response stream");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6);
+            try {
+              const event = JSON.parse(jsonStr);
+              if (event.type === "meta" && event.conversationId && !activeConversationId) {
+                setActiveConversationId(event.conversationId);
+                setConversations((prev) => [
+                  {
+                    id: event.conversationId,
+                    title: messageText.slice(0, 50) || "New Chat",
+                    updatedAt: new Date().toISOString(),
+                  },
+                  ...prev,
+                ]);
+              } else if (event.type === "title" && event.title && event.conversationId) {
+                setConversations((prev) =>
+                  prev.map((conv) =>
+                    conv.id === event.conversationId
+                      ? { ...conv, title: event.title }
+                      : conv
+                  )
+                );
+              } else if (event.type === "thinking") {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, thinking: (msg.thinking || "") + event.content }
+                      : msg
+                  )
+                );
+              } else if (event.type === "delta") {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, content: msg.content + event.content }
+                      : msg
+                  )
+                );
+              }
+            } catch {
+              // skip malformed JSON
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // User pressed Stop: keep whatever streamed so far, mark visibly
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMsgId
+                ? { ...msg, content: msg.content || "_Generation stopped._" }
+                : msg
+            )
+          );
+          return;
+        }
+        console.error("Chat error:", err);
+        const errorMsg = err instanceof Error ? err.message : "Sorry, I encountered an error. Please try again.";
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId && !msg.content
+              ? { ...msg, content: errorMsg, error: true }
+              : msg
+          )
+        );
+        setPendingRetry({ text: messageText, imageUrls: uploadedUrls.length ? uploadedUrls : undefined });
+        // Restore the input so the user can retry without retyping
+        if (requestFailedBeforeStream) {
+          onRestoreInput(messageText);
+        }
+      } finally {
+        abortControllerRef.current = null;
+        setLoading(false);
+      }
+    },
+    [activeConversationId, model, chatMode, setActiveConversationId, setConversations, onRestoreInput]
+  );
+
+  const retryLast = useCallback(() => {
+    if (!pendingRetry || loading) return;
+    // Drop the failed user/assistant pair so the retry replaces it visually
+    setMessages((prev) => {
+      const next = [...prev];
+      if (next.length >= 1 && next[next.length - 1].role === "assistant" && next[next.length - 1].error) {
+        next.pop();
+        if (next.length >= 1 && next[next.length - 1].role === "user") {
+          next.pop();
+        }
+      }
+      return next;
+    });
+    sendMessage(pendingRetry.text, pendingRetry.imageUrls || []);
+  }, [pendingRetry, loading, sendMessage]);
+
+  return {
+    messages,
+    setMessages,
+    loading,
+    sendMessage,
+    stopGeneration,
+    retryLast,
+    canRetry: pendingRetry !== null && !loading,
+  };
+}
