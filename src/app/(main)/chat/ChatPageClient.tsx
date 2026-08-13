@@ -4,28 +4,21 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { upload } from "@vercel/blob/client";
 import { useTrackTime } from "@/lib/use-track-time";
 import {
-  Sparkles,
-  Atom,
   PanelLeftOpen,
   PanelLeftClose,
   ShieldAlert,
   Lightbulb,
   X,
-  ChevronDown,
-  Check,
   Download,
   FileText,
   Printer,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -41,20 +34,6 @@ interface ChatPageClientProps {
   conversationLimit: number;
 }
 
-interface ModelOption {
-  id: string;
-  label: string;
-  shortLabel: string;
-  provider: string;
-  icon: LucideIcon;
-  color: string;
-}
-
-const MODEL_OPTIONS: ModelOption[] = [
-  { id: "gpt-5.2", label: "GPT-5.2", shortLabel: "GPT-5.2", provider: "OpenAI", icon: Sparkles, color: "text-blue-500" },
-  { id: "claude-haiku-4-5-20251001", label: "Claude 4.5 Haiku", shortLabel: "Claude", provider: "Anthropic", icon: Atom, color: "text-purple-500" },
-];
-
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
@@ -69,7 +48,6 @@ export default function ChatPageClient({
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [model, setModel] = useState("gpt-5.2");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpenRaw] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -93,7 +71,6 @@ export default function ChatPageClient({
     activeConversationId,
     setActiveConversationId,
     setConversations,
-    model,
     chatMode,
     onRestoreInput: setInput,
   });
@@ -350,52 +327,6 @@ export default function ChatPageClient({
               </Button>
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                  {(() => {
-                    const current = MODEL_OPTIONS.find((m) => m.id === model) || MODEL_OPTIONS[0];
-                    const Icon = current.icon;
-                    return (
-                      <>
-                        <Icon className={cn("h-3.5 w-3.5", current.color)} />
-                        <span className="hidden sm:inline text-gray-700 dark:text-gray-200">{current.label}</span>
-                        <span className="sm:hidden text-gray-700 dark:text-gray-200">{current.shortLabel}</span>
-                      </>
-                    );
-                  })()}
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                {(() => {
-                  const providers = Array.from(new Set(MODEL_OPTIONS.map((m) => m.provider)));
-                  return providers.map((provider, pi) => (
-                    <React.Fragment key={provider}>
-                      {pi > 0 && <DropdownMenuSeparator />}
-                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        {provider}
-                      </DropdownMenuLabel>
-                      {MODEL_OPTIONS.filter((m) => m.provider === provider).map((opt) => {
-                        const Icon = opt.icon;
-                        const selected = model === opt.id;
-                        return (
-                          <DropdownMenuItem
-                            key={opt.id}
-                            onClick={() => setModel(opt.id)}
-                            className="flex items-center gap-2 cursor-pointer"
-                          >
-                            <Icon className={cn("h-4 w-4", opt.color)} />
-                            <span className="flex-1">{opt.label}</span>
-                            {selected && <Check className="h-3.5 w-3.5 text-gray-500" />}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </React.Fragment>
-                  ));
-                })()}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
 

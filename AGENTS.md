@@ -1175,7 +1175,7 @@ Next.js 14 app with Prisma (PostgreSQL), NextAuth credentials + Google OAuth, Op
 - **Framework**: Next.js 14 (App Router)
 - **Database**: PostgreSQL via Prisma ORM (`@prisma/adapter-pg`)
 - **Auth**: NextAuth v5 (credentials + Google)
-- **AI**: OpenAI (`gpt-4o-mini`, `gpt-5.2`), Anthropic (`claude-sonnet-4-20250514`)
+- **AI**: OpenAI only for chat (`CHAT_MODEL = "gpt-5.6-luna"` in `src/lib/ai.ts`); Anthropic code paths remain for problem generation/grading fallback but are unused without `ANTHROPIC_API_KEY`
 - **Styling**: Tailwind CSS, Radix UI, shadcn/ui
 - **LaTeX**: `react-markdown`, `remark-math`, `rehype-katex`, `katex`
 
@@ -1187,7 +1187,8 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 
 - Client-side chat streaming lives in `src/hooks/use-chat-stream.ts` (`useChatStream`): sending, SSE parsing, Stop (AbortController), and Retry of failed sends. `ChatPageClient.tsx` composes the hook with UI state only.
 - `/api/chat` input is validated with `ChatInputSchema` (Zod). SSE writes go through a `send()` helper that tolerates client disconnects (Stop button) — the partial answer is still persisted.
-- Web search runs via OpenAI's `web_search_preview` tool (GPT models only). `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
+- Chat always uses the single OpenAI `CHAT_MODEL` (`gpt-5.6-luna`); there is no client-side model selection and the API ignores/rejects a `model` field. Conversation titles are generated via OpenAI (`generateConversationTitle` in `src/lib/ai.ts`).
+- Web search runs via OpenAI's `web_search_preview` tool. `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
 - Conversation export: `src/components/chat/export-conversation.ts` (Markdown download; PDF via `window.print()` scoped to `#chat-print-area` by `@media print` rules in `globals.css`).
 
 ## Testing
