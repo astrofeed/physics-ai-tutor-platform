@@ -109,6 +109,33 @@ export function notificationEmail(params: NotificationEmailParams): string {
 }
 
 // ---------------------------------------------------------------------------
+// Template: Password reset
+// ---------------------------------------------------------------------------
+
+export interface PasswordResetEmailParams {
+  userName: string;
+  resetUrl: string;
+  expiresMinutes: number;
+}
+
+/** Email containing a one-time password reset link. */
+export function passwordResetEmail(params: PasswordResetEmailParams): string {
+  return brandedLayout(`
+              <p style="margin: 0 0 16px; color: #111827; font-size: 16px;">Dear ${esc(params.userName)},</p>
+              <p style="margin: 0 0 16px; color: #374151; font-size: 14px; line-height: 1.6;">We received a request to reset the password for your PhysTutor account. Click the button below to choose a new password. This link expires in ${params.expiresMinutes} minutes and can only be used once.</p>
+              <table cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+                <tr>
+                  <td style="background-color: #4f46e5; border-radius: 8px;">
+                    <a href="${params.resetUrl}" style="display: inline-block; padding: 12px 24px; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none;">Reset Password</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0 0 8px; color: #6b7280; font-size: 13px; line-height: 1.6;">If the button doesn't work, copy and paste this link into your browser:</p>
+              <p style="margin: 0 0 16px; color: #4f46e5; font-size: 13px; word-break: break-all;">${params.resetUrl}</p>
+              <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6;">If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.</p>`);
+}
+
+// ---------------------------------------------------------------------------
 // Template: Account suspended (sent to the banned user)
 // ---------------------------------------------------------------------------
 

@@ -1477,6 +1477,16 @@ if (isErrorResponse(auth)) return auth;
 
 **Note:** `src/app/api/admin/impersonate/route.ts` intentionally uses `auth()` directly (needs the real session, not the impersonated one).
 
+### Password Reset Flow
+
+Email-based forgot/reset password for credentials accounts:
+
+- **Pages**: `/forgot-password` (request link) and `/reset-password?token=...` (set new password), both under `src/app/(auth)/`. Login page links to `/forgot-password`.
+- **API**: `POST /api/auth/forgot-password` (Zod-validated email, IP rate-limited via `checkIpRateLimit`, always returns a generic success message to prevent account enumeration) and `POST /api/auth/reset-password` (Zod-validated token + password with the same complexity rules as registration).
+- **Service**: `src/lib/services/password-reset-service.ts` — generates a 32-byte random token, stores only its SHA-256 hash in `PasswordResetToken` (30-minute expiry, one-time use via `usedAt`, prior tokens deleted on new request), and emails the raw token link using `passwordResetEmail` from `src/lib/email-templates.ts`.
+- **Schema**: `PasswordResetToken` model (`tokenHash` unique, `userId` cascade FK). Google-only accounts (no `passwordHash`) and deleted users are silently ignored.
+- **Rate limiting**: `checkIpRateLimit(key, maxRequests, windowMs)` in `src/lib/rate-limit.ts` for unauthenticated endpoints.
+
 ### Prisma Migrations
 
 ```bash
