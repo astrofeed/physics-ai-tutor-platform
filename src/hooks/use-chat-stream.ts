@@ -171,6 +171,8 @@ export function useChatStream({
 
   const retryLast = useCallback(() => {
     if (!pendingRetry || loading) return;
+    // Clear the restored input so the retried text isn't accidentally sent twice
+    onRestoreInput("");
     // Drop the failed user/assistant pair so the retry replaces it visually
     setMessages((prev) => {
       const next = [...prev];
@@ -183,7 +185,7 @@ export function useChatStream({
       return next;
     });
     sendMessage(pendingRetry.text, pendingRetry.imageUrls || []);
-  }, [pendingRetry, loading, sendMessage]);
+  }, [pendingRetry, loading, sendMessage, onRestoreInput]);
 
   return {
     messages,
