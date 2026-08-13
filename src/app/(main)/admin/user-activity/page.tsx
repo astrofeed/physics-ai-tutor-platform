@@ -222,7 +222,7 @@ export default function AdminUserActivityPage() {
   return (
     <div className="page-sections">
       <div className="page-header">
-        <p className="eyebrow">Platform</p>
+        <p className="eyebrow-signal">Platform</p>
         <h1 className="page-title">User activity</h1>
         <p className="page-lede">
           Monitor how users engage with platform features

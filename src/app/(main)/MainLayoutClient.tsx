@@ -107,7 +107,7 @@ export default function MainLayoutClient({
           userRole={userRole}
           onMobileMenuToggle={() => setMobileSidebarOpen((prev) => !prev)}
         />
-        <main id="main-content" className="flex-1 overflow-auto bg-gray-50/50 dark:bg-gray-950">
+        <main id="main-content" className="app-canvas flex-1 overflow-auto">
           <div
             className={
               fullBleed

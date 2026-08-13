@@ -21,7 +21,7 @@ function Figure({ label, value, hint }: StatItem) {
   return (
     <>
       <p className="eyebrow">{label}</p>
-      <p className="mt-2 text-title font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+      <p className="mt-2.5 text-display font-semibold tabular-nums text-gray-900 dark:text-gray-100">
         {value}
       </p>
       {hint && <p className="mt-1.5 text-caption text-gray-500 dark:text-gray-400">{hint}</p>}

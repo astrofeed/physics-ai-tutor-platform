@@ -1206,6 +1206,9 @@ Full spec: [`docs/design-system.md`](./docs/design-system.md). Read it before ad
 - `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
 - Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`) and, for activity categories, `CATEGORY_COLORS` in `src/lib/constants.ts`. Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`, and do not branch chart colors on `resolvedTheme`; tokens already handle dark mode.
 - Dashboard cards use `.card-minimal` with a hairline header rule, `.section-title`, and text-first empty states. No icon-in-circle accents, no `rounded-xl`/`rounded-2xl`, no `shadow-sm` floating cards.
+- The navigation rail is an ink surface: use the `sidebar-*` Tailwind colors (`bg-sidebar`, `text-sidebar-muted`, `bg-sidebar-active`, `border-sidebar-border`) in `Sidebar.tsx`, never `bg-white`/`bg-gray-*`. The content area sits on `.app-canvas` (graph-paper grid); do not replace it with a flat `bg-gray-50`.
+- `--signal` (copper, `text-signal`/`bg-signal`) is the only accent: active-nav bar, wordmark, badges, `.eyebrow-signal`, `.section-index`. Never use amber/indigo/violet accents, and never fill large areas with the signal color.
+- Section headings inside a page use `.section-rule` + `.section-index` + `.eyebrow` (numbered rule), not a bare `<h2>` with a bottom border.
 - Labels must say what is actually measured: "visits" for `UserActivity` rows, "messages" for chat messages, "events" for the mixed heatmap, and "sessions" only for gap-derived sessions (see below).
 
 ## Activity & Usage Metrics

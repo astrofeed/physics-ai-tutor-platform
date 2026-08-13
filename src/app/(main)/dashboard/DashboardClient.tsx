@@ -56,11 +56,11 @@ interface DashboardClientProps {
   }[];
 }
 
-function SectionHeading({ title }: { title: string }) {
+function SectionHeading({ index, title }: { index: string; title: string }) {
   return (
-    <div className="mb-4 flex items-center gap-3">
+    <div className="section-rule mb-4">
+      <span className="section-index">{index}</span>
       <h2 className="eyebrow shrink-0">{title}</h2>
-      <span className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -151,16 +151,14 @@ export default function DashboardClient({
   return (
     <div className="page-sections pb-8">
       <div className="page-header">
-        <p className="eyebrow">{date}</p>
-        <h1 className="page-title md:text-display">
-          Good to see you, {userName}
-        </h1>
+        <p className="eyebrow-signal">{date}</p>
+        <h1 className="page-title">Good to see you, {userName}</h1>
       </div>
 
       <StatBand items={statItems} />
 
       <div>
-        <SectionHeading title="Jump back in" />
+        <SectionHeading index="01" title="Jump back in" />
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
           {filteredQuickStart.slice(0, 6).map((item) => (
             <Link
@@ -168,10 +166,10 @@ export default function DashboardClient({
               href={item.href}
               className="flex items-start gap-3 bg-card px-4 py-3.5 hover:bg-secondary/60 transition-colors"
             >
-              <item.icon className="h-4 w-4 mt-0.5 shrink-0 text-gray-400 dark:text-gray-500" />
+              <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
               <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.label}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{item.description}</p>
+                <p className="text-body font-medium text-gray-900 dark:text-gray-100">{item.label}</p>
+                <p className="mt-0.5 text-caption text-muted-foreground">{item.description}</p>
               </div>
             </Link>
           ))}
@@ -179,7 +177,7 @@ export default function DashboardClient({
       </div>
 
       <div>
-        <SectionHeading title="Recent activity" />
+        <SectionHeading index="02" title="Recent activity" />
         <div className="grid grid-cols-1 gap-gutter lg:grid-cols-2">
           <RecentConversationsCard conversations={recentConversations} />
           {isStaffRole ? (

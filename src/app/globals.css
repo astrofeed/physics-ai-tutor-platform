@@ -31,6 +31,10 @@ body {
     @apply text-label font-medium uppercase text-gray-500 dark:text-gray-400;
   }
 
+  .eyebrow-signal {
+    @apply text-label font-medium uppercase text-signal;
+  }
+
   /* Hairline-ruled band of figures — replaces stacks of identical stat cards */
   .stat-band {
     @apply grid gap-px overflow-hidden rounded-lg border border-border bg-border;
@@ -52,7 +56,7 @@ body {
   }
 
   .page-title {
-    @apply mt-1.5 text-title text-gray-900 dark:text-gray-100;
+    @apply mt-1.5 text-title text-gray-900 dark:text-gray-100 md:text-display;
   }
 
   .page-lede {
@@ -70,6 +74,29 @@ body {
 
   .measure {
     @apply max-w-measure;
+  }
+
+  /* Graph-paper canvas behind page content — the coursebook motif */
+  .app-canvas {
+    background-color: hsl(var(--background));
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.55) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.55) 1px, transparent 1px);
+    background-size: 2rem 2rem;
+    background-position: -1px -1px;
+  }
+
+  /* Numbered section rule: figure, label, then a hairline to the right edge */
+  .section-rule {
+    @apply flex items-center gap-3;
+  }
+
+  .section-rule::after {
+    @apply ml-1 h-px flex-1 bg-border content-[''];
+  }
+
+  .section-index {
+    @apply text-label font-medium tabular-nums text-signal;
   }
 }
 
@@ -109,6 +136,13 @@ body {
     --border: 34 12% 88%;
     --input: 34 12% 88%;
     --ring: 214 34% 30%;
+    --signal: 20 68% 42%;
+    --signal-foreground: 40 24% 98%;
+    --sidebar: 214 38% 13%;
+    --sidebar-foreground: 40 20% 94%;
+    --sidebar-muted: 214 14% 68%;
+    --sidebar-active: 214 30% 20%;
+    --sidebar-border: 214 26% 22%;
     --chart-1: 214 34% 32%;
     --chart-2: 178 32% 38%;
     --chart-3: 24 62% 48%;
@@ -136,6 +170,13 @@ body {
     --border: 30 5% 20%;
     --input: 30 5% 20%;
     --ring: 38 14% 70%;
+    --signal: 22 62% 52%;
+    --signal-foreground: 30 8% 10%;
+    --sidebar: 220 16% 9%;
+    --sidebar-foreground: 38 14% 92%;
+    --sidebar-muted: 220 8% 60%;
+    --sidebar-active: 220 12% 16%;
+    --sidebar-border: 220 10% 18%;
     --chart-1: 210 40% 62%;
     --chart-2: 178 32% 52%;
     --chart-3: 26 62% 58%;

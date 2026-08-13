@@ -135,7 +135,7 @@ export default function AnalyticsPage() {
   return (
     <div className="page-sections">
       <div className="page-header">
-        <p className="eyebrow">Your record</p>
+        <p className="eyebrow-signal">Your record</p>
         <h1 className="page-title">Learning analytics</h1>
         <p className="page-lede">
           Measured from your own visits, messages and submissions.

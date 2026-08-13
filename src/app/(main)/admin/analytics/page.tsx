@@ -63,7 +63,7 @@ export default function AdminAnalyticsPage() {
   return (
     <div className="page-sections">
       <div className="page-header">
-        <p className="eyebrow">Platform</p>
+        <p className="eyebrow-signal">Platform</p>
         <h1 className="page-title">Admin analytics</h1>
       </div>
 

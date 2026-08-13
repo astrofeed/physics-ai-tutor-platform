@@ -78,6 +78,22 @@ when a layout needs asymmetric columns. Cards are hairline-bordered
 (hover/menus) and `shadow-overlay` (dialogs). No gradients, no glows, no
 gradient text.
 
+## Shell and signal color
+
+The app has two surfaces. The navigation rail is an ink surface built from the
+`--sidebar*` tokens (`bg-sidebar`, `text-sidebar-foreground`, `text-sidebar-muted`,
+`bg-sidebar-active`, `border-sidebar-border`); the content area is the warm paper
+canvas `.app-canvas`, a 2rem graph-paper grid drawn from `--border`, which reads as
+squared coursebook paper behind the cards. Full-bleed routes (`/chat`,
+`/simulations`) sit on the same canvas without the page shell.
+
+One accent only: `--signal`, a copper reserved for orientation — the wordmark
+atom, the 2px bar on the active nav item, badges, page eyebrows
+(`.eyebrow-signal`), and the numbered `.section-index` in `.section-rule`. It
+never fills a large area and never appears twice for the same purpose on a
+screen. Headline figures in `StatBand` use `text-display`, so the number, not a
+color, carries the emphasis.
+
 ## Cards
 
 List cards (recent conversations, upcoming assignments, open appeals) share one

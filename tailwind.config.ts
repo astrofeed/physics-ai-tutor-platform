@@ -66,6 +66,19 @@ const config: Config = {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
+  			// Copper signal colour: the one saturated hue on screen, reserved for
+  			// the active navigation marker and section rules.
+  			signal: {
+  				DEFAULT: 'hsl(var(--signal))',
+  				foreground: 'hsl(var(--signal-foreground))'
+  			},
+  			sidebar: {
+  				DEFAULT: 'hsl(var(--sidebar))',
+  				foreground: 'hsl(var(--sidebar-foreground))',
+  				muted: 'hsl(var(--sidebar-muted))',
+  				active: 'hsl(var(--sidebar-active))',
+  				border: 'hsl(var(--sidebar-border))'
+  			},
   			card: {
   				DEFAULT: 'hsl(var(--card))',
   				foreground: 'hsl(var(--card-foreground))'
