@@ -1183,6 +1183,13 @@ Next.js 14 app with Prisma (PostgreSQL), NextAuth credentials + Google OAuth, Op
 
 OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()` / `getAnthropic()`, which throw a clear "API key is not configured" error when the corresponding env var is missing. Never instantiate these SDK clients at module load time — the app must boot and degrade gracefully without AI keys (`/api/chat` streams a friendly authentication-error message instead of returning a 500).
 
+### Chat Streaming
+
+- Client-side chat streaming lives in `src/hooks/use-chat-stream.ts` (`useChatStream`): sending, SSE parsing, Stop (AbortController), and Retry of failed sends. `ChatPageClient.tsx` composes the hook with UI state only.
+- `/api/chat` input is validated with `ChatInputSchema` (Zod). SSE writes go through a `send()` helper that tolerates client disconnects (Stop button) — the partial answer is still persisted.
+- Web search runs via OpenAI's `web_search_preview` tool (GPT models only). `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
+- Conversation export: `src/components/chat/export-conversation.ts` (Markdown download; PDF via `window.print()` scoped to `#chat-print-area` by `@media print` rules in `globals.css`).
+
 ## Testing
 
 ### Prerequisites

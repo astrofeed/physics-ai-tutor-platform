@@ -13,6 +13,9 @@ import {
   X,
   ChevronDown,
   Check,
+  Download,
+  FileText,
+  Printer,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,7 +31,9 @@ import { cn } from "@/lib/utils";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
-import type { Message, Conversation } from "@/components/chat/types";
+import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversation";
+import { useChatStream } from "@/hooks/use-chat-stream";
+import type { Conversation } from "@/components/chat/types";
 
 interface ChatPageClientProps {
   conversations: Conversation[];
@@ -60,9 +65,7 @@ export default function ChatPageClient({
   useTrackTime("AI_CHAT");
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -77,6 +80,23 @@ export default function ChatPageClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const {
+    messages,
+    setMessages,
+    loading,
+    sendMessage,
+    stopGeneration,
+    retryLast,
+    canRetry,
+  } = useChatStream({
+    activeConversationId,
+    setActiveConversationId,
+    setConversations,
+    model,
+    chatMode,
+    onRestoreInput: setInput,
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem("chat-sidebar-open");
@@ -117,7 +137,6 @@ export default function ChatPageClient({
 
   const loadConversation = async (convId: string) => {
     setActiveConversationId(convId);
-    setLoading(false);
     setMessages([]);
     if (isMobile) setSidebarOpen(false);
     try {
@@ -191,121 +210,10 @@ export default function ChatPageClient({
       }
     }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: messageText,
-      imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     clearImages();
-    setLoading(true);
-
-    const assistantMsgId = (Date.now() + 1).toString();
-
-    // Add empty assistant message that will be streamed into
-    setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "", thinking: "" }]);
-
-    let requestFailedBeforeStream = false;
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId: activeConversationId,
-          message: messageText,
-          imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
-          model,
-          mode: chatMode,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Chat request failed" }));
-        requestFailedBeforeStream = true;
-        throw new Error(errData.error || "Chat request failed");
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6);
-          try {
-            const event = JSON.parse(jsonStr);
-            if (event.type === "meta" && event.conversationId && !activeConversationId) {
-              setActiveConversationId(event.conversationId);
-              setConversations((prev) => [
-                {
-                  id: event.conversationId,
-                  title: messageText.slice(0, 50) || "New Chat",
-                  updatedAt: new Date().toISOString(),
-                },
-                ...prev,
-              ]);
-            } else if (event.type === "title" && event.title && event.conversationId) {
-              setConversations((prev) =>
-                prev.map((conv) =>
-                  conv.id === event.conversationId
-                    ? { ...conv, title: event.title }
-                    : conv
-                )
-              );
-            } else if (event.type === "thinking") {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? { ...msg, thinking: (msg.thinking || "") + event.content }
-                    : msg
-                )
-              );
-            } else if (event.type === "delta") {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? { ...msg, content: msg.content + event.content }
-                    : msg
-                )
-              );
-            }
-          } catch {
-            // skip malformed JSON
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Chat error:", err);
-      const errorMsg = err instanceof Error ? err.message : "Sorry, I encountered an error. Please try again.";
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMsgId && !msg.content
-            ? { ...msg, content: errorMsg }
-            : msg
-        )
-      );
-      // Restore the input so the user can retry without retyping
-      if (requestFailedBeforeStream) {
-        setInput(messageText);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [activeConversationId, imageFiles, model, chatMode]);
+    await sendMessage(messageText, uploadedUrls);
+  }, [imageFiles, sendMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -394,6 +302,35 @@ export default function ChatPageClient({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {messages.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Export conversation"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Export</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => exportAsMarkdown(activeConversation?.title || "Conversation", messages)}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4 text-gray-500" />
+                    <span>Markdown (.md)</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => exportAsPdf()}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="h-4 w-4 text-gray-500" />
+                    <span>PDF (print)</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {!examModeActive && (
               <Button
                 type="button"
@@ -502,6 +439,9 @@ export default function ChatPageClient({
           onClearImageError={() => setImageError(null)}
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
+          onStop={stopGeneration}
+          onRetry={retryLast}
+          canRetry={canRetry}
         />
       </div>
     </div>

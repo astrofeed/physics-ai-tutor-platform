@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useCallback } from "react";
-import { Send, ImageIcon, X } from "lucide-react";
+import { Send, ImageIcon, X, Square, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_IMAGES = 5;
@@ -19,6 +19,9 @@ interface ChatInputProps {
   onClearImageError: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onStop: () => void;
+  onRetry: () => void;
+  canRetry: boolean;
 }
 
 export function ChatInput({
@@ -33,6 +36,9 @@ export function ChatInput({
   onClearImageError,
   onSubmit,
   onKeyDown,
+  onStop,
+  onRetry,
+  canRetry,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,6 +93,18 @@ export function ChatInput({
       )}
 
       <div className="p-4">
+        {canRetry && (
+          <div className="max-w-3xl mx-auto mb-2 flex justify-center">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Retry last message
+            </button>
+          </div>
+        )}
         <form onSubmit={onSubmit} className="max-w-3xl mx-auto">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-2 flex items-end gap-2">
             <input
@@ -121,18 +139,30 @@ export function ChatInput({
               className="flex-1 resize-none bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none py-2 px-1 max-h-32 leading-relaxed disabled:opacity-50"
               style={{ minHeight: "36px" }}
             />
-            <button
-              type="submit"
-              disabled={loading || (!input.trim() && !imageFiles.length)}
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all",
-                loading || (!input.trim() && !imageFiles.length)
-                  ? "bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed"
-                  : "bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900"
-              )}
-            >
-              <Send className="h-4 w-4" />
-            </button>
+            {loading ? (
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="Stop generating"
+                title="Stop generating"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 transition-all"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() && !imageFiles.length}
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all",
+                  !input.trim() && !imageFiles.length
+                    ? "bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                    : "bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900"
+                )}
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            )}
           </div>
           <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-2">
             Press Enter to send, Shift+Enter for new line

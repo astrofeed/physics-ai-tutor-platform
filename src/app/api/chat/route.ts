@@ -6,6 +6,15 @@ import { checkContentFlags, handleContentFlag, trackRateLimitAbuse } from "@/lib
 import { checkAndBanSpammer } from "@/lib/spam-guard";
 import { logger } from "@/lib/logger";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+
+const ChatInputSchema = z.object({
+  conversationId: z.string().max(100).nullish(),
+  message: z.string().max(50000),
+  imageUrls: z.array(z.string().url()).max(5).optional(),
+  model: z.string().max(100).optional(),
+  mode: z.enum(["normal", "socratic"]).optional(),
+});
 
 export async function POST(req: Request) {
   try {
@@ -59,15 +68,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const { conversationId, message, imageUrls, model, mode } = await req.json();
-
-    // Validate message size to prevent abuse
-    if (typeof message !== "string" || message.length > 50000) {
-      return Response.json(
-        { error: "Message is too long. Maximum 50,000 characters." },
-        { status: 413 }
+    const parsed = ChatInputSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      const tooLong = parsed.error.issues.some(
+        (i) => i.code === "too_big" && i.path[0] === "message"
       );
+      if (tooLong) {
+        return Response.json(
+          { error: "Message is too long. Maximum 50,000 characters." },
+          { status: 413 }
+        );
+      }
+      return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
+    const { conversationId, message, imageUrls, model, mode } = parsed.data;
 
     // Fire-and-forget: check content for jailbreak/prompt injection patterns
     const contentFlags = checkContentFlags(message);
@@ -153,29 +167,58 @@ export async function POST(req: Request) {
     // Stream response via SSE
     const encoder = new TextEncoder();
     let fullContent = "";
+    let clientAborted = false;
 
     const readable = new ReadableStream({
       async start(controller) {
+        const send = (payload: Record<string, unknown>) => {
+          if (clientAborted) return;
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          } catch {
+            // Client disconnected (e.g. Stop button); keep accumulating so the partial answer is saved
+            clientAborted = true;
+          }
+        };
         try {
           // Send conversationId as first event
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "meta", conversationId: convId })}\n\n`));
+          send({ type: "meta", conversationId: convId });
 
           if (provider === "openai") {
+            const citations: { url: string; title: string }[] = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const stream = await streamChat(chatMessages, "openai", model || "gpt-5.2", systemPrompt) as any;
             for await (const event of stream) {
               if (event.type === "response.reasoning_summary_text.delta") {
                 const delta = event.delta || "";
                 if (delta) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "thinking", content: delta })}\n\n`));
+                  send({ type: "thinking", content: delta });
                 }
               } else if (event.type === "response.output_text.delta") {
                 const delta = event.delta || "";
                 if (delta) {
                   fullContent += delta;
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", content: delta })}\n\n`));
+                  send({ type: "delta", content: delta });
+                }
+              } else if (
+                event.type === "response.output_text.annotation.added" &&
+                event.annotation?.type === "url_citation" &&
+                event.annotation.url
+              ) {
+                if (!citations.some((c) => c.url === event.annotation.url)) {
+                  citations.push({
+                    url: event.annotation.url,
+                    title: event.annotation.title || event.annotation.url,
+                  });
                 }
               }
+            }
+            if (citations.length > 0) {
+              const sources =
+                "\n\n**Sources:**\n" +
+                citations.map((c, i) => `${i + 1}. [${c.title}](${c.url})`).join("\n");
+              fullContent += sources;
+              send({ type: "delta", content: sources });
             }
           } else {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,7 +226,7 @@ export async function POST(req: Request) {
             for await (const event of stream) {
               if (event.type === "content_block_delta" && event.delta?.text) {
                 fullContent += event.delta.text;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", content: event.delta.text })}\n\n`));
+                send({ type: "delta", content: event.delta.text });
               }
             }
           }
@@ -201,7 +244,7 @@ export async function POST(req: Request) {
           } else {
             fullContent = "I'm sorry, I encountered an error while processing your request. Please try again shortly.";
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", content: fullContent })}\n\n`));
+          send({ type: "delta", content: fullContent });
         }
 
         // Save to DB after stream completes
@@ -230,8 +273,14 @@ export async function POST(req: Request) {
           });
         }
 
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
-        controller.close();
+        send({ type: "done" });
+        if (!clientAborted) {
+          try {
+            controller.close();
+          } catch {
+            clientAborted = true;
+          }
+        }
 
         // Generate AI title for new conversations (fire-and-forget, non-blocking)
         if (!conversationId && fullContent && process.env.ANTHROPIC_API_KEY) {

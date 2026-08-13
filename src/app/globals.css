@@ -257,3 +257,20 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Print only the chat transcript when exporting a conversation as PDF */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #chat-print-area,
+  #chat-print-area * {
+    visibility: visible;
+  }
+  #chat-print-area {
+    position: absolute;
+    inset: 0;
+    overflow: visible !important;
+    height: auto !important;
+  }
+}

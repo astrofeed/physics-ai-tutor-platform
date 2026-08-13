@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   imageUrls?: string[];
   thinking?: string;
+  error?: boolean;
 }
 
 export interface Conversation {
