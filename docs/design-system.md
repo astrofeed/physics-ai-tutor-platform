@@ -82,10 +82,10 @@ gradient text.
 
 The app has two surfaces. The navigation rail is an ink surface built from the
 `--sidebar*` tokens (`bg-sidebar`, `text-sidebar-foreground`, `text-sidebar-muted`,
-`bg-sidebar-active`, `border-sidebar-border`); the content area is the warm paper
-canvas `.app-canvas`, a 2rem graph-paper grid drawn from `--border`, which reads as
-squared coursebook paper behind the cards. Full-bleed routes (`/chat`,
-`/simulations`) sit on the same canvas without the page shell.
+`bg-sidebar-active`, `border-sidebar-border`); the content area is the flat warm
+paper `bg-background`, with cards a shade lighter (`bg-card`) on top of it. Keep the
+canvas plain — no textures, grids or tints behind content. Full-bleed routes
+(`/chat`, `/simulations`) sit on the same canvas without the page shell.
 
 One accent only: `--signal`, a copper reserved for orientation — the wordmark
 atom, the 2px bar on the active nav item, badges, page eyebrows

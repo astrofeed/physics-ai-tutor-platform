@@ -76,16 +76,6 @@ body {
     @apply max-w-measure;
   }
 
-  /* Graph-paper canvas behind page content — the coursebook motif */
-  .app-canvas {
-    background-color: hsl(var(--background));
-    background-image:
-      linear-gradient(hsl(var(--border) / 0.55) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--border) / 0.55) 1px, transparent 1px);
-    background-size: 2rem 2rem;
-    background-position: -1px -1px;
-  }
-
   /* Numbered section rule: figure, label, then a hairline to the right edge */
   .section-rule {
     @apply flex items-center gap-3;
