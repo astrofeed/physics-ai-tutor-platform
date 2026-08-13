@@ -1179,6 +1179,10 @@ Next.js 14 app with Prisma (PostgreSQL), NextAuth credentials + Google OAuth, Op
 - **Styling**: Tailwind CSS, Radix UI, shadcn/ui
 - **LaTeX**: `react-markdown`, `remark-math`, `rehype-katex`, `katex`
 
+### AI Client Initialization
+
+OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()` / `getAnthropic()`, which throw a clear "API key is not configured" error when the corresponding env var is missing. Never instantiate these SDK clients at module load time — the app must boot and degrade gracefully without AI keys (`/api/chat` streams a friendly authentication-error message instead of returning a 500).
+
 ## Testing
 
 ### Prerequisites

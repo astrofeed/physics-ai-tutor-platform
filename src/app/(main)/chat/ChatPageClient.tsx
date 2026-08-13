@@ -208,6 +208,8 @@ export default function ChatPageClient({
     // Add empty assistant message that will be streamed into
     setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "", thinking: "" }]);
 
+    let requestFailedBeforeStream = false;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -223,6 +225,7 @@ export default function ChatPageClient({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: "Chat request failed" }));
+        requestFailedBeforeStream = true;
         throw new Error(errData.error || "Chat request failed");
       }
 
@@ -295,6 +298,10 @@ export default function ChatPageClient({
             : msg
         )
       );
+      // Restore the input so the user can retry without retyping
+      if (requestFailedBeforeStream) {
+        setInput(messageText);
+      }
     } finally {
       setLoading(false);
     }

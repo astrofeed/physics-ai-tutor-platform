@@ -1,7 +1,7 @@
 import { getEffectiveSession } from "@/lib/impersonate";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripMarkdown } from "@/lib/utils";
 import { isStaff } from "@/lib/constants";
 import DashboardClient from "./DashboardClient";
 
@@ -16,13 +16,13 @@ export default async function DashboardPage() {
   const role = (user.role as string) || "STUDENT";
 
   const [conversationCount, assignmentCount, submissionCount] = await Promise.all([
-    prisma.conversation.count({ where: { userId } }),
+    prisma.conversation.count({ where: { userId, isDeleted: false } }),
     prisma.assignment.count({ where: { published: true } }),
     prisma.submission.count({ where: { userId } }),
   ]);
 
   const recentConversations = await prisma.conversation.findMany({
-    where: { userId },
+    where: { userId, isDeleted: false },
     orderBy: { updatedAt: "desc" },
     take: 5,
     include: {
@@ -110,7 +110,7 @@ export default async function DashboardPage() {
         id: c.id,
         title: c.title,
         updatedAt: c.updatedAt.toISOString(),
-        lastMessage: c.messages[0]?.content?.slice(0, 80) || "No messages yet",
+        lastMessage: stripMarkdown(c.messages[0]?.content || "").slice(0, 80) || "No messages yet",
       }))}
       upcomingAssignments={upcomingAssignments.map((a) => ({
         id: a.id,
