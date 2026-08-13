@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 import colors from "tailwindcss/colors";
+import defaultTheme from "tailwindcss/defaultTheme";
 
 const config: Config = {
   darkMode: "class",
@@ -11,13 +12,18 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['var(--font-geist-sans)', ...defaultTheme.fontFamily.sans],
+  			mono: ['var(--font-geist-mono)', ...defaultTheme.fontFamily.mono],
+  			display: ['var(--font-display)', ...defaultTheme.fontFamily.serif],
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
-  			gray: colors.neutral,
+  			gray: colors.stone,
+  			neutral: colors.stone,
   			accent: {
   				DEFAULT: 'hsl(var(--accent))',
-  				light: '#f3e8ff',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
   			card: {

@@ -1192,6 +1192,26 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 - Web search runs via OpenAI's `web_search_preview` tool. `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
 - Conversation export: `src/components/chat/export-conversation.ts` (Markdown download; PDF via `window.print()` scoped to `#chat-print-area` by `@media print` rules in `globals.css`).
 
+## Design System
+
+Visual language is editorial, not "AI dashboard": warm off-white surfaces, stone neutrals, a muted navy primary, hairline borders, `0.375rem` radius, and almost no gradients or shadows.
+
+- Theme tokens live in `src/app/globals.css`; `tailwind.config.ts` maps `gray`/`neutral` to Tailwind `stone` so legacy `text-neutral-*` classes stay on-palette.
+- Display typography: Newsreader via `next/font/google` (`--font-display`), applied automatically to `h1`/`h2` and available as `font-display`. Body text stays on Geist.
+- `.eyebrow` — small uppercase label above headings and stat figures.
+- `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
+- Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`). Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`.
+- Labels must say what is actually measured (visits / messages / events), never "sessions".
+
+## Activity & Usage Metrics
+
+Shared activity contracts live in `src/lib/activity.ts` (categories, filter groups, `MAX_ACTIVITY_DURATION_MS`, `toDateKey`, `resolveTimezone`) and `src/types/activity.ts`. The old `src/lib/track-activity.ts` was removed — import from `@/lib/activity`.
+
+- **Time**: `useTrackTime` (`src/lib/use-track-time.ts`) measures *foreground* time only — the clock pauses on `visibilitychange`, flushes every 60s / on `pagehide` / on unmount, and each flush sends the running total which `POST /api/activity` overwrites (idempotent). Durations are validated finite + non-negative with Zod and capped at `MAX_ACTIVITY_DURATION_MS` (2h per visit).
+- `/api/analytics` returns `trackedStudyMinutes` — the sum of recorded `UserActivity.durationMs`. The previous `estimatedStudyMinutes` (`totalMessages * 1.5`) heuristic was removed; never estimate time from message counts.
+- **Counts**: `UserActivity` rows are page visits, not sessions. The heatmap intentionally mixes activity rows, user chat messages, and submissions, so it is labeled "events recorded per day". There is currently no session model (no inactivity-gap grouping).
+- **Timezone**: any user-facing day bucketing must go through `toDateKey(date, tz)` with `resolveTimezone(searchParams.get("tz"))`; clients pass `?tz=` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+
 ## Testing
 
 ### Prerequisites

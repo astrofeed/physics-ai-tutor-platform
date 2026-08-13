@@ -5,15 +5,13 @@ import Link from "next/link";
 import {
   MessageSquare,
   FileText,
-  GraduationCap,
   Sparkles,
   Upload,
   PenTool,
-  Users,
   ClipboardList,
-  AlertCircle,
 } from "lucide-react";
 import { isStaff } from "@/lib/constants";
+import { StatBand, type StatItem } from "@/components/ui/stat-band";
 import { RecentConversationsCard } from "@/components/dashboard/RecentConversationsCard";
 import { OpenAppealsCard, UpcomingAssignmentsCard } from "@/components/dashboard/ActivityCards";
 
@@ -58,19 +56,11 @@ interface DashboardClientProps {
   }[];
 }
 
-function SectionHeading({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle?: string;
-}) {
+function SectionHeading({ title }: { title: string }) {
   return (
-    <div className="mb-5">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-      {subtitle && (
-        <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">{subtitle}</p>
-      )}
+    <div className="mb-4 flex items-center gap-3">
+      <h2 className="eyebrow shrink-0">{title}</h2>
+      <span className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -136,150 +126,60 @@ export default function DashboardClient({
     item.roles.includes(userRole)
   );
 
-  const statCards = (() => {
+  const statItems: StatItem[] = (() => {
     if (userRole === "ADMIN" && adminStats) {
       return [
-        {
-          value: adminStats.totalUsers,
-          label: "Total Users",
-          sublabel: "Platform-wide",
-          icon: Users,
-          href: "/admin/users",
-        },
-        {
-          value: adminStats.totalConversations,
-          label: "Total Conversations",
-          sublabel: "All users combined",
-          icon: MessageSquare,
-          href: "/admin/qa-history",
-        },
-        {
-          value: adminStats.totalSubmissions,
-          label: "Total Submissions",
-          sublabel: "All assignments",
-          icon: GraduationCap,
-          href: "/assignments",
-        },
+        { value: adminStats.totalUsers, label: "Users", href: "/admin/users" },
+        { value: adminStats.totalConversations, label: "Conversations", href: "/admin/qa-history" },
+        { value: adminStats.totalSubmissions, label: "Submissions", href: "/assignments" },
       ];
     }
     if ((userRole === "TA" || userRole === "PROFESSOR") && taStats) {
       return [
-        {
-          value: stats.conversationCount,
-          label: "My Chats",
-          sublabel: "AI conversations",
-          icon: MessageSquare,
-          href: "/chat",
-        },
-        {
-          value: taStats.pendingGrading,
-          label: "Pending Grading",
-          sublabel: "Submissions to review",
-          icon: ClipboardList,
-          href: "/grading",
-        },
-        {
-          value: taStats.openAppealCount,
-          label: "Open Appeals",
-          sublabel: "Awaiting response",
-          icon: AlertCircle,
-          href: "/grading",
-        },
+        { value: stats.conversationCount, label: "My chats", href: "/chat" },
+        { value: taStats.pendingGrading, label: "Pending grading", href: "/grading" },
+        { value: taStats.openAppealCount, label: "Open appeals", href: "/grading" },
       ];
     }
     return [
-      {
-        value: stats.conversationCount,
-        label: "Questions Asked",
-        sublabel: "AI conversations",
-        icon: MessageSquare,
-        href: "/chat",
-      },
-      {
-        value: stats.assignmentCount,
-        label: "Assignments",
-        sublabel: "Available assignments",
-        icon: FileText,
-        href: "/assignments",
-      },
-      {
-        value: stats.submissionCount,
-        label: "Submissions",
-        sublabel: "Completed work",
-        icon: GraduationCap,
-        href: "/grades",
-      },
+      { value: stats.conversationCount, label: "Questions asked", href: "/chat" },
+      { value: stats.assignmentCount, label: "Assignments", href: "/assignments" },
+      { value: stats.submissionCount, label: "Submissions", href: "/grades" },
     ];
   })();
 
   return (
-    <div className="space-y-6 sm:space-y-10 pb-8">
-      {/* Welcome Section — plain text, no colored background */}
-      <div className="pt-2 animate-fade-in">
-        <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-gray-100">
-          Welcome Back, {userName}
+    <div className="space-y-8 sm:space-y-12 pb-8">
+      <div className="pt-1">
+        <p className="eyebrow">{date}</p>
+        <h1 className="mt-1.5 text-[28px] md:text-[34px] leading-tight text-gray-900 dark:text-gray-100">
+          Good to see you, {userName}
         </h1>
-        <p className="text-gray-400 dark:text-gray-500 mt-1">{date}</p>
       </div>
 
-      {/* Stat Cards */}
+      <StatBand items={statItems} />
+
       <div>
-        <SectionHeading title="Overview" subtitle="Your activity at a glance" />
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          {statCards.map((stat, index) => (
+        <SectionHeading title="Jump back in" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border border border-border rounded-lg overflow-hidden">
+          {filteredQuickStart.slice(0, 6).map((item) => (
             <Link
-              key={stat.label}
-              href={stat.href}
-              className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 hover:border-gray-200 dark:hover:border-gray-700 transition-colors animate-fade-in group"
-              style={{ animationDelay: `${index * 100}ms` }}
+              key={item.href + item.label}
+              href={item.href}
+              className="flex items-start gap-3 bg-card px-4 py-3.5 hover:bg-secondary/60 transition-colors"
             >
-              <div className="flex items-center justify-between mb-2 sm:mb-3">
-                <div className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center group-hover:bg-gray-100 dark:group-hover:bg-gray-750 transition-colors">
-                  <stat.icon className="h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 text-gray-500 dark:text-gray-400" />
-                </div>
-              </div>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                {stat.value}
-              </p>
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1 leading-tight">{stat.label}</p>
-              <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 mt-0.5 hidden sm:block">{stat.sublabel}</p>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Quick Start */}
-      <div>
-        <SectionHeading title="Quick Start" subtitle="Top physics tools" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {filteredQuickStart.slice(0, 8).map((item, index) => (
-            <Link key={item.href + item.label} href={item.href}>
-              <div
-                className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200 cursor-pointer h-full group animate-fade-in"
-                style={{ animationDelay: `${index * 80}ms` }}
-              >
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center mb-2.5 sm:mb-3 group-hover:bg-gray-100 dark:group-hover:bg-gray-750 transition-colors">
-                  <item.icon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 dark:text-gray-400" />
-                </div>
-
-                <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {item.label}
-                </p>
-                <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 mt-0.5 sm:mt-1 leading-relaxed line-clamp-1 sm:line-clamp-none">
-                  {item.description}
-                </p>
+              <item.icon className="h-4 w-4 mt-0.5 shrink-0 text-gray-400 dark:text-gray-500" />
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.label}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{item.description}</p>
               </div>
             </Link>
           ))}
         </div>
       </div>
 
-      {/* Recent Activity */}
       <div>
-        <SectionHeading
-          title="Recent Activity"
-          subtitle="Your conversations and upcoming work"
-        />
+        <SectionHeading title="Recent activity" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RecentConversationsCard conversations={recentConversations} />
           {isStaffRole ? (

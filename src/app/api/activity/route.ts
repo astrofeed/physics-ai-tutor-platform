@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
+import { ACTIVITY_CATEGORIES, MAX_ACTIVITY_DURATION_MS } from "@/lib/activity";
 
-const VALID_CATEGORIES = [
-  "AI_CHAT",
-  "ASSIGNMENT_VIEW",
-  "ASSIGNMENT_SUBMIT",
-  "GRADING",
-  "SIMULATION",
-  "PROBLEM_GEN",
-  "ANALYTICS_VIEW",
-  "ADMIN_ACTION",
-] as const;
+const DurationUpdateSchema = z.object({
+  id: z.string().min(1),
+  durationMs: z.number().finite().min(0),
+});
+
+const CreateActivitySchema = z.object({
+  category: z.enum(ACTIVITY_CATEGORIES),
+  detail: z.string().max(200).nullish(),
+});
 
 // Deterministic cleanup: delete records older than 1 year, at most once per hour
 let lastCleanup = 0;
@@ -47,23 +48,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Account suspended" }, { status: 403 });
     }
 
-    const body = await req.json();
-    const { category, detail, id, durationMs } = body;
+    const body: unknown = await req.json();
 
-    // Duration update (used by sendBeacon which can only POST)
-    if (id && typeof durationMs === "number") {
-      const cappedDuration = Math.min(Math.max(durationMs, 0), 2 * 60 * 60 * 1000);
+    // Duration update (used by sendBeacon, which can only POST)
+    if (typeof body === "object" && body !== null && "id" in body) {
+      const parsed = DurationUpdateSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid duration update" }, { status: 400 });
+      }
       await prisma.userActivity.updateMany({
-        where: { id, userId },
-        data: { durationMs: cappedDuration },
+        where: { id: parsed.data.id, userId },
+        data: { durationMs: Math.min(parsed.data.durationMs, MAX_ACTIVITY_DURATION_MS) },
       });
       return NextResponse.json({ ok: true });
     }
 
-    // New activity creation
-    if (!category || !VALID_CATEGORIES.includes(category)) {
+    const created = CreateActivitySchema.safeParse(body);
+    if (!created.success) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
+    const { category, detail } = created.data;
 
     // Rate limit: skip if same user+category was created in last 3 seconds
     const recentDuplicate = await prisma.userActivity.findFirst({
@@ -104,19 +108,14 @@ export async function PATCH(req: Request) {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
     const userId = auth.user.id;
-    const body = await req.json();
-    const { id, durationMs } = body;
-
-    if (!id || typeof durationMs !== "number" || durationMs < 0) {
+    const parsed = DurationUpdateSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
     }
 
-    // Cap at 2 hours to prevent runaway tabs
-    const cappedDuration = Math.min(durationMs, 2 * 60 * 60 * 1000);
-
     await prisma.userActivity.updateMany({
-      where: { id, userId },
-      data: { durationMs: cappedDuration },
+      where: { id: parsed.data.id, userId },
+      data: { durationMs: Math.min(parsed.data.durationMs, MAX_ACTIVITY_DURATION_MS) },
     });
 
     return NextResponse.json({ ok: true });
