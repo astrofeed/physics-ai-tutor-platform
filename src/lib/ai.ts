@@ -286,6 +286,32 @@ export async function generateConversationTitle(
   return title || null;
 }
 
+export async function summarizeConversation(
+  messages: { role: string; content: string }[]
+): Promise<string | null> {
+  const transcript = messages
+    .map((m) => `${m.role === "user" ? "Student" : "Tutor"}: ${m.content}`)
+    .join("\n\n");
+
+  const summaryPrompt = `Summarize the following physics tutoring conversation so a new tutoring session can continue seamlessly. Capture: the physics topics discussed, key concepts and formulas covered, problems the student worked on and their solutions or progress, and any open questions or misunderstandings. Use the same language as the conversation (Traditional Chinese if the conversation is in Chinese). Keep it under 500 words. Use LaTeX with $...$ / $$...$$ for math. Reply with ONLY the summary.\n\n${transcript}`;
+
+  if (isDeepSeekActive()) {
+    const response = await getDeepSeek().chat.completions.create({
+      model: DEEPSEEK_CHAT_MODEL,
+      messages: [{ role: "user", content: summaryPrompt }],
+      max_tokens: 2000,
+    });
+    return response.choices[0]?.message?.content?.trim() || null;
+  }
+
+  const response = await getOpenAI().responses.create({
+    model: OPENAI_CHAT_MODEL,
+    input: [{ role: "user", content: summaryPrompt }],
+    reasoning: { effort: "low" },
+  });
+  return response.output_text?.trim() || null;
+}
+
 async function streamAnthropic(
   messages: ChatMessage[],
   model: string,

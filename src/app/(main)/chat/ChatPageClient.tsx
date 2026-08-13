@@ -12,7 +12,10 @@ import {
   Download,
   FileText,
   Printer,
+  FoldVertical,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -56,6 +59,7 @@ export default function ChatPageClient({
   const [examBannerDismissed, setExamBannerDismissed] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -230,6 +234,29 @@ export default function ChatPageClient({
     }
   };
 
+  const compressAndContinue = async () => {
+    if (!activeConversationId || compressing) return;
+    setCompressing(true);
+    try {
+      const res = await fetch(`/api/conversations/${activeConversationId}/compress`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to compress conversation");
+        return;
+      }
+      setConversations((prev) => [data.conversation, ...prev]);
+      setActiveConversationId(data.conversation.id);
+      setMessages([data.summaryMessage]);
+      toast.success("Conversation compressed into a new chat");
+    } catch {
+      toast.error("Failed to compress conversation. Please try again.");
+    } finally {
+      setCompressing(false);
+    }
+  };
+
   const copyMessage = async (messageId: string, content: string) => {
     await navigator.clipboard.writeText(content);
     setCopiedMessageId(messageId);
@@ -307,6 +334,22 @@ export default function ChatPageClient({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {activeConversationId && messages.length > 0 && (
+              <button
+                type="button"
+                onClick={compressAndContinue}
+                disabled={compressing || loading}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Summarize this conversation and continue in a new chat"
+              >
+                {compressing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FoldVertical className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden sm:inline">{compressing ? "Compressing…" : "Compress"}</span>
+              </button>
             )}
             {!examModeActive && (
               <Button
