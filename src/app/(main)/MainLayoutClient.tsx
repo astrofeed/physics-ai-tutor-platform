@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { EyeOff } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { EffectiveSessionProvider } from "@/lib/effective-session-context";
 import type { UserRole } from "@/types";
+
+// Routes that own their full width: canvases, chat transcript, editors
+const FULL_BLEED_ROUTES = ["/chat", "/simulations"];
 
 interface MainLayoutClientProps {
   children: React.ReactNode;
@@ -30,6 +33,8 @@ export default function MainLayoutClient({
   realAdminName,
 }: MainLayoutClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const fullBleed = FULL_BLEED_ROUTES.some((route) => pathname.startsWith(route));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -102,19 +107,27 @@ export default function MainLayoutClient({
           userRole={userRole}
           onMobileMenuToggle={() => setMobileSidebarOpen((prev) => !prev)}
         />
-        <main id="main-content" className="flex-1 p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-950 overflow-auto">
-          <EffectiveSessionProvider
-            session={{
-              id: userId,
-              name: userName,
-              email: userEmail,
-              role: userRole,
-              image: userImage,
-              isImpersonating: !!isImpersonating,
-            }}
+        <main id="main-content" className="flex-1 overflow-auto bg-background">
+          <div
+            className={
+              fullBleed
+                ? "h-full p-3 sm:p-6"
+                : "page-shell h-full p-3 sm:px-gutter sm:py-8"
+            }
           >
-            {children}
-          </EffectiveSessionProvider>
+            <EffectiveSessionProvider
+              session={{
+                id: userId,
+                name: userName,
+                email: userEmail,
+                role: userRole,
+                image: userImage,
+                isImpersonating: !!isImpersonating,
+              }}
+            >
+              {children}
+            </EffectiveSessionProvider>
+          </div>
         </main>
       </div>
     </div>

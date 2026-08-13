@@ -1,16 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  Loader2,
-  Users,
-  Clock,
-  Activity,
-  TrendingUp,
-  Download,
-  Crown,
-} from "lucide-react";
+import { Loader2, Download, Crown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatBand } from "@/components/ui/stat-band";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,9 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTheme } from "next-themes";
 import { CATEGORY_LABELS, ROLE_BADGE_COLORS } from "@/lib/constants";
 import { formatDuration, timeAgo } from "@/lib/utils";
+import { SESSION_GAP_MS } from "@/lib/activity";
 import { ActivityChart } from "@/components/admin/ActivityChart";
 import { UsageBreakdown } from "@/components/admin/UsageBreakdown";
 
@@ -54,6 +47,8 @@ interface ActivityData {
   summary: {
     totalActivities: number;
     uniqueUsers: number;
+    sessionCount: number;
+    avgSessionMs: number;
     totalTimeMs: number;
     avgDailyActivities: number;
   };
@@ -116,8 +111,6 @@ export default function AdminUserActivityPage() {
     "activity"
   );
   const [csvLoading, setCsvLoading] = useState(false);
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -135,7 +128,8 @@ export default function AdminUserActivityPage() {
         setData(json);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[admin/user-activity] Failed to load activity data:", err);
         setData(null);
         setLoading(false);
       });
@@ -226,12 +220,11 @@ export default function AdminUserActivityPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight dark:text-gray-100">
-          User Activity
-        </h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+    <div className="page-sections">
+      <div className="page-header">
+        <p className="eyebrow-signal">Platform</p>
+        <h1 className="page-title">User activity</h1>
+        <p className="page-lede">
           Monitor how users engage with platform features
         </p>
       </div>
@@ -306,87 +299,38 @@ export default function AdminUserActivityPage() {
         </div>
       ) : (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="gradient-card-purple border-0">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                    <Activity className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {data.summary.totalActivities.toLocaleString()}
-                    </div>
-                    <p className="text-sm font-medium">Total Activities</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="gradient-card-blue border-0">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                    <Users className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {data.summary.uniqueUsers}
-                    </div>
-                    <p className="text-sm font-medium">Unique Users</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="gradient-card-green border-0">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                    <Clock className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {data.summary.totalTimeMs > 0
-                        ? formatDuration(data.summary.totalTimeMs)
-                        : "--"}
-                    </div>
-                    <p className="text-sm font-medium">
-                      {data.summary.totalTimeMs > 0
-                        ? "Total Time Spent"
-                        : "Time Not Tracked"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="gradient-card-pink border-0">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {data.summary.avgDailyActivities}
-                    </div>
-                    <p className="text-sm font-medium">Avg Daily Activities</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <StatBand
+            items={[
+              {
+                label: "Sessions",
+                value: data.summary.sessionCount.toLocaleString(),
+                hint: `Split after ${SESSION_GAP_MS / 60000} min idle`,
+              },
+              {
+                label: "Average session",
+                value: data.summary.avgSessionMs > 0 ? formatDuration(data.summary.avgSessionMs) : "--",
+              },
+              { label: "Unique users", value: data.summary.uniqueUsers },
+              {
+                label: "Measured time",
+                value: data.summary.totalTimeMs > 0 ? formatDuration(data.summary.totalTimeMs) : "--",
+                hint: "Foreground time on tracked pages",
+              },
+              {
+                label: "Recorded events",
+                value: data.summary.totalActivities.toLocaleString(),
+                hint: `${data.summary.avgDailyActivities}/day average`,
+              },
+            ]}
+          />
 
           <ActivityChart
             dailyTrend={data.dailyTrend}
             trendCategories={data.trendCategories}
-            isDark={isDark}
           />
 
           {/* Two-column: Top Users + Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-gutter lg:grid-cols-2">
             {/* Top Users */}
             <Card className="flex flex-col">
               <CardHeader>

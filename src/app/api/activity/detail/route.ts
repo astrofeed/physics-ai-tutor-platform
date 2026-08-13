@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-
-/** Format a Date as YYYY-MM-DD in a given IANA timezone */
-function toDateKey(date: Date, tz: string): string {
-  return date.toLocaleDateString("en-CA", { timeZone: tz });
-}
+import { ACTIVITY_FILTER_CATEGORIES, resolveTimezone, toDateKey } from "@/lib/activity";
+import type { DayActivity } from "@/types/activity";
 
 export async function GET(req: Request) {
   try {
@@ -21,27 +18,14 @@ export async function GET(req: Request) {
 
     const filter = searchParams.get("filter");
 
-    // Validate timezone (fallback to UTC)
-    const tzParam = searchParams.get("tz") || "UTC";
-    let tz = "UTC";
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: tzParam });
-      tz = tzParam;
-    } catch { /* invalid timezone */ }
-
-    const FILTER_CATEGORIES: Record<string, string[]> = {
-      chat: ["AI_CHAT"],
-      simulation: ["SIMULATION"],
-      submission: ["ASSIGNMENT_SUBMIT", "ASSIGNMENT_VIEW"],
-    };
+    const tz = resolveTimezone(searchParams.get("tz"));
 
     const whereCategory: Record<string, unknown> = {};
     if (filter && filter !== "all") {
       if (filter === "other") {
-        const excludeCats = Object.values(FILTER_CATEGORIES).flat();
-        whereCategory.category = { notIn: excludeCats };
-      } else if (FILTER_CATEGORIES[filter]) {
-        whereCategory.category = { in: FILTER_CATEGORIES[filter] };
+        whereCategory.category = { notIn: Object.values(ACTIVITY_FILTER_CATEGORIES).flat() };
+      } else if (ACTIVITY_FILTER_CATEGORIES[filter]) {
+        whereCategory.category = { in: ACTIVITY_FILTER_CATEGORIES[filter] };
       }
     }
 
@@ -68,7 +52,7 @@ export async function GET(req: Request) {
       },
     });
 
-    const results: { id: string; category: string; detail: string | null; durationMs: number | null; time: string }[] = [];
+    const results: DayActivity[] = [];
 
     for (const a of activities) {
       if (toDateKey(a.createdAt, tz) !== date) continue;

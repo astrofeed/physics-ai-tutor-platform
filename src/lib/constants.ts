@@ -12,17 +12,19 @@ export const CATEGORY_LABELS: Record<string, string> = {
   ADMIN_ACTION: "Admin",
 };
 
-/** Activity category colors for charts */
+/** Activity category colors for charts — theme tokens, never raw hex */
 export const CATEGORY_COLORS: Record<string, string> = {
-  AI_CHAT: "#6366f1",
-  ASSIGNMENT_VIEW: "#8b5cf6",
-  ASSIGNMENT_SUBMIT: "#a78bfa",
-  GRADING: "#10b981",
-  SIMULATION: "#f59e0b",
-  PROBLEM_GEN: "#ec4899",
-  ANALYTICS_VIEW: "#06b6d4",
-  ADMIN_ACTION: "#64748b",
+  AI_CHAT: "hsl(var(--chart-1))",
+  ASSIGNMENT_VIEW: "hsl(var(--chart-2))",
+  ASSIGNMENT_SUBMIT: "hsl(var(--chart-3))",
+  GRADING: "hsl(var(--chart-4))",
+  SIMULATION: "hsl(var(--chart-5))",
+  PROBLEM_GEN: "hsl(var(--chart-2) / 0.6)",
+  ANALYTICS_VIEW: "hsl(var(--chart-1) / 0.6)",
+  ADMIN_ACTION: "hsl(var(--muted-foreground))",
 };
+
+export const CATEGORY_COLOR_FALLBACK = "hsl(var(--muted-foreground))";
 
 /** Tailwind classes for role badges */
 export const ROLE_BADGE_COLORS: Record<string, string> = {

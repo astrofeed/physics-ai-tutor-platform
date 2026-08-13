@@ -1,17 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-
-const FILTER_CATEGORIES: Record<string, string[]> = {
-  chat: ["AI_CHAT"],
-  simulation: ["SIMULATION"],
-  submission: ["ASSIGNMENT_SUBMIT", "ASSIGNMENT_VIEW"],
-};
-
-/** Format a Date as YYYY-MM-DD in a given IANA timezone */
-function toDateKey(date: Date, tz: string): string {
-  return date.toLocaleDateString("en-CA", { timeZone: tz });
-}
+import { ACTIVITY_FILTER_CATEGORIES, resolveTimezone, toDateKey } from "@/lib/activity";
 
 export async function GET(req: Request) {
   try {
@@ -21,13 +11,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const filter = searchParams.get("filter"); // "all" | "chat" | "simulation" | "submission" | "other"
 
-    // Validate timezone (fallback to UTC)
-    const tzParam = searchParams.get("tz") || "UTC";
-    let tz = "UTC";
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: tzParam });
-      tz = tzParam;
-    } catch { /* invalid timezone */ }
+    const tz = resolveTimezone(searchParams.get("tz"));
 
     // Get activities from the past ~366 days (extra buffer for timezone edge cases)
     const yearAgo = new Date();
@@ -39,10 +23,9 @@ export async function GET(req: Request) {
     const whereCategory: Record<string, unknown> = {};
     if (filter && filter !== "all") {
       if (filter === "other") {
-        const excludeCats = Object.values(FILTER_CATEGORIES).flat();
-        whereCategory.category = { notIn: excludeCats };
-      } else if (FILTER_CATEGORIES[filter]) {
-        whereCategory.category = { in: FILTER_CATEGORIES[filter] };
+        whereCategory.category = { notIn: Object.values(ACTIVITY_FILTER_CATEGORIES).flat() };
+      } else if (ACTIVITY_FILTER_CATEGORIES[filter]) {
+        whereCategory.category = { in: ACTIVITY_FILTER_CATEGORIES[filter] };
       }
     }
 

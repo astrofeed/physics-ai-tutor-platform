@@ -11,32 +11,34 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { CATEGORY_COLORS, CATEGORY_LABELS } from "@/lib/constants";
+import {
+  CATEGORY_COLORS,
+  CATEGORY_COLOR_FALLBACK,
+  CATEGORY_LABELS,
+} from "@/lib/constants";
+import { CHART_TOOLTIP_STYLE } from "@/lib/chart-theme";
 
 interface ActivityChartProps {
   dailyTrend: Record<string, string | number>[];
   trendCategories: string[];
-  isDark: boolean;
 }
 
-export function ActivityChart({ dailyTrend, trendCategories, isDark }: ActivityChartProps) {
-  const gridColor = isDark ? "#374151" : "#e5e7eb";
-  const tickColor = isDark ? "#9ca3af" : "#6b7280";
-  const tooltipBg = isDark ? "#1f2937" : "#ffffff";
-  const tooltipBorder = isDark ? "#374151" : "#e5e7eb";
+export function ActivityChart({ dailyTrend, trendCategories }: ActivityChartProps) {
+  const gridColor = "hsl(var(--border))";
+  const tickColor = "hsl(var(--muted-foreground))";
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Daily Activity Trend</CardTitle>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        <CardTitle className="section-title">Daily activity trend</CardTitle>
+        <p className="text-caption text-muted-foreground">
           Activity count by category over time
         </p>
       </CardHeader>
       <CardContent>
         {dailyTrend.every((d) => d.total === 0) ? (
-          <div className="flex items-center justify-center h-[300px]">
-            <p className="text-sm text-neutral-400 dark:text-neutral-500">
+          <div className="flex h-[300px] items-center justify-center">
+            <p className="text-body text-muted-foreground">
               No activity in this period
             </p>
           </div>
@@ -64,13 +66,7 @@ export function ActivityChart({ dailyTrend, trendCategories, isDark }: ActivityC
                 tick={{ fill: tickColor }}
               />
               <Tooltip
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: `1px solid ${tooltipBorder}`,
-                  fontSize: "13px",
-                  backgroundColor: tooltipBg,
-                  color: isDark ? "#e5e7eb" : "#1f2937",
-                }}
+                contentStyle={CHART_TOOLTIP_STYLE}
                 formatter={(
                   value: number | undefined,
                   name: string | undefined
@@ -78,14 +74,14 @@ export function ActivityChart({ dailyTrend, trendCategories, isDark }: ActivityC
                   value ?? 0,
                   CATEGORY_LABELS[name || ""] || name || "",
                 ]}
-                cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}
+                cursor={{ fill: "hsl(var(--secondary))" }}
               />
               {trendCategories.map((cat) => (
                 <Bar
                   key={cat}
                   dataKey={cat}
                   stackId="1"
-                  fill={CATEGORY_COLORS[cat] || "#94a3b8"}
+                  fill={CATEGORY_COLORS[cat] || CATEGORY_COLOR_FALLBACK}
                   radius={[0, 0, 0, 0]}
                 />
               ))}
@@ -94,16 +90,16 @@ export function ActivityChart({ dailyTrend, trendCategories, isDark }: ActivityC
         )}
 
         {trendCategories.length > 1 && (
-          <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div className="mt-3 flex flex-wrap gap-3 border-t border-border pt-3">
             {trendCategories.map((cat) => (
               <div key={cat} className="flex items-center gap-1.5">
                 <div
-                  className="w-3 h-3 rounded-sm"
+                  className="h-2.5 w-2.5 rounded-sm"
                   style={{
-                    backgroundColor: CATEGORY_COLORS[cat] || "#94a3b8",
+                    backgroundColor: CATEGORY_COLORS[cat] || CATEGORY_COLOR_FALLBACK,
                   }}
                 />
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-caption text-muted-foreground">
                   {CATEGORY_LABELS[cat] || cat}
                 </span>
               </div>

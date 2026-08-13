@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Loader2, Users, MessageSquare, Mail, FileText } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatBand } from "@/components/ui/stat-band";
+import { CHART_TOOLTIP_STYLE } from "@/lib/chart-theme";
 import {
   BarChart,
   Bar,
@@ -36,7 +38,10 @@ export default function AdminAnalyticsPage() {
         setData(json);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error("[admin-analytics] Failed to load analytics data:", err);
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -50,99 +55,41 @@ export default function AdminAnalyticsPage() {
   if (!data) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-neutral-500 dark:text-neutral-400">Failed to load analytics data.</p>
+        <p className="text-muted-foreground">Failed to load analytics data.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight dark:text-gray-100">Admin Analytics</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-          Platform-wide usage and performance overview
-        </p>
+    <div className="page-sections">
+      <div className="page-header">
+        <p className="eyebrow-signal">Platform</p>
+        <h1 className="page-title">Admin analytics</h1>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="gradient-card-purple border-0">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                <Users className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{data.overview.totalUsers}</div>
-                <p className="text-sm font-medium">Total Users</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="gradient-card-pink border-0">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{data.overview.totalConversations}</div>
-                <p className="text-sm font-medium">Conversations</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="gradient-card-blue border-0">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                <Mail className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{data.overview.totalMessages}</div>
-                <p className="text-sm font-medium">Messages</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="gradient-card-green border-0">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-white/60 dark:bg-white/20 flex items-center justify-center">
-                <FileText className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{data.overview.totalSubmissions}</div>
-                <p className="text-sm font-medium">Submissions</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <StatBand
+        items={[
+          { label: "Users", value: data.overview.totalUsers },
+          { label: "Conversations", value: data.overview.totalConversations },
+          { label: "Messages", value: data.overview.totalMessages },
+          { label: "Submissions", value: data.overview.totalSubmissions },
+        ]}
+      />
 
       {/* Daily Activity Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Daily Activity</CardTitle>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Messages per day (last 14 days)</p>
+          <CardTitle>Daily activity</CardTitle>
+          <p className="text-xs text-muted-foreground">Messages per day, last 14 days</p>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data.dailyActivity}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="day" fontSize={11} tickLine={false} angle={-30} textAnchor="end" height={60} />
               <YAxis fontSize={12} tickLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: "1px solid #e5e5e5",
-                  fontSize: "13px",
-                }}
-              />
-              <Bar dataKey="messages" fill="#737373" radius={[4, 4, 0, 0]} />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+              <Bar dataKey="messages" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -152,28 +99,22 @@ export default function AdminAnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Score Distribution</CardTitle>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Number of submissions per score range</p>
+            <CardTitle>Score distribution</CardTitle>
+            <p className="text-xs text-muted-foreground">Submissions per score range</p>
           </CardHeader>
           <CardContent>
             {data.scoreDistribution.every((d) => d.count === 0) ? (
               <div className="flex items-center justify-center h-[300px]">
-                <p className="text-sm text-neutral-400 dark:text-neutral-500">No graded submissions yet</p>
+                <p className="text-sm text-muted-foreground">No graded submissions yet</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data.scoreDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="range" fontSize={12} tickLine={false} />
                   <YAxis fontSize={12} tickLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid #e5e5e5",
-                      fontSize: "13px",
-                    }}
-                  />
-                  <Bar dataKey="count" fill="#525252" radius={[4, 4, 0, 0]} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -182,18 +123,18 @@ export default function AdminAnalyticsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Assignment Averages</CardTitle>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Sorted by average score (lowest first)</p>
+            <CardTitle>Assignment averages</CardTitle>
+            <p className="text-xs text-muted-foreground">Lowest average first</p>
           </CardHeader>
           <CardContent>
             {data.assignmentAvgs.length === 0 ? (
               <div className="flex items-center justify-center h-[300px]">
-                <p className="text-sm text-neutral-400 dark:text-neutral-500">No assignment data yet</p>
+                <p className="text-sm text-muted-foreground">No assignment data yet</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data.assignmentAvgs} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis
                     type="number"
                     fontSize={12}
@@ -209,14 +150,10 @@ export default function AdminAnalyticsPage() {
                     width={120}
                   />
                   <Tooltip
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid #e5e5e5",
-                      fontSize: "13px",
-                    }}
-                    formatter={(value: number | undefined) => [`${value ?? 0}%`, "Avg Score"]}
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                    formatter={(value: number | undefined) => [`${value ?? 0}%`, "Avg score"]}
                   />
-                  <Bar dataKey="avgPercent" fill="#404040" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="avgPercent" fill="hsl(var(--chart-1))" radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

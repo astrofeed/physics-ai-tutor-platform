@@ -1192,6 +1192,35 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 - Web search runs via OpenAI's `web_search_preview` tool. `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
 - Conversation export: `src/components/chat/export-conversation.ts` (Markdown download; PDF via `window.print()` scoped to `#chat-print-area` by `@media print` rules in `globals.css`).
 
+## Design System
+
+Visual language is editorial, not "AI dashboard": warm off-white surfaces, stone neutrals, a muted navy primary, hairline borders, `0.375rem` radius, and almost no gradients or shadows.
+
+Full spec: [`docs/design-system.md`](./docs/design-system.md). Read it before adding UI.
+
+- Theme tokens live in `src/app/globals.css`; `tailwind.config.ts` maps `gray`/`neutral` to Tailwind `stone` so legacy `text-neutral-*` classes stay on-palette, and adds the `brand-50..950` navy scale.
+- Typography stays on Geist throughout. Sizes come from the named scale in `tailwind.config.ts` (`text-label`/`caption`/`body`/`body-lg`/`subheading`/`heading`/`title`/`display`), each of which carries its own line-height and tracking. `h1`/`h2`/`h3` are sized in the base layer — do not restate sizes per page, and do not add arbitrary `text-[28px]` values.
+- Layout: `MainLayoutClient` wraps routes in `.page-shell` (`max-w-shell`, centred, `px-gutter py-8`); `FULL_BLEED_ROUTES` (`/chat`, `/simulations`) opt out. Pages compose with `.page-sections` → `.page-header` / `.page-title` / `.page-lede`, `gap-gutter` between cards, `.measure` for prose, `.grid-12` for asymmetric page grids. Pages must not set their own outer padding.
+- Elevation is limited to `shadow-hairline` / `shadow-raised` / `shadow-overlay`.
+- `.eyebrow` — small uppercase label above headings and stat figures.
+- `StatBand` (`src/components/ui/stat-band.tsx`) is the only approved way to show a row of headline figures. Do **not** reintroduce gradient stat cards or icon-in-circle stat grids; the `gradient-card-*` utilities were removed.
+- Chart styling comes from `src/lib/chart-theme.ts` (`CHART_TOOLTIP_STYLE`, `CHART_SERIES_COLORS`) and, for activity categories, `CATEGORY_COLORS` in `src/lib/constants.ts`. Never hardcode hex colors in Recharts — use `hsl(var(--chart-N))` and `hsl(var(--border))`, and do not branch chart colors on `resolvedTheme`; tokens already handle dark mode.
+- Dashboard cards use `.card-minimal` with a hairline header rule, `.section-title`, and text-first empty states. No icon-in-circle accents, no `rounded-xl`/`rounded-2xl`, no `shadow-sm` floating cards.
+- The navigation rail is an ink surface: use the `sidebar-*` Tailwind colors (`bg-sidebar`, `text-sidebar-muted`, `bg-sidebar-active`, `border-sidebar-border`) in `Sidebar.tsx`, never `bg-white`/`bg-gray-*`. The content area is plain `bg-background` with `bg-card` surfaces on top — no background textures, grids or tints behind content.
+- `--signal` (copper, `text-signal`/`bg-signal`) is the only accent: active-nav bar, wordmark, badges, `.eyebrow-signal`, `.section-index`. Never use amber/indigo/violet accents, and never fill large areas with the signal color.
+- Section headings inside a page use `.section-rule` + `.section-index` + `.eyebrow` (numbered rule), not a bare `<h2>` with a bottom border.
+- Labels must say what is actually measured: "visits" for `UserActivity` rows, "messages" for chat messages, "events" for the mixed heatmap, and "sessions" only for gap-derived sessions (see below).
+
+## Activity & Usage Metrics
+
+Shared activity contracts live in `src/lib/activity.ts` (categories, filter groups, `MAX_ACTIVITY_DURATION_MS`, `toDateKey`, `resolveTimezone`) and `src/types/activity.ts`. The old `src/lib/track-activity.ts` was removed — import from `@/lib/activity`.
+
+- **Time**: `useTrackTime` (`src/lib/use-track-time.ts`) measures *foreground* time only — the clock pauses on `visibilitychange`, flushes every 60s / on `pagehide` / on unmount, and each flush sends the running total which `POST /api/activity` overwrites (idempotent). Durations are validated finite + non-negative with Zod and capped at `MAX_ACTIVITY_DURATION_MS` (2h per visit).
+- `/api/analytics` returns `trackedStudyMinutes` — the sum of recorded `UserActivity.durationMs`. The previous `estimatedStudyMinutes` (`totalMessages * 1.5`) heuristic was removed; never estimate time from message counts.
+- **Counts**: `UserActivity` rows are page visits. The heatmap intentionally mixes activity rows, user chat messages, and submissions, so it is labeled "events recorded per day" — never call that total a session count.
+- **Sessions**: derived from visit timestamps, not stored. `summarizeSessions()` in `src/lib/activity.ts` walks a single user's visits in order and starts a new session when a visit begins more than `SESSION_GAP_MS` (30 min) after the previous visit ended; a session's length spans its first visit's start to its last visit's end, so overlapping tabs are not double counted. `/api/analytics` uses that helper; `/api/admin/user-activity` computes the same rule in SQL with window functions (`sessionCount`, `avgSessionMs`) so it stays a single aggregate query. Sessions must always be grouped per user before splitting on the gap.
+- **Timezone**: any user-facing day bucketing must go through `toDateKey(date, tz)` with `resolveTimezone(searchParams.get("tz"))`; clients pass `?tz=` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+
 ## Testing
 
 ### Prerequisites
@@ -1420,7 +1449,7 @@ Duplicated pure functions and constant maps are consolidated into shared modules
 - **`src/lib/diagram-utils.ts`** — `getDiagramContent(diagram)`: Extracts diagram content from various formats (Prisma JSON, raw SVG string, etc.). Used by assignment detail and edit pages.
 - **`src/lib/constants.ts`** — Shared constant maps:
   - `CATEGORY_LABELS`: Activity category display labels (e.g., `AI_CHAT` → `"AI Chat"`)
-  - `CATEGORY_COLORS`: Activity category hex colors for charts
+  - `CATEGORY_COLORS`: Activity category chart colors as theme tokens (`hsl(var(--chart-N))`), plus `CATEGORY_COLOR_FALLBACK`. Single source of truth — the admin activity API imports it instead of redeclaring its own map.
   - `ROLE_BADGE_COLORS`: Tailwind classes for role badges (ADMIN, PROFESSOR, TA, STUDENT)
 - **`src/lib/utils.ts`** — Added shared utility functions:
   - `formatDuration(ms)`: Formats milliseconds as human-readable duration (`"<1s"`, `"5m 30s"`, `"1h 30m"`)
