@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, CHAT_MODEL, generateConversationTitle, type ChatMessage } from "@/lib/ai";
+import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, type ChatMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { checkContentFlags, handleContentFlag, trackRateLimitAbuse } from "@/lib/abuse-detection";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
           {
             const citations: { url: string; title: string }[] = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const stream = await streamChat(chatMessages, "openai", CHAT_MODEL, systemPrompt) as any;
+            const stream = await streamChat(chatMessages, "openai", undefined, systemPrompt) as any;
             for await (const event of stream) {
               if (event.type === "response.reasoning_summary_text.delta") {
                 const delta = event.delta || "";
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
               conversationId: convId,
               role: "assistant",
               content: fullContent,
-              model: CHAT_MODEL,
+              model: getActiveChatModel(),
               mode: mode || "normal",
             },
           });
@@ -270,7 +270,7 @@ export async function POST(req: Request) {
         }
 
         // Generate AI title for new conversations (fire-and-forget, non-blocking)
-        if (!conversationId && fullContent && process.env.OPENAI_API_KEY) {
+        if (!conversationId && fullContent && (process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY)) {
           (async () => {
             try {
               const generatedTitle = await generateConversationTitle(message, fullContent);
