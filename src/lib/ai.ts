@@ -1,13 +1,28 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openaiClient: OpenAI | null = null;
+let anthropicClient: Anthropic | null = null;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getOpenAI(): OpenAI {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OpenAI API key is not configured");
+  }
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
+
+function getAnthropic(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("Anthropic API key is not configured");
+  }
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
+}
 
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful physics tutor for university-level General Physics students at NTHU (National Tsing Hua University).
 
@@ -163,7 +178,7 @@ async function streamOpenAI(
     }
   }
 
-  const stream = await openai.responses.create({
+  const stream = await getOpenAI().responses.create({
     model,
     input,
     reasoning: { effort: "low", summary: "detailed" },
@@ -213,7 +228,7 @@ async function streamAnthropic(
     }
   }
 
-  const stream = await anthropic.messages.stream({
+  const stream = await getAnthropic().messages.stream({
     model,
     max_tokens: 4096,
     system: systemPrompt,
@@ -292,7 +307,7 @@ export async function streamGenerateProblems(
   const prompt = buildProblemPrompt(topic, difficulty, count, questionType, "object", customInstructions);
 
   if (provider === "openai") {
-    return openai.responses.create({
+    return getOpenAI().responses.create({
       model: "gpt-5.2",
       input: [
         { role: "developer", content: PROBLEM_GEN_SYSTEM },
@@ -302,7 +317,7 @@ export async function streamGenerateProblems(
       stream: true,
     });
   } else {
-    return anthropic.messages.stream({
+    return getAnthropic().messages.stream({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 4096,
       system: PROBLEM_GEN_SYSTEM + " Wrap your JSON response in a ```json code block.",
@@ -345,7 +360,7 @@ Provide your response as JSON with:
         userContent.push({ type: "input_image", image_url: url });
       }
     }
-    const response = await openai.responses.create({
+    const response = await getOpenAI().responses.create({
       model: "gpt-5.2",
       input: [
         { role: "developer", content: systemMsg },
@@ -365,7 +380,7 @@ Provide your response as JSON with:
       }
     }
     userContent.push({ type: "text", text: prompt });
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: systemMsg,

@@ -196,7 +196,7 @@ export async function POST(req: Request) {
 
           if (aiError instanceof Error && (aiError.message.includes("rate limit") || aiError.message.includes("429"))) {
             fullContent = "The AI service is currently rate limited. Please wait a moment and try again.";
-          } else if (aiError instanceof Error && (aiError.message.includes("401") || aiError.message.includes("authentication") || aiError.message.includes("API key"))) {
+          } else if (aiError instanceof Error && (aiError.message.includes("401") || aiError.message.includes("authentication") || aiError.message.includes("API key") || aiError.message.includes("apiKey") || aiError.message.includes("credentials") || aiError.message.includes("not configured"))) {
             fullContent = "AI service authentication error. Please contact an administrator to check API key configuration.";
           } else {
             fullContent = "I'm sorry, I encountered an error while processing your request. Please try again shortly.";
@@ -234,7 +234,7 @@ export async function POST(req: Request) {
         controller.close();
 
         // Generate AI title for new conversations (fire-and-forget, non-blocking)
-        if (!conversationId && fullContent) {
+        if (!conversationId && fullContent && process.env.ANTHROPIC_API_KEY) {
           (async () => {
             try {
               const titleClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
