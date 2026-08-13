@@ -236,6 +236,54 @@ export function rateLimitAbuseStaffEmail(params: RateLimitAbuseStaffEmailParams)
 }
 
 // ---------------------------------------------------------------------------
+// Template: Staff notification – unusual message volume
+// ---------------------------------------------------------------------------
+
+export interface MessageVolumeStaffEmailParams {
+  userName: string;
+  userId: string;
+  messageCount: number;
+  threshold: number;
+  adminUrl: string;
+}
+
+/** Sent to staff when one user's hourly chat volume crosses the alert threshold. */
+export function messageVolumeStaffEmail(params: MessageVolumeStaffEmailParams): string {
+  return staffAlertLayout("#b45309", "Unusual Message Volume", `
+    <p><strong>User:</strong> ${stripHtmlChars(params.userName)} (${params.userId})</p>
+    <p><strong>Messages in the last hour:</strong> ${params.messageCount} (alert threshold: ${params.threshold})</p>
+    <p>The account is not blocked. Review usage and restrict the account if this looks like abuse.</p>
+    <p>Review this user in the <a href="${params.adminUrl}/admin/users">admin panel</a>.</p>`);
+}
+
+// ---------------------------------------------------------------------------
+// Template: Email verification
+// ---------------------------------------------------------------------------
+
+export interface EmailVerificationParams {
+  userName: string;
+  verifyUrl: string;
+  expiresHours: number;
+}
+
+/** Sent after registration; the account cannot use the tutor until verified. */
+export function emailVerificationEmail(params: EmailVerificationParams): string {
+  return brandedLayout(`
+              <p style="margin: 0 0 16px; color: #111827; font-size: 16px;">Dear ${esc(params.userName)},</p>
+              <p style="margin: 0 0 16px; color: #374151; font-size: 14px; line-height: 1.6;">Confirm this address to activate your PhysTutor account. The link expires in ${params.expiresHours} hours.</p>
+              <table cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+                <tr>
+                  <td style="background-color: #4f46e5; border-radius: 8px;">
+                    <a href="${params.verifyUrl}" style="display: inline-block; padding: 12px 24px; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none;">Verify Email</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0 0 8px; color: #6b7280; font-size: 13px; line-height: 1.6;">If the button doesn't work, copy and paste this link into your browser:</p>
+              <p style="margin: 0 0 16px; color: #4f46e5; font-size: 13px; word-break: break-all;">${params.verifyUrl}</p>
+              <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6;">If you didn't create this account, you can ignore this email.</p>`);
+}
+
+// ---------------------------------------------------------------------------
 // Template: Assignment published notification
 // ---------------------------------------------------------------------------
 

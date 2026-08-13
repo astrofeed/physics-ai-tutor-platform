@@ -14,6 +14,7 @@ import {
   Copy,
 } from "lucide-react";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import { MessageDocuments } from "./MessageDocuments";
 import { cn } from "@/lib/utils";
 import type { Message } from "./types";
 
@@ -116,6 +117,7 @@ export function ChatMessageList({
                   </button>
 
                   <div className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed">
+                    {msg.documents && <MessageDocuments documents={msg.documents} />}
                     {msg.imageUrls && msg.imageUrls.length > 0 && (
                       <div className={cn(
                         "mb-3 gap-2",

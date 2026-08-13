@@ -53,6 +53,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  events: {
+    // Google already proves the address, so those accounts skip our own
+    // verification email.
+    async signIn({ user, account }) {
+      if (account?.provider === "google" && user.email) {
+        await prisma.user.updateMany({
+          where: { email: user.email, emailVerified: null },
+          data: { emailVerified: new Date(), isVerified: true },
+        });
+      }
+    },
+  },
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {

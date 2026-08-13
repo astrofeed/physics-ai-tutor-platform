@@ -1,91 +1,44 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { registerUser } from "@/lib/services/registration-service";
+import { clientIp } from "@/lib/services/auth-attempt-limit";
+import { logger } from "@/lib/logger";
+
+const RegisterInputSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(200),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(200)
+    .regex(/[A-Z]/, "Password must contain uppercase, lowercase, and a number")
+    .regex(/[a-z]/, "Password must contain uppercase, lowercase, and a number")
+    .regex(/[0-9]/, "Password must contain uppercase, lowercase, and a number"),
+  studentId: z.string().trim().min(1).max(50),
+});
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password, studentId } = await req.json();
-
-    if (!name || !email || !password || !studentId) {
+    const parsed = RegisterInputSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: parsed.error.issues[0]?.message || "Invalid registration details" },
         { status: 400 }
       );
     }
 
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
-        { status: 400 }
-      );
+    const result = await registerUser(parsed.data, clientIp(req));
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      return NextResponse.json(
-        { error: "Password must contain uppercase, lowercase, and a number" },
-        { status: 400 }
-      );
-    }
-
-    if (name.length > 200) {
-      return NextResponse.json(
-        { error: "Name is too long" },
-        { status: 400 }
-      );
-    }
-
-    const trimmedStudentId = studentId.trim();
-    if (trimmedStudentId.length > 50) {
-      return NextResponse.json(
-        { error: "Student ID is too long" },
-        { status: 400 }
-      );
-    }
-
-    // Use generic error to prevent user/student ID enumeration
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Registration failed. Please check your details or contact support." },
-        { status: 400 }
-      );
-    }
-
-    const existingStudentId = await prisma.user.findUnique({
-      where: { studentId: trimmedStudentId },
-    });
-
-    if (existingStudentId) {
-      return NextResponse.json(
-        { error: "Registration failed. Please check your details or contact support." },
-        { status: 400 }
-      );
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        studentId: trimmedStudentId,
-      },
-    });
 
     return NextResponse.json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
+      message: "Check your email for a verification link to activate your account.",
     });
   } catch (error) {
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    logger.error("Registration failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

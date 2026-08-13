@@ -2,16 +2,15 @@
 
 import React, { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Atom, Mail, Lock, User, Loader2, ArrowRight, IdCard } from "lucide-react";
+import { Atom, Mail, Lock, User, Loader2, ArrowRight, ArrowLeft, IdCard, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 export default function RegisterPage() {
-  const router = useRouter();
+  const [registered, setRegistered] = useState(false);
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
@@ -63,7 +62,8 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login?registered=true");
+      setRegistered(true);
+      setLoading(false);
     } catch {
       triggerError("Something went wrong");
       setLoading(false);
@@ -92,6 +92,26 @@ export default function RegisterPage() {
 
         {/* Card */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-8">
+          {registered ? (
+            <div className="text-center">
+              <MailCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Verify your email
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">
+                We sent a verification link to <span className="font-medium">{email}</span>. Open it
+                to activate your account — the link expires in 24 hours.
+              </p>
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to sign in
+              </Link>
+            </div>
+          ) : (
+          <>
           {/* Header */}
           <div className="text-center mb-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -261,6 +281,8 @@ export default function RegisterPage() {
               </Link>
             </p>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
-import { contentFlagStaffEmail, rateLimitAbuseStaffEmail } from "@/lib/email-templates";
+import { contentFlagStaffEmail, messageVolumeStaffEmail, rateLimitAbuseStaffEmail } from "@/lib/email-templates";
+import { logger } from "@/lib/logger";
 
 // Jailbreak / prompt injection patterns (case-insensitive)
 const CONTENT_FLAG_PATTERNS = [
@@ -16,37 +17,42 @@ const CONTENT_FLAG_PATTERNS = [
   /forget\s+(your|all|previous)\s+(instructions|rules|training)/i,
 ];
 
-// Dedup: max 1 notification per user per hour
-const notificationCache = new Map<string, number>();
-const NOTIFICATION_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const NOTIFICATION_COOLDOWN_MS = 60 * 60 * 1000; // max 1 notification per user per type
 
-// Rate limit abuse tracking: count hits per user in the current hour
-const rateLimitHitCache = new Map<string, { count: number; windowStart: number }>();
-const RATE_ABUSE_THRESHOLD = 3; // 3+ hits in 1 hour = escalation
+const RATE_ABUSE_THRESHOLD = 3; // 3+ rate limit hits in 1 hour = escalation
 const RATE_ABUSE_WINDOW_MS = 60 * 60 * 1000;
 
-// Clean up expired abuse-detection entries every 60 seconds
-setInterval(() => {
-  const now = Date.now();
-  notificationCache.forEach((ts, key) => {
-    if (now - ts > NOTIFICATION_COOLDOWN_MS) notificationCache.delete(key);
-  });
-  rateLimitHitCache.forEach((entry, key) => {
-    if (now - entry.windowStart > RATE_ABUSE_WINDOW_MS) rateLimitHitCache.delete(key);
-  });
-}, 60_000);
+/** Messages per hour from one user that count as abnormal volume. */
+const MESSAGE_VOLUME_THRESHOLD = parseInt(process.env.MESSAGE_VOLUME_ALERT_THRESHOLD || "60", 10);
+const MESSAGE_VOLUME_WINDOW_MS = 60 * 60 * 1000;
 
-function shouldNotify(userId: string, type: string): boolean {
-  const key = `${userId}:${type}`;
-  const now = Date.now();
-  const lastNotified = notificationCache.get(key);
-  if (lastNotified && now - lastNotified < NOTIFICATION_COOLDOWN_MS) {
-    return false;
-  }
-  notificationCache.set(key, now);
+/**
+ * Dedups notifications through AuditLog instead of process memory, so a
+ * serverless fleet does not send one alert per instance.
+ */
+async function shouldNotify(userId: string, type: string): Promise<boolean> {
+  const since = new Date(Date.now() - NOTIFICATION_COOLDOWN_MS);
+  const recent = await prisma.auditLog.count({
+    where: {
+      userId,
+      action: "abuse_notified",
+      createdAt: { gte: since },
+      details: { path: ["type"], equals: type },
+    },
+  });
+  if (recent > 0) return false;
+
+  await prisma.auditLog.create({
+    data: { userId, action: "abuse_notified", details: { type } },
+  });
   return true;
 }
 
+/**
+ * Staff recipients for abuse alerts: TA/ADMIN accounts plus any address in
+ * `ABUSE_ALERT_EMAILS` (comma separated), so the platform owner is notified
+ * even without a staff account.
+ */
 async function getStaffEmails(): Promise<string[]> {
   const staff = await prisma.user.findMany({
     where: {
@@ -56,7 +62,11 @@ async function getStaffEmails(): Promise<string[]> {
     },
     select: { email: true },
   });
-  return staff.map((s) => s.email).filter(Boolean);
+  const configured = (process.env.ABUSE_ALERT_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+  return Array.from(new Set([...staff.map((s) => s.email), ...configured].filter(Boolean)));
 }
 
 /**
@@ -93,7 +103,7 @@ export async function handleContentFlag(
     },
   });
 
-  if (shouldNotify(userId, "content_flag")) {
+  if (await shouldNotify(userId, "content_flag")) {
     const staffEmails = await getStaffEmails();
     if (staffEmails.length > 0) {
       sendEmail({
@@ -116,41 +126,81 @@ export async function handleContentFlag(
  * Call this each time a user hits the rate limit.
  */
 export async function trackRateLimitAbuse(userId: string, userName: string) {
-  const now = Date.now();
-  const entry = rateLimitHitCache.get(userId);
+  const since = new Date(Date.now() - RATE_ABUSE_WINDOW_MS);
+  const hitCount = await prisma.auditLog.count({
+    where: { userId, action: "rate_limit_hit", createdAt: { gte: since } },
+  });
 
-  if (!entry || now - entry.windowStart > RATE_ABUSE_WINDOW_MS) {
-    rateLimitHitCache.set(userId, { count: 1, windowStart: now });
-    return;
-  }
+  if (hitCount < RATE_ABUSE_THRESHOLD) return;
+  if (!(await shouldNotify(userId, "rate_abuse"))) return;
 
-  entry.count++;
-
-  if (entry.count >= RATE_ABUSE_THRESHOLD && shouldNotify(userId, "rate_abuse")) {
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: "abuse_detected",
-        details: {
-          type: "rate_limit_abuse",
-          hitCount: entry.count,
-          windowMinutes: 60,
-        },
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: "abuse_detected",
+      details: {
+        type: "rate_limit_abuse",
+        hitCount,
+        windowMinutes: 60,
       },
-    });
+    },
+  });
 
-    const staffEmails = await getStaffEmails();
-    if (staffEmails.length > 0) {
-      sendEmail({
-        to: staffEmails,
-        subject: `[PhysTutor] Rate limit abuse: ${userName.replace(/[\r\n]/g, "")}`,
-        html: rateLimitAbuseStaffEmail({
-          userName,
-          userId,
-          hitCount: entry.count,
-          adminUrl: process.env.NEXTAUTH_URL || "",
-        }),
-      }).catch((err) => console.error("[email] Failed to send rate abuse notification:", err));
-    }
+  const staffEmails = await getStaffEmails();
+  if (staffEmails.length > 0) {
+    sendEmail({
+      to: staffEmails,
+      subject: `[PhysTutor] Rate limit abuse: ${userName.replace(/[\r\n]/g, "")}`,
+      html: rateLimitAbuseStaffEmail({
+        userName,
+        userId,
+        hitCount,
+        adminUrl: process.env.NEXTAUTH_URL || "",
+      }),
+    }).catch((err) => logger.error("Failed to send rate abuse notification", {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    }));
   }
+}
+
+/**
+ * Alerts staff when one user's hourly message count crosses
+ * `MESSAGE_VOLUME_ALERT_THRESHOLD`. Unlike the spam guard (30 messages in a
+ * minute, auto-ban) this catches sustained heavy use without blocking anyone.
+ */
+export async function trackMessageVolume(userId: string, userName: string) {
+  const since = new Date(Date.now() - MESSAGE_VOLUME_WINDOW_MS);
+  const messageCount = await prisma.message.count({
+    where: { conversation: { userId }, role: "user", createdAt: { gte: since } },
+  });
+
+  if (messageCount < MESSAGE_VOLUME_THRESHOLD) return;
+  if (!(await shouldNotify(userId, "message_volume"))) return;
+
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: "abuse_detected",
+      details: { type: "message_volume", messageCount, windowMinutes: 60 },
+    },
+  });
+
+  const staffEmails = await getStaffEmails();
+  if (staffEmails.length === 0) return;
+
+  sendEmail({
+    to: staffEmails,
+    subject: `[PhysTutor] Unusual message volume: ${userName.replace(/[\r\n]/g, "")}`,
+    html: messageVolumeStaffEmail({
+      userName,
+      userId,
+      messageCount,
+      threshold: MESSAGE_VOLUME_THRESHOLD,
+      adminUrl: process.env.NEXTAUTH_URL || "",
+    }),
+  }).catch((err) => logger.error("Failed to send message volume notification", {
+    userId,
+    error: err instanceof Error ? err.message : String(err),
+  }));
 }

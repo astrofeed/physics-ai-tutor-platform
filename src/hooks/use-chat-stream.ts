@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import type { Message, Conversation } from "@/components/chat/types";
+import type { Message, Conversation, DocumentAttachment } from "@/components/chat/types";
 
 interface UseChatStreamOptions {
   activeConversationId: string | null;
@@ -14,6 +14,7 @@ interface UseChatStreamOptions {
 interface PendingRetry {
   text: string;
   imageUrls?: string[];
+  documents?: DocumentAttachment[];
 }
 
 export function useChatStream({
@@ -33,12 +34,17 @@ export function useChatStream({
   }, []);
 
   const sendMessage = useCallback(
-    async (messageText: string, uploadedUrls: string[]) => {
+    async (
+      messageText: string,
+      uploadedUrls: string[],
+      documents: DocumentAttachment[] = []
+    ) => {
       const userMessage: Message = {
         id: Date.now().toString(),
         role: "user",
         content: messageText,
         imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+        documents: documents.length ? documents : undefined,
       };
 
       setMessages((prev) => [...prev, userMessage]);
@@ -62,6 +68,7 @@ export function useChatStream({
             conversationId: activeConversationId,
             message: messageText,
             imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+            documents: documents.length ? documents : undefined,
             mode: chatMode,
           }),
           signal: abortController.signal,
@@ -153,7 +160,11 @@ export function useChatStream({
               : msg
           )
         );
-        setPendingRetry({ text: messageText, imageUrls: uploadedUrls.length ? uploadedUrls : undefined });
+        setPendingRetry({
+          text: messageText,
+          imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+          documents: documents.length ? documents : undefined,
+        });
         // Restore the input so the user can retry without retyping
         if (requestFailedBeforeStream) {
           onRestoreInput(messageText);
@@ -181,7 +192,7 @@ export function useChatStream({
       }
       return next;
     });
-    sendMessage(pendingRetry.text, pendingRetry.imageUrls || []);
+    sendMessage(pendingRetry.text, pendingRetry.imageUrls || [], pendingRetry.documents || []);
   }, [pendingRetry, loading, sendMessage, onRestoreInput]);
 
   return {
