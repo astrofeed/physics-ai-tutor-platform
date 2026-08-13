@@ -14,6 +14,21 @@ function getOpenAI(): OpenAI {
   return openaiClient;
 }
 
+let deepseekClient: OpenAI | null = null;
+
+function getDeepSeek(): OpenAI {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    throw new Error("DeepSeek API key is not configured");
+  }
+  if (!deepseekClient) {
+    deepseekClient = new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: "https://api.deepseek.com",
+    });
+  }
+  return deepseekClient;
+}
+
 function getAnthropic(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("Anthropic API key is not configured");
@@ -128,8 +143,20 @@ You are here to ASSIST understanding, not to solve problems for students.`;
 
 export type AIProvider = "openai" | "anthropic";
 
-/** The single OpenAI model used for AI chat (cost-efficient tier with web search support). */
-export const CHAT_MODEL = "gpt-5.6-luna";
+/** The OpenAI model used for AI chat (cost-efficient tier with web search support). */
+export const OPENAI_CHAT_MODEL = "gpt-5.6-luna";
+
+/** The DeepSeek model used for AI chat while the OpenAI account is unavailable. */
+export const DEEPSEEK_CHAT_MODEL = "deepseek-v4-flash";
+
+/** Chat runs on DeepSeek when DEEPSEEK_API_KEY is set, otherwise on OpenAI. */
+export function isDeepSeekActive(): boolean {
+  return Boolean(process.env.DEEPSEEK_API_KEY);
+}
+
+export function getActiveChatModel(): string {
+  return isDeepSeekActive() ? DEEPSEEK_CHAT_MODEL : OPENAI_CHAT_MODEL;
+}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -146,7 +173,10 @@ export async function streamChat(
   const system = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   if (provider === "openai") {
-    return streamOpenAI(messages, model || CHAT_MODEL, system);
+    if (isDeepSeekActive()) {
+      return streamDeepSeek(messages, DEEPSEEK_CHAT_MODEL, system);
+    }
+    return streamOpenAI(messages, model || OPENAI_CHAT_MODEL, system);
   } else {
     return streamAnthropic(messages, model || "claude-haiku-4-5-20251001", system);
   }
@@ -192,16 +222,62 @@ async function streamOpenAI(
   return stream;
 }
 
+/**
+ * Streams a DeepSeek chat completion, adapting each chunk to the OpenAI
+ * Responses event shapes consumed by the chat route
+ * (`response.output_text.delta` / `response.reasoning_summary_text.delta`).
+ * DeepSeek has no image or web-search support, so images are ignored.
+ */
+async function* streamDeepSeek(
+  messages: ChatMessage[],
+  model: string,
+  systemPrompt: string
+) {
+  const stream = await getDeepSeek().chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+    ],
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const delta = chunk.choices[0]?.delta as any;
+    if (delta?.reasoning_content) {
+      yield { type: "response.reasoning_summary_text.delta", delta: delta.reasoning_content };
+    }
+    if (delta?.content) {
+      yield { type: "response.output_text.delta", delta: delta.content };
+    }
+  }
+}
+
 export async function generateConversationTitle(
   question: string,
   answer: string
 ): Promise<string | null> {
+  const titlePrompt = `Generate a concise title (max 6 words) for this conversation. The title should accurately reflect the topic of the question. Reply with ONLY the title, no quotes.\n\nQuestion: ${question}\n\nAI answer (for context only): ${answer.slice(0, 100)}`;
+
+  if (isDeepSeekActive()) {
+    const response = await getDeepSeek().chat.completions.create({
+      model: DEEPSEEK_CHAT_MODEL,
+      messages: [{ role: "user", content: titlePrompt }],
+      max_tokens: 1000,
+    });
+    return response.choices[0]?.message?.content?.trim() || null;
+  }
+
   const response = await getOpenAI().responses.create({
-    model: CHAT_MODEL,
+    model: OPENAI_CHAT_MODEL,
     input: [
       {
         role: "user",
-        content: `Generate a concise title (max 6 words) for this conversation. The title should accurately reflect the topic of the question. Reply with ONLY the title, no quotes.\n\nQuestion: ${question}\n\nAI answer (for context only): ${answer.slice(0, 100)}`,
+        content: titlePrompt,
       },
     ],
     reasoning: { effort: "low" },
