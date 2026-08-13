@@ -128,6 +128,9 @@ You are here to ASSIST understanding, not to solve problems for students.`;
 
 export type AIProvider = "openai" | "anthropic";
 
+/** The single OpenAI model used for AI chat (cost-efficient tier with web search support). */
+export const CHAT_MODEL = "gpt-5.6-luna";
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -143,7 +146,7 @@ export async function streamChat(
   const system = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   if (provider === "openai") {
-    return streamOpenAI(messages, model || "gpt-5.2", system);
+    return streamOpenAI(messages, model || CHAT_MODEL, system);
   } else {
     return streamAnthropic(messages, model || "claude-haiku-4-5-20251001", system);
   }
@@ -187,6 +190,24 @@ async function streamOpenAI(
   });
 
   return stream;
+}
+
+export async function generateConversationTitle(
+  question: string,
+  answer: string
+): Promise<string | null> {
+  const response = await getOpenAI().responses.create({
+    model: CHAT_MODEL,
+    input: [
+      {
+        role: "user",
+        content: `Generate a concise title (max 6 words) for this conversation. The title should accurately reflect the topic of the question. Reply with ONLY the title, no quotes.\n\nQuestion: ${question}\n\nAI answer (for context only): ${answer.slice(0, 100)}`,
+      },
+    ],
+    reasoning: { effort: "low" },
+  });
+  const title = response.output_text?.trim();
+  return title || null;
 }
 
 async function streamAnthropic(

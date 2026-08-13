@@ -1,18 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, type ChatMessage, type AIProvider } from "@/lib/ai";
+import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, CHAT_MODEL, generateConversationTitle, type ChatMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { checkContentFlags, handleContentFlag, trackRateLimitAbuse } from "@/lib/abuse-detection";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
 import { logger } from "@/lib/logger";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 const ChatInputSchema = z.object({
   conversationId: z.string().max(100).nullish(),
   message: z.string().max(50000),
   imageUrls: z.array(z.string().url()).max(5).optional(),
-  model: z.string().max(100).optional(),
   mode: z.enum(["normal", "socratic"]).optional(),
 });
 
@@ -81,7 +79,7 @@ export async function POST(req: Request) {
       }
       return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
-    const { conversationId, message, imageUrls, model, mode } = parsed.data;
+    const { conversationId, message, imageUrls, mode } = parsed.data;
 
     // Fire-and-forget: check content for jailbreak/prompt injection patterns
     const contentFlags = checkContentFlags(message);
@@ -140,8 +138,6 @@ export async function POST(req: Request) {
       imageUrls: m.imageUrls?.length ? m.imageUrls : undefined,
     }));
 
-    const provider: AIProvider = model?.startsWith("claude") ? "anthropic" : "openai";
-
     const aiConfig = await prisma.aIConfig.findFirst({
       where: { isActive: true },
     });
@@ -184,10 +180,10 @@ export async function POST(req: Request) {
           // Send conversationId as first event
           send({ type: "meta", conversationId: convId });
 
-          if (provider === "openai") {
+          {
             const citations: { url: string; title: string }[] = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const stream = await streamChat(chatMessages, "openai", model || "gpt-5.2", systemPrompt) as any;
+            const stream = await streamChat(chatMessages, "openai", CHAT_MODEL, systemPrompt) as any;
             for await (const event of stream) {
               if (event.type === "response.reasoning_summary_text.delta") {
                 const delta = event.delta || "";
@@ -220,15 +216,6 @@ export async function POST(req: Request) {
               fullContent += sources;
               send({ type: "delta", content: sources });
             }
-          } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const stream = await streamChat(chatMessages, "anthropic", model, systemPrompt) as any;
-            for await (const event of stream) {
-              if (event.type === "content_block_delta" && event.delta?.text) {
-                fullContent += event.delta.text;
-                send({ type: "delta", content: event.delta.text });
-              }
-            }
           }
         } catch (aiError) {
           logger.error("AI streaming error", {
@@ -254,7 +241,7 @@ export async function POST(req: Request) {
               conversationId: convId,
               role: "assistant",
               content: fullContent,
-              model: model || "gpt-5.2",
+              model: CHAT_MODEL,
               mode: mode || "normal",
             },
           });
@@ -283,20 +270,10 @@ export async function POST(req: Request) {
         }
 
         // Generate AI title for new conversations (fire-and-forget, non-blocking)
-        if (!conversationId && fullContent && process.env.ANTHROPIC_API_KEY) {
+        if (!conversationId && fullContent && process.env.OPENAI_API_KEY) {
           (async () => {
             try {
-              const titleClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-              const titleResponse = await titleClient.messages.create({
-                model: "claude-haiku-4-5-20251001",
-                max_tokens: 50,
-                messages: [{
-                  role: "user",
-                  content: `Generate a concise title (max 6 words) for this conversation. The title should accurately reflect the topic of the question. Reply with ONLY the title, no quotes.\n\nQuestion: ${message}\n\nAI answer (for context only): ${fullContent.slice(0, 100)}`,
-                }],
-              });
-              const titleBlock = titleResponse.content[0];
-              const generatedTitle = titleBlock.type === "text" ? titleBlock.text.trim() : null;
+              const generatedTitle = await generateConversationTitle(message, fullContent);
               if (generatedTitle) {
                 await prisma.conversation.update({
                   where: { id: convId },

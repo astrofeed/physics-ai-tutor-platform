@@ -7,7 +7,6 @@ interface UseChatStreamOptions {
   activeConversationId: string | null;
   setActiveConversationId: (id: string | null) => void;
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
-  model: string;
   chatMode: "normal" | "socratic";
   onRestoreInput: (text: string) => void;
 }
@@ -21,7 +20,6 @@ export function useChatStream({
   activeConversationId,
   setActiveConversationId,
   setConversations,
-  model,
   chatMode,
   onRestoreInput,
 }: UseChatStreamOptions) {
@@ -64,7 +62,6 @@ export function useChatStream({
             conversationId: activeConversationId,
             message: messageText,
             imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
-            model,
             mode: chatMode,
           }),
           signal: abortController.signal,
@@ -166,7 +163,7 @@ export function useChatStream({
         setLoading(false);
       }
     },
-    [activeConversationId, model, chatMode, setActiveConversationId, setConversations, onRestoreInput]
+    [activeConversationId, chatMode, setActiveConversationId, setConversations, onRestoreInput]
   );
 
   const retryLast = useCallback(() => {
