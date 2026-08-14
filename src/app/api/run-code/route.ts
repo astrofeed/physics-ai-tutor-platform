@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
+import { consumeActionRateLimit } from "@/lib/services/action-rate-limit";
+import { logger } from "@/lib/logger";
+import { z } from "zod";
 
-// Rate limiting: Track execution count per user
-const executionCount = new Map<string, { count: number; resetTime: number }>();
+const RunCodeSchema = z.object({
+  code: z.string().min(1).max(50_000),
+  language: z.string().min(1).max(50),
+});
+
 const MAX_EXECUTIONS_PER_HOUR = parseInt(process.env.CODE_EXEC_RATE_LIMIT || "20", 10);
 const RATE_LIMIT_WINDOW = parseInt(process.env.CODE_EXEC_RATE_WINDOW_MS || "3600000", 10);
 
@@ -27,45 +33,34 @@ export async function POST(req: NextRequest) {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
 
-    // Rate limiting check
-    const userId = auth.user.id;
-    const now = Date.now();
-    const userLimit = executionCount.get(userId);
+    const parsed = RunCodeSchema.safeParse(await req.json());
 
-    if (userLimit) {
-      if (now < userLimit.resetTime) {
-        if (userLimit.count >= MAX_EXECUTIONS_PER_HOUR) {
-          const minutesLeft = Math.ceil((userLimit.resetTime - now) / 60000);
-          return NextResponse.json(
-            { error: `Rate limit exceeded. Please try again in ${minutesLeft} minute(s).` },
-            { status: 429 }
-          );
-        }
-        userLimit.count++;
-      } else {
-        // Reset counter after time window
-        executionCount.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-      }
-    } else {
-      executionCount.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Code and language are required" }, { status: 400 });
     }
 
-    const { code, language } = await req.json();
-
-    if (!code || !language) {
-      return NextResponse.json(
-        { error: "Code and language are required" },
-        { status: 400 }
-      );
-    }
-
-    const normalizedLang = language.toLowerCase();
-    const langConfig = LANGUAGE_MAP[normalizedLang];
+    const { code, language } = parsed.data;
+    const langConfig = LANGUAGE_MAP[language.toLowerCase()];
 
     if (!langConfig) {
       return NextResponse.json(
         { error: `Language "${language}" is not supported for execution` },
         { status: 400 }
+      );
+    }
+
+    const rateLimit = await consumeActionRateLimit({
+      userId: auth.user.id,
+      action: "run_code",
+      limit: MAX_EXECUTIONS_PER_HOUR,
+      windowMs: RATE_LIMIT_WINDOW,
+    });
+
+    if (!rateLimit.allowed) {
+      const minutesLeft = Math.max(1, Math.ceil(rateLimit.retryAfterMs / 60000));
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Please try again in ${minutesLeft} minute(s).` },
+        { status: 429 }
       );
     }
 
@@ -103,7 +98,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Failed to execute code" });
   } catch (error) {
-    console.error("Run code error:", error);
+    logger.error("Run code failed", {
+      route: "/api/run-code",
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

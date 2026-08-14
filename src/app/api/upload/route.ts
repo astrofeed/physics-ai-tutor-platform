@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { storeUploadedFile, visibilityForUploader } from "@/lib/services/file-storage";
+import {
+  FileStorageUnavailableError,
+  storeUploadedFile,
+  visibilityForUploader,
+} from "@/lib/services/file-storage";
 import { logger } from "@/lib/logger";
 import {
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -51,6 +55,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: stored.url });
   } catch (error) {
+    if (error instanceof FileStorageUnavailableError) {
+      logger.error("Upload rejected: no object store configured", { route: "/api/upload" });
+      return NextResponse.json(
+        { error: "File storage is not configured. Ask an administrator to set it up." },
+        { status: 503 }
+      );
+    }
     logger.error("Upload failed", {
       route: "/api/upload",
       error: error instanceof Error ? error.message : String(error),

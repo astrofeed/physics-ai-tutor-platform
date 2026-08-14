@@ -10,6 +10,14 @@ export const FILE_ROUTE_PREFIX = "/api/files/";
 
 export type FileVisibility = "PUBLIC" | "RESTRICTED";
 
+/** Thrown when no durable object store is configured for a production deploy. */
+export class FileStorageUnavailableError extends Error {
+  constructor() {
+    super("BLOB_READ_WRITE_TOKEN is not configured: file storage is unavailable");
+    this.name = "FileStorageUnavailableError";
+  }
+}
+
 /** Files live outside `public/` so they are never served as static assets. */
 function privateUploadsDir() {
   return process.env.PRIVATE_UPLOADS_DIR
@@ -59,6 +67,10 @@ export async function storeUploadedFile(params: {
       addRandomSuffix: true,
     });
     storageUrl = blob.url;
+  } else if (process.env.NODE_ENV === "production") {
+    // Serverless filesystems are wiped on every deploy, so disk storage would
+    // silently lose student work; refuse the upload instead.
+    throw new FileStorageUnavailableError();
   } else {
     const dir = privateUploadsDir();
     await fs.mkdir(dir, { recursive: true });
