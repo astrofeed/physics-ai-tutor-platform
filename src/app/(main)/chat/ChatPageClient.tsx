@@ -29,10 +29,12 @@ import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversation";
 import { useChatStream } from "@/hooks/use-chat-stream";
-import type { Conversation } from "@/components/chat/types";
+import { useConversationFolders } from "@/hooks/use-conversation-folders";
+import type { Conversation, ConversationFolder } from "@/components/chat/types";
 
 interface ChatPageClientProps {
   conversations: Conversation[];
+  folders: ConversationFolder[];
   userId: string;
   conversationLimit: number;
 }
@@ -42,6 +44,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export default function ChatPageClient({
   conversations: initialConversations,
+  folders: initialFolders,
   conversationLimit,
 }: ChatPageClientProps) {
   useTrackTime("AI_CHAT");
@@ -62,6 +65,9 @@ export default function ChatPageClient({
   const [compressing, setCompressing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const { folders, createFolder, renameFolder, deleteFolder, moveConversation } =
+    useConversationFolders({ initialFolders, setConversations });
 
   const {
     messages,
@@ -269,6 +275,7 @@ export default function ChatPageClient({
     <div className="flex h-[calc(100vh-5rem)] sm:h-[calc(100vh-6.5rem)] overflow-hidden -m-3 sm:-m-6">
       <ChatSidebar
         conversations={conversations}
+        folders={folders}
         activeConversationId={activeConversationId}
         conversationLimit={conversationLimit}
         searchQuery={searchQuery}
@@ -276,6 +283,10 @@ export default function ChatPageClient({
         onSelectConversation={loadConversation}
         onNewChat={createNewChat}
         onDeleteConversation={deleteConversation}
+        onMoveConversation={moveConversation}
+        onCreateFolder={createFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={deleteFolder}
         confirmDeleteId={confirmDeleteId}
         sidebarOpen={sidebarOpen}
         isMobile={isMobile}

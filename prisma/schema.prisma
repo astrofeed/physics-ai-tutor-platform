@@ -45,6 +45,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   conversations Conversation[]
+  conversationFolders ConversationFolder[]
   submissions   Submission[]
   gradedSubmissions Submission[] @relation("GradedBy")
   createdAssignments Assignment[] @relation("CreatedBy")
@@ -113,16 +114,32 @@ model VerificationToken {
 model Conversation {
   id        String    @id @default(cuid())
   userId    String
+  folderId  String?
   title     String    @default("New Chat")
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder   ConversationFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   messages Message[]
 
   @@index([userId, isDeleted, updatedAt])
+  @@index([folderId])
+}
+
+model ConversationFolder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([userId, createdAt])
 }
 
 model Message {

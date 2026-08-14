@@ -99,6 +99,7 @@ export function useChatStream({
                     id: event.conversationId,
                     title: messageText.slice(0, 50) || "New Chat",
                     updatedAt: new Date().toISOString(),
+                    folderId: null,
                   },
                   ...prev,
                 ]);
