@@ -1326,6 +1326,26 @@ Both the assignment detail page (`src/app/(main)/assignments/[id]/page.tsx`) and
 
 **Unpublish** uses a simple destructive confirm dialog (no notify step).
 
+### Grade Appeal Emails
+
+`src/lib/services/appeal-notification-service.ts` owns every appeal email; `POST`/`PATCH /api/appeals` only pass primitives to it and swallow nothing (failures are logged, never rolled back into the appeal write, so a mail outage cannot lose an appeal).
+
+Recipient rules — `resolveAppealRecipients(submissionId)`:
+
+- `Submission.gradedById` points at an active user → that grader alone (`audience: "grader"`).
+- No grader, or the grader is banned/soft-deleted → every `role: "TA"` user with `isBanned: false, isDeleted: false` (`audience: "all_tas"`). This is the fully auto/AI-graded case. **Professors and admins are never included** — do not "helpfully" widen this set.
+
+Direction rules — `notifyAppealPatch`:
+
+- Student files an appeal or replies in the thread → mail the grader/TA audience above.
+- Staff (TA/professor/admin) reply or resolve/reject → mail **only the student who filed the appeal**, never other staff.
+
+Templates live in `src/lib/email-templates.ts`: `gradeAppealEmail` (to graders/TAs) and `appealReplyEmail` (to the student).
+
+There is no in-app appeal notification: the `Notification` model is announcement-shaped (global, no per-user or per-role audience), so appeals are email-only until notifications gain an audience.
+
+Recipient selection is covered by `e2e/appeal-notification.spec.ts` (grader-only, all active TAs with professor/admin/banned/deleted excluded, deleted-grader fallback).
+
 ### Scheduled Emails
 
 All email/notification sending through `NotifyUsersDialog` supports scheduling for later delivery.
