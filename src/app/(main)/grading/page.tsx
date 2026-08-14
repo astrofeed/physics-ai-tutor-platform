@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Filter,
   Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ import {
 // Extracted subcomponents
 import { SubmissionList } from "@/components/grading/SubmissionList";
 import { GradingPanel } from "@/components/grading/GradingPanel";
+import { GradingShortcutsDialog } from "@/components/grading/GradingShortcutsDialog";
+import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
 import { OverallGradeForm } from "@/components/grading/OverallGradeForm";
 import type {
   AssignmentInfo,
@@ -172,6 +175,7 @@ function GradingPageContent() {
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [pendingAppealAction, setPendingAppealAction] = useState<{ appealId: string; status: "RESOLVED" | "REJECTED" | "OPEN" } | null>(null);
   const [showUnfinalizeConfirm, setShowUnfinalizeConfirm] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [expandedAppeals, setExpandedAppeals] = useState<Record<string, boolean>>({});
   const [appealImages, setAppealImages] = useState<Record<string, string[]>>({});
   const { upload: handleUploadImage, uploading: uploadingImage } = useUploadFile();
@@ -494,8 +498,34 @@ function GradingPageContent() {
     }
   };
 
-  const handleSaveGrades = async () => {
+  const filteredSubmissions = submissions.filter((s) => {
+    if (filterMode === "ungraded") return s.totalScore === null;
+    if (filterMode === "graded") return s.totalScore !== null;
+    if (filterMode === "appeals") return s.openAppealCount > 0;
+    return true;
+  });
+
+  /**
+   * Moves through the visible queue. Pending grade edits are flushed by
+   * `selectSubmission`, so nothing typed on the current submission is lost.
+   */
+  const selectAdjacentSubmission = (direction: 1 | -1) => {
     if (!selectedSubmission) return;
+    const index = filteredSubmissions.findIndex((s) => s.id === selectedSubmission.id);
+    const next = index === -1 ? undefined : filteredSubmissions[index + direction];
+    if (!next) {
+      toast.info(direction === 1 ? "Last submission in this list." : "First submission in this list.");
+      return;
+    }
+    selectSubmission(next);
+  };
+
+  /** Set by "Save & next" so the queue only advances after the save succeeds. */
+  const advanceAfterSaveRef = useRef(false);
+
+  const handleSaveGrades = async (advanceAfterSave = false) => {
+    if (!selectedSubmission) return;
+    advanceAfterSaveRef.current = advanceAfterSave;
 
     if (gradingMode === "overall" && !overallGradePayload(overallGrade)) {
       toast.error("Enter an overall score and confirm it before finalizing.");
@@ -553,6 +583,9 @@ function GradingPageContent() {
         // Clear localStorage on successful final save
         clearLocalStorage(selectedSubmission.id);
         setGradingDraftRestored(false);
+        if (advanceAfterSaveRef.current) {
+          selectAdjacentSubmission(1);
+        }
         setSubmissions((prev) =>
           prev.map((s) => {
             if (s.id !== selectedSubmission.id) return s;
@@ -579,6 +612,7 @@ function GradingPageContent() {
       });
       toast.error("Failed to save grades");
     } finally {
+      advanceAfterSaveRef.current = false;
       setSaving(false);
     }
   };
@@ -684,17 +718,27 @@ function GradingPageContent() {
     });
   };
 
-  const filteredSubmissions = submissions.filter((s) => {
-    if (filterMode === "ungraded") return s.totalScore === null;
-    if (filterMode === "graded") return s.totalScore !== null;
-    if (filterMode === "appeals") return s.openAppealCount > 0;
-    return true;
+  useGradingShortcuts({
+    enabled: !!selectedSubmission && !saving,
+    onSaveAndNext: () => {
+      if (selectedSubmission?.gradedAt) return;
+      handleSaveGrades(true);
+    },
+    onNextSubmission: () => selectAdjacentSubmission(1),
+    onPrevSubmission: () => selectAdjacentSubmission(-1),
+    onToggleHelp: () => setShowShortcuts((prev) => !prev),
   });
 
   const gradedCount = submissions.filter((s) => s.totalScore !== null).length;
   const ungradedCount = submissions.length - gradedCount;
   const appealsCount = submissions.filter((s) => s.openAppealCount > 0).length;
   const allAutoGraded = (selectedSubmission?.answers.length ?? 0) > 0 && (selectedSubmission?.answers.every((a) => a.autoGraded) ?? false);
+  const finalizeDisabled =
+    saving ||
+    allAutoGraded ||
+    (!!selectedSubmission &&
+      selectedSubmission.answers.filter((a) => !a.autoGraded).length === 0 &&
+      !overallGrade.confirmed);
 
   if (loading) {
     return <LoadingSpinner message="Loading..." />;
@@ -935,6 +979,7 @@ function GradingPageContent() {
                       </Select>
                     )}
                     <SaveStatusIndicator status={gradingAutoSaveStatus} lastSavedAt={gradingAutoSavedAt} />
+                    <GradingShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
                     {selectedSubmission.gradedAt ? (
                       <Button
                         onClick={() => setShowUnfinalizeConfirm(true)}
@@ -948,15 +993,29 @@ function GradingPageContent() {
                         <span className="sm:hidden">Undo</span>
                       </Button>
                     ) : (
-                      <Button
-                        onClick={handleSaveGrades}
-                        disabled={saving || allAutoGraded || (selectedSubmission.answers.filter(a => !a.autoGraded).length === 0 && !overallGrade.confirmed)}
-                        size="sm"
-                        className="gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg"
-                      >
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                        Finalize
-                      </Button>
+                      <>
+                        <Button
+                          onClick={() => handleSaveGrades()}
+                          disabled={finalizeDisabled}
+                          size="sm"
+                          className="gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg"
+                        >
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          Finalize
+                        </Button>
+                        <Button
+                          onClick={() => handleSaveGrades(true)}
+                          disabled={finalizeDisabled}
+                          variant="outline"
+                          size="sm"
+                          title="Finalize this submission and open the next one (Ctrl/⌘ + Enter)"
+                          className="gap-1.5 rounded-lg"
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                          <span className="hidden sm:inline">Save &amp; next</span>
+                          <span className="sm:hidden">Next</span>
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

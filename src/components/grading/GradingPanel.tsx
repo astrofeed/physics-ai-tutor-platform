@@ -6,6 +6,9 @@ import {
   Sparkles,
   MessageSquare,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +53,34 @@ interface GradingPanelProps {
     status: "RESOLVED" | "REJECTED" | "OPEN"
   ) => void;
   onSendAppealMessage: (appealId: string) => void;
+}
+
+function ReferenceAnswer({ answer }: { answer: string }) {
+  const [visible, setVisible] = React.useState(false);
+  return (
+    <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+      <div className="flex items-center gap-1.5">
+        <KeyRound className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          Reference answer
+        </p>
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline"
+        >
+          {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {visible ? "Hide" : "Show"}
+        </button>
+      </div>
+      {visible && (
+        <MarkdownContent
+          content={answer}
+          className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
+        />
+      )}
+    </div>
+  );
 }
 
 function SuggestionCard({
@@ -106,6 +137,32 @@ export function GradingPanel({
   onResolveAppeal,
   onSendAppealMessage,
 }: GradingPanelProps) {
+  /**
+   * Enter in a score box confirms that question and moves to the next one, so a
+   * submission can be graded without reaching for the mouse; Alt+F fills the max.
+   */
+  const handleScoreKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    answer: SubmissionAnswer,
+    index: number
+  ) => {
+    if (event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      onGradeChange(answer.id, "score", answer.maxPoints);
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (!answer.autoGraded && !confirmedAnswers.has(answer.id)) {
+      onToggleConfirm(answer.id);
+    }
+    const next = document.querySelector<HTMLInputElement>(
+      `[data-score-input="${index + 1}"]`
+    );
+    next?.focus();
+    next?.select();
+  };
+
   return (
     <>
       {answers.map((answer, index) => (
@@ -196,10 +253,12 @@ export function GradingPanel({
                     type="number"
                     min={0}
                     max={answer.maxPoints}
+                    data-score-input={index}
                     value={grades[answer.id]?.score || 0}
                     onChange={(e) =>
                       onGradeChange(answer.id, "score", Number(e.target.value))
                     }
+                    onKeyDown={(e) => handleScoreKeyDown(e, answer, index)}
                     className="font-semibold text-center"
                   />
                   {!answer.autoGraded && (
@@ -241,6 +300,10 @@ export function GradingPanel({
                 </Button>
               )}
             </div>
+
+            {answer.referenceAnswer && (
+              <ReferenceAnswer answer={answer.referenceAnswer} />
+            )}
 
             {suggestions[answer.id] && (
               <SuggestionCard

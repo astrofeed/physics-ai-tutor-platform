@@ -33,6 +33,8 @@ export interface SubmissionAnswer {
   score: number | null;
   feedback: string | null;
   autoGraded: boolean;
+  /** The question's stored answer key, shown to graders only. */
+  referenceAnswer: string | null;
   /** AI pre-grade recommendation; never an official score until a grader applies it. */
   aiSuggestedScore: number | null;
   aiSuggestedFeedback: string | null;
