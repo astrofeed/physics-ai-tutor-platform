@@ -77,6 +77,7 @@ export default function ChatPageClient({
     stopGeneration,
     retryLast,
     canRetry,
+    getInFlightMessages,
   } = useChatStream({
     activeConversationId,
     setActiveConversationId,
@@ -130,7 +131,26 @@ export default function ChatPageClient({
       const res = await fetch(`/api/conversations/${convId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages);
+        const inFlight = getInFlightMessages(convId);
+        if (inFlight.length) {
+          const [userMsg, assistantMsg] = inFlight;
+          const last = data.messages[data.messages.length - 1];
+          const prev = data.messages[data.messages.length - 2];
+          const replyAlreadySaved =
+            last?.role === "assistant" && prev?.role === "user" && prev.content === userMsg.content;
+          if (replyAlreadySaved) {
+            setMessages(data.messages);
+            return;
+          }
+          const userAlreadySaved = last?.role === "user" && last.content === userMsg.content;
+          setMessages(
+            userAlreadySaved
+              ? [...data.messages, assistantMsg]
+              : [...data.messages, userMsg, assistantMsg]
+          );
+        } else {
+          setMessages(data.messages);
+        }
       }
     } catch (err) {
       console.error("Failed to load conversation:", err);
