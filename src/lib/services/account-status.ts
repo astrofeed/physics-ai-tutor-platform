@@ -3,6 +3,7 @@ import type { UserRole } from "@/types/user";
 
 export interface AccountStatus {
   role: UserRole;
+  isBanned: boolean;
   isDeleted: boolean;
 }
 
@@ -18,6 +19,6 @@ export async function getAccountStatus(
 ): Promise<AccountStatus | null> {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, isDeleted: true },
+    select: { role: true, isBanned: true, isDeleted: true },
   });
 }

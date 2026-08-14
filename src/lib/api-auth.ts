@@ -17,12 +17,15 @@ export interface AuthResult {
   session: Awaited<ReturnType<typeof getEffectiveSession>>;
 }
 
+export const BANNED_MESSAGE =
+  "Your account has been suspended. Please contact an administrator.";
+
 /**
  * Require an authenticated user. Returns 401 JSON if not authenticated.
  *
  * The session is a JWT, so its claims are a snapshot from sign-in time. The
- * account is re-read on every call so that a deletion or a role change takes
- * effect immediately instead of when the token expires.
+ * account is re-read on every call so that a deletion, a ban, or a role change
+ * takes effect immediately instead of when the token expires.
  */
 export async function requireApiAuth(): Promise<AuthResult | NextResponse> {
   const session = await getEffectiveSession();
@@ -37,6 +40,10 @@ export async function requireApiAuth(): Promise<AuthResult | NextResponse> {
       { error: "Your account is no longer active. Please contact an administrator." },
       { status: 401 }
     );
+  }
+
+  if (account.isBanned) {
+    return NextResponse.json({ error: BANNED_MESSAGE }, { status: 403 });
   }
 
   const user: ApiUser = { ...sessionUser, role: account.role };

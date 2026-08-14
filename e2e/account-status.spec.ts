@@ -29,7 +29,15 @@ test.describe("API auth re-reads account state", () => {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { isDeleted: true, deletedAt: new Date() },
+      data: { isBanned: true, bannedAt: new Date() },
+    });
+    const afterBan = await page.request.get("/api/assignments");
+    expect(afterBan.status()).toBe(403);
+    expect((await afterBan.json()).error).toContain("suspended");
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isBanned: false, bannedAt: null, isDeleted: true, deletedAt: new Date() },
     });
     const afterDelete = await page.request.get("/api/assignments");
     expect(afterDelete.status()).toBe(401);

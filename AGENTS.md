@@ -433,9 +433,9 @@ Soft-deleting an `Assignment` must not hide its history irrecoverably. Deleted a
 
 #### 3.7 Re-read Account State on Every API Call
 
-Sessions are JWTs, so `isDeleted` and `role` claims are a snapshot from sign-in. `requireApiAuth()` calls `getAccountStatus()` (`src/lib/services/account-status.ts`) on every request: a deleted account gets 401 immediately and the role used for authorization comes from the database, not the token. Do not read `session.user.role` directly in new API routes — use the `user` returned by `requireApiAuth()`/`requireApiRole()`.
+Sessions are JWTs, so `isDeleted`, `isBanned` and `role` claims are a snapshot from sign-in. `requireApiAuth()` calls `getAccountStatus()` (`src/lib/services/account-status.ts`) on every request: a deleted account gets 401, a banned account gets 403 with `BANNED_MESSAGE`, and the role used for authorization comes from the database, not the token. Do not read `session.user.role` directly in new API routes — use the `user` returned by `requireApiAuth()`/`requireApiRole()`.
 
-Ban handling stays route-specific (e.g. chat's "Your account has been suspended" message); do not centralize it into `requireApiAuth()` without reviewing every route's response contract.
+Do not re-check `isBanned` inside a route that already calls `requireApiAuth()` — that branch is unreachable. Routes that authenticate without it (e.g. `api/upload/client`, which needs the raw `getEffectiveSession()` for the Blob callback) must still check bans themselves.
 
 ---
 

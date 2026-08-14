@@ -37,23 +37,16 @@ export async function POST(req: Request) {
     if (isErrorResponse(auth)) return auth;
     const userId = auth.user.id;
 
-    // Check if user is banned or restricted from using AI chat
+    // Bans and deletions are already rejected by requireApiAuth
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { isBanned: true, isRestricted: true, emailVerified: true },
+      select: { isRestricted: true, emailVerified: true },
     });
 
     if (!user) {
       return Response.json(
         { error: "User not found. Please sign out and sign back in." },
         { status: 401 }
-      );
-    }
-
-    if (user?.isBanned) {
-      return Response.json(
-        { error: "Your account has been suspended. Please contact an administrator." },
-        { status: 403 }
       );
     }
 
