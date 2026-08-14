@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
+import { isInAudience } from "@/lib/services/notification-service";
 
 export async function POST(
   _req: Request,
@@ -11,6 +12,10 @@ export async function POST(
     if (isErrorResponse(auth)) return auth;
     const userId = auth.user.id;
     const { id: notificationId } = await params;
+
+    if (!(await isInAudience(notificationId, auth.user.role))) {
+      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
+    }
 
     await prisma.notificationRead.upsert({
       where: {

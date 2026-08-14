@@ -42,23 +42,33 @@ export interface SendBulkEmailsResult {
   recipients: { id: string; name: string | null; email: string }[];
   sentCount: number;
   failedCount: number;
+  /** Requested recipients that were banned, deleted, or no longer exist. */
+  skippedCount: number;
   errors: string[];
 }
 
 /**
- * Send an email to a list of user IDs. Resolves IDs to users, builds HTML
- * per recipient, and sends via `Promise.allSettled`.
+ * Send an email to a list of user IDs. Banned, soft-deleted, and unknown IDs are
+ * skipped server-side so a stale client selection cannot mail an ineligible user.
  */
 export async function sendBulkEmails(params: SendBulkEmailsParams): Promise<SendBulkEmailsResult> {
   const { recipientIds, subject, message, senderName, htmlBuilder } = params;
 
+  const uniqueIds = Array.from(new Set(recipientIds));
   const recipients = await prisma.user.findMany({
-    where: { id: { in: recipientIds } },
+    where: { id: { in: uniqueIds }, isBanned: false, isDeleted: false },
     select: { id: true, name: true, email: true },
   });
+  const skippedCount = uniqueIds.length - recipients.length;
 
   if (recipients.length === 0) {
-    return { recipients: [], sentCount: 0, failedCount: 0, errors: ["No valid recipients found"] };
+    return {
+      recipients: [],
+      sentCount: 0,
+      failedCount: 0,
+      skippedCount,
+      errors: ["No valid recipients found"],
+    };
   }
 
   const buildHtml = htmlBuilder ?? ((user: { name: string | null }) =>
@@ -77,7 +87,7 @@ export async function sendBulkEmails(params: SendBulkEmailsParams): Promise<Send
     .filter((r): r is PromiseRejectedResult => r.status === "rejected")
     .map((r) => String(r.reason?.message || r.reason));
 
-  return { recipients, sentCount, failedCount, errors };
+  return { recipients, sentCount, failedCount, skippedCount, errors };
 }
 
 // ---------------------------------------------------------------------------

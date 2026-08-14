@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+
+const MAX_RECIPIENTS = 200;
+
+const ScheduledEmailSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  message: z.string().trim().min(1).max(50_000),
+  scheduledAt: z.string().min(1),
+  /** Empty is allowed only for in-app-only scheduling (`createNotification`). */
+  recipientIds: z.array(z.string().min(1)).max(MAX_RECIPIENTS),
+  createNotification: z.boolean().default(false),
+  /** Roles the in-app notification is visible to. Empty means everyone. */
+  audienceRoles: z.array(z.enum(["STUDENT", "TA", "PROFESSOR", "ADMIN"])).default([]),
+  assignmentId: z.string().min(1).nullish(),
+});
 
 // GET /api/admin/scheduled-emails - List scheduled emails
 export async function GET() {
@@ -28,14 +43,24 @@ export async function POST(req: Request) {
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;
 
-    const { subject, message, scheduledAt, recipientIds, createNotification, assignmentId } = await req.json();
-
-    if (!subject?.trim() || !message?.trim() || !scheduledAt || !Array.isArray(recipientIds)) {
+    const parsed = ScheduledEmailSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "subject, message, scheduledAt, and recipientIds are required" },
+        {
+          error: `subject (≤500 chars), message (≤50,000 chars), scheduledAt, and up to ${MAX_RECIPIENTS} recipientIds are required`,
+        },
         { status: 400 }
       );
     }
+    const {
+      subject,
+      message,
+      scheduledAt,
+      recipientIds,
+      createNotification,
+      audienceRoles,
+      assignmentId,
+    } = parsed.data;
 
     // recipientIds can be empty when createNotification is true (notification-only, no email)
     if (recipientIds.length === 0 && !createNotification) {
@@ -53,22 +78,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "scheduledAt must be in the future" }, { status: 400 });
     }
 
-    const MAX_RECIPIENTS = 200;
-    if (recipientIds.length > MAX_RECIPIENTS) {
-      return NextResponse.json(
-        { error: `Too many recipients. Maximum is ${MAX_RECIPIENTS}.` },
-        { status: 400 }
-      );
-    }
-
     const scheduledEmail = await prisma.scheduledEmail.create({
       data: {
-        subject: subject.trim(),
-        message: message.trim(),
+        subject,
+        message,
         scheduledAt: scheduledDate,
         recipientIds,
         createdById: auth.user.id,
-        createNotification: createNotification ?? false,
+        createNotification,
+        audienceRoles,
         assignmentId: assignmentId || null,
       },
       include: {
@@ -82,10 +100,11 @@ export async function POST(req: Request) {
         action: "scheduled_email_created",
         details: {
           scheduledEmailId: scheduledEmail.id,
-          subject: subject.trim(),
+          subject,
           scheduledAt: scheduledDate.toISOString(),
           recipientCount: recipientIds.length,
-          createNotification: createNotification ?? false,
+          createNotification,
+          audienceRoles,
           assignmentId: assignmentId || null,
         },
       },

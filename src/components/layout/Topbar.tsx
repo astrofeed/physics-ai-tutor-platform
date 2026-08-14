@@ -44,7 +44,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { NotifyUsersDialog } from "@/components/ui/notify-users-dialog";
+import { NotifyUsersDialog, type NotifySendContext } from "@/components/ui/notify-users-dialog";
 import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 
 interface TopbarProps {
@@ -248,11 +248,15 @@ export default function Topbar({ userName, userEmail, userImage, userRole, onMob
     }
   };
 
-  const handleCreateAnnouncement = async (subject: string, msg: string) => {
+  const handleCreateAnnouncement = async (
+    subject: string,
+    msg: string,
+    { audienceRoles }: NotifySendContext
+  ) => {
     await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: subject, message: msg }),
+      body: JSON.stringify({ title: subject, message: msg, audienceRoles }),
     });
     fetchNotifications();
   };

@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { sendBulkEmails } from "@/lib/services/email-service";
+
+const MAX_RECIPIENTS = 200;
+
+const BulkEmailSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1).max(MAX_RECIPIENTS),
+  subject: z.string().trim().min(1).max(500),
+  message: z.string().trim().min(1).max(50_000),
+});
 
 export async function POST(req: Request) {
   try {
@@ -9,51 +18,30 @@ export async function POST(req: Request) {
     if (isErrorResponse(auth)) return auth;
     const senderId = auth.user.id;
     const senderName = auth.user.name || "Staff";
-    const { userIds, subject, message } = await req.json();
 
-    if (
-      !Array.isArray(userIds) ||
-      userIds.length === 0 ||
-      !subject?.trim() ||
-      !message?.trim()
-    ) {
+    const parsed = BulkEmailSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "userIds (non-empty array), subject, and message are required" },
+        {
+          error: `userIds (1-${MAX_RECIPIENTS} ids), subject (≤500 chars), and message (≤50,000 chars) are required`,
+        },
         { status: 400 }
       );
     }
-
-    // Input size limits
-    if (typeof subject !== "string" || subject.length > 500) {
-      return NextResponse.json(
-        { error: "Subject must be 500 characters or fewer" },
-        { status: 400 }
-      );
-    }
-    if (typeof message !== "string" || message.length > 50000) {
-      return NextResponse.json(
-        { error: "Message must be 50,000 characters or fewer" },
-        { status: 400 }
-      );
-    }
-
-    const MAX_RECIPIENTS = 200;
-    if (userIds.length > MAX_RECIPIENTS) {
-      return NextResponse.json(
-        { error: `Too many recipients. Maximum is ${MAX_RECIPIENTS}.` },
-        { status: 400 }
-      );
-    }
+    const { userIds, subject, message } = parsed.data;
 
     const result = await sendBulkEmails({
       recipientIds: userIds,
-      subject: subject.trim(),
-      message: message.trim(),
+      subject,
+      message,
       senderName,
     });
 
     if (result.recipients.length === 0) {
-      return NextResponse.json({ error: "No valid recipients found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No eligible recipients found (banned or deleted users are skipped)" },
+        { status: 404 }
+      );
     }
 
     await prisma.auditLog.create({
@@ -65,10 +53,11 @@ export async function POST(req: Request) {
           performedByName: senderName,
           recipientIds: result.recipients.map((u) => u.id),
           recipientCount: result.recipients.length,
-          subject: subject.trim(),
-          message: message.trim(),
+          subject,
+          message,
           sentCount: result.sentCount,
           failedCount: result.failedCount,
+          skippedCount: result.skippedCount,
         },
       },
     });
@@ -77,6 +66,7 @@ export async function POST(req: Request) {
       success: true,
       sentCount: result.sentCount,
       failedCount: result.failedCount,
+      skippedCount: result.skippedCount,
       ...(result.errors.length > 0 && { errors: result.errors }),
     });
   } catch (error) {

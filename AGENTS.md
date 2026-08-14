@@ -1317,14 +1317,33 @@ Both the assignment detail page (`src/app/(main)/assignments/[id]/page.tsx`) and
 2. **Notify Users Dialog** — After publishing, a shared dialog opens allowing the instructor to email users:
    - Recipients list with role-based filter tabs: **All**, Students, TAs, Professors, Admins (with counts)
    - Individual user checkboxes with name, role badge, and email
-   - "Select All" / "Deselect All" toggle
+   - "Select All" / "Deselect All" toggle — operates on the **currently visible** users only
    - Pre-filled editable Subject and Message fields
    - "Skip" to close without sending, "Send Reminder" to email selected users
    - All users are pre-selected by default
    - Fetches users from `/api/admin/users` and sends via `/api/admin/email`
-   - Success state with checkmark before auto-closing
+   - Success state with checkmark before auto-closing, including sent/failed/skipped counts
    - Props: `open`, `onOpenChange`, `defaultSubject`, `defaultMessage`, `onSkip?`, `onSent?`
    - Optional props for customization: `onBeforeSend?`, `dialogTitle?`, `dialogDescription?`, `sendButtonLabel?`, `successMessage?`
+
+### Notification Recipients & Audience Targeting
+
+The role tabs are a **view filter only** — they never change the selection. Selecting the "Student" tab does not deselect TAs, so the dialog discloses hidden selections instead of silently sending to everyone.
+
+**Composition:**
+- `src/lib/notify-selection.ts` — pure selection helpers (`visibleUsersFor`, `countSelected`, `toggleVisibleSelection`, `selectedRoles`), unit-tested in `e2e/notify-selection.spec.ts`
+- `src/hooks/use-notify-recipients.ts` — loads `/api/admin/users`, owns the selection Set, derives `visibleUsers`, `visibleSelectedCount`, `hiddenSelectedCount`, `allVisibleSelected`, `selectedRoles`
+- `src/hooks/use-email-templates.ts` — loads `/api/admin/email-templates`
+- `src/components/ui/notify/recipient-picker.tsx` — role tabs, counts, and the amber "N more selected recipients from other roles are hidden" warning
+- `src/components/ui/notify-users-dialog.tsx` — composes the above; keeps subject/message/schedule state only
+
+**Audience targeting:** `Notification.audienceRoles` and `ScheduledEmail.audienceRoles` (`Role[]`) restrict who sees an in-app notification. Empty means everyone. The dialog derives the audience from the roles present in the selection and passes it through `onBeforeSend(subject, message, { scheduledAt?, audienceRoles })` to `POST /api/notifications`, and to `POST /api/admin/scheduled-emails` for scheduled sends. `GET /api/notifications`, mark-all-read, and `POST /api/notifications/[id]/read` all filter by audience, so a staff-only announcement is never returned to students.
+
+**Delivery honesty:**
+- `sendBulkEmails` filters out banned and soft-deleted users server-side and returns `skippedCount`; client filtering is never authoritative
+- `POST /api/admin/email` returns `sentCount` / `failedCount` / `skippedCount`, recorded in the audit log
+- With "Also send as email" unchecked the dialog states that no email is sent (in-app only) instead of implying delivery
+- Scheduled sends reject malformed and past datetimes on both the client (`parseFutureDate`) and the API
 
 **Unpublish** uses a simple destructive confirm dialog (no notify step).
 
@@ -1336,20 +1355,21 @@ All email/notification sending through `NotifyUsersDialog` supports scheduling f
 - `subject`, `message` (`@db.Text`), `scheduledAt` (`DateTime`), `recipientIds` (`Json` — string array of user IDs)
 - `createdById` (relation to `User`), `status` (`ScheduledEmailStatus` enum: `PENDING`, `SENT`, `CANCELLED`, `FAILED`)
 - `createNotification` (`Boolean`, default `false`) — Also create in-app notification when email is sent
+- `audienceRoles` (`Role[]`) — Roles the generated in-app notification is visible to; empty means everyone
 - `sentAt`, `cancelledAt` (`DateTime?`), `error` (`@db.Text?`)
 
 **Cron job:** `GET /api/cron/send-scheduled-emails` — called every 5 minutes via [cron-job.org](https://cron-job.org). Queries `ScheduledEmail` where `status = PENDING AND scheduledAt <= now()`, sends emails, optionally creates in-app notifications, updates status, creates audit logs. Protected by `CRON_SECRET`.
 
 **API routes:**
 - `GET /api/admin/scheduled-emails` — List all scheduled emails (staff only)
-- `POST /api/admin/scheduled-emails` — Create a scheduled email (`subject`, `message`, `scheduledAt`, `recipientIds`, `createNotification?`)
+- `POST /api/admin/scheduled-emails` — Create a scheduled email (`subject`, `message`, `scheduledAt`, `recipientIds`, `createNotification?`, `audienceRoles?`, `assignmentId?`); Zod-validated, `recipientIds` may be empty only when `createNotification` is true (in-app only)
 - `GET /api/admin/scheduled-emails/[id]` — Get single scheduled email
 - `PATCH /api/admin/scheduled-emails/[id]` — Update or cancel (`status: "CANCELLED"`) a pending scheduled email
 - `DELETE /api/admin/scheduled-emails/[id]` — Delete a scheduled email record
 
 **UI — NotifyUsersDialog** (`src/components/ui/notify-users-dialog.tsx`):
 - New props: `enableScheduling` (default `true`), `onScheduled?`
-- When "Also send as email" is checked, a "Schedule for later" checkbox appears with a datetime picker
+- Schedule mode is entered via `defaultScheduledAt` or `schedulePublishMode`, which shows the datetime picker
 - Button label changes to "Schedule" with `CalendarClock` icon when in schedule mode
 - Creates scheduled email via `/api/admin/scheduled-emails` POST instead of sending immediately
 
@@ -1434,7 +1454,7 @@ Assignments can be scheduled to auto-publish at a future date/time. The schedule
 - **Topbar** (`src/components/layout/Topbar.tsx`) — Staff users see a "Scheduled" section at the top of the notification dropdown showing PENDING scheduled notifications with a `CalendarClock` icon and scheduled time label.
 
 **NotifyUsersDialog `schedulePublishMode` prop:**
-When `schedulePublishMode=true`, the dialog shows a datetime picker at the top, hides the "Also send as email" toggle (always sends email), and creates a `ScheduledEmail` with `createNotification=true`. The `onBeforeSend` callback receives `scheduledAt` as a third parameter and can return an `assignmentId` string for linking. The `onSkip` callback receives `scheduledAt` as a parameter.
+When `schedulePublishMode=true`, the dialog shows a datetime picker at the top, hides the "Also send as email" toggle (always sends email), and creates a `ScheduledEmail` with `createNotification=true`. The `onBeforeSend` callback receives a `{ scheduledAt?, audienceRoles }` context object as its third parameter and can return an `assignmentId` string for linking. The `onSkip` callback receives `scheduledAt` as a parameter.
 
 **Env vars:**
 - `CRON_SECRET` — Required for production. Vercel sends this as `Authorization: Bearer <secret>` header.

@@ -411,6 +411,8 @@ model Notification {
   message     String   @db.Text
   createdById String
   isGlobal    Boolean  @default(true)
+  /// Roles allowed to see this notification. Empty means everyone.
+  audienceRoles Role[]
   createdAt   DateTime @default(now())
 
   createdBy User               @relation("NotificationCreatedBy", fields: [createdById], references: [id])
@@ -526,6 +528,8 @@ model ScheduledEmail {
   cancelledAt        DateTime?
   error              String?              @db.Text
   createNotification Boolean              @default(false)
+  /// Roles the generated in-app notification is visible to. Empty means everyone.
+  audienceRoles      Role[]
   assignmentId       String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt

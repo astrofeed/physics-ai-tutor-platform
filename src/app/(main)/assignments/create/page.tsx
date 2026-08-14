@@ -255,7 +255,7 @@ function CreateAssignmentPageContent() {
               toast.error(err instanceof Error ? err.message : "Failed to create assignment");
             }
           }}
-          onBeforeSend={async (subj, msg) => {
+          onBeforeSend={async (subj, msg, { audienceRoles }) => {
             const id = await createAssignment();
             if (!id) return;
             createdIdRef.current = id;
@@ -267,7 +267,7 @@ function CreateAssignmentPageContent() {
             await fetch("/api/notifications", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title: subj, message: msg }),
+              body: JSON.stringify({ title: subj, message: msg, audienceRoles }),
             });
           }}
           onSent={() => {
@@ -290,7 +290,7 @@ function CreateAssignmentPageContent() {
           dialogDescription="Set a publish time and select who to notify when it goes live."
           sendButtonLabel="Notify & Schedule"
           skipButtonLabel="Skip Notification & Schedule"
-          onBeforeSend={async (_subj, _msg, scheduledAt) => {
+          onBeforeSend={async (_subj, _msg, { scheduledAt }) => {
             const id = await createAssignment(scheduledAt, true);
             if (!id) return;
             createdIdRef.current = id;

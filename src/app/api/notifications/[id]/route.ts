@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { z } from "zod";
+
+const UpdateNotificationSchema = z
+  .object({
+    title: z.string().trim().min(1).max(500).optional(),
+    message: z.string().trim().min(1).max(50_000).optional(),
+    audienceRoles: z.array(z.enum(["STUDENT", "TA", "PROFESSOR", "ADMIN"])).optional(),
+  })
+  .refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: "Nothing to update",
+  });
 
 export async function PATCH(
   req: Request,
@@ -11,10 +22,12 @@ export async function PATCH(
     if (isErrorResponse(auth)) return auth;
 
     const { id } = await params;
-    const { title, message } = await req.json();
-
-    if (!title && !message) {
-      return NextResponse.json({ error: "Title or message required" }, { status: 400 });
+    const parsed = UpdateNotificationSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid input" },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.notification.findUnique({ where: { id } });
@@ -24,10 +37,7 @@ export async function PATCH(
 
     const notification = await prisma.notification.update({
       where: { id },
-      data: {
-        ...(title && { title }),
-        ...(message && { message }),
-      },
+      data: parsed.data,
     });
 
     return NextResponse.json({ notification });
