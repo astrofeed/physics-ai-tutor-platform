@@ -19,6 +19,47 @@ export interface AssignmentQuestion {
   imageUrl?: string | null;
 }
 
+/** A question being authored in the assignment form, before it is saved. */
+export interface QuestionFormData {
+  /** Set for questions already saved in the database; absent for newly added ones. */
+  id?: string;
+  questionText: string;
+  questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  diagram?: { type: "svg" | "mermaid"; content: string } | any;
+  imageUrl?: string | null;
+  /** Staged locally and uploaded when the assignment is saved. */
+  imageFile?: File | null;
+  imagePreview?: string | null;
+}
+
+/** The whole assignment form state. */
+export interface AssignmentFormData {
+  title: string;
+  description: string;
+  dueDate: string;
+  type: "QUIZ" | "FILE_UPLOAD";
+  totalPoints: number;
+  lockAfterSubmit: boolean;
+  pdfUrl: string | null;
+  questions: QuestionFormData[];
+}
+
+/** A question in the shape the assignment API accepts. */
+export interface QuestionPayload {
+  id?: string;
+  questionText: string;
+  questionType: string;
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  diagram?: unknown;
+  imageUrl?: string;
+}
+
 /** Assignment as shown in the list view (assignments page). */
 export interface AssignmentListItem {
   id: string;
