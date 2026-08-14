@@ -19,6 +19,8 @@ export interface AuthResult {
 
 export const BANNED_MESSAGE =
   "Your account has been suspended. Please contact an administrator.";
+export const DELETED_MESSAGE =
+  "Your account is no longer active. Please contact an administrator.";
 
 /**
  * Require an authenticated user. Returns 401 JSON if not authenticated.
@@ -36,10 +38,7 @@ export async function requireApiAuth(): Promise<AuthResult | NextResponse> {
 
   const account = await getAccountStatus(sessionUser.id);
   if (!account || account.isDeleted) {
-    return NextResponse.json(
-      { error: "Your account is no longer active. Please contact an administrator." },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: DELETED_MESSAGE }, { status: 401 });
   }
 
   if (account.isBanned) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 
 // Rate limiting: Track execution count per user
 const executionCount = new Map<string, { count: number; resetTime: number }>();
@@ -24,13 +24,11 @@ const LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireApiAuth();
+    if (isErrorResponse(auth)) return auth;
 
     // Rate limiting check
-    const userId = session.user.id;
+    const userId = auth.user.id;
     const now = Date.now();
     const userLimit = executionCount.get(userId);
 

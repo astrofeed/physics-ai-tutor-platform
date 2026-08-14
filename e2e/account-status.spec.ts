@@ -42,5 +42,17 @@ test.describe("API auth re-reads account state", () => {
     const afterDelete = await page.request.get("/api/assignments");
     expect(afterDelete.status()).toBe(401);
     expect((await afterDelete.json()).error).toContain("no longer active");
+
+    // Routes that authenticate outside requireApiAuth must reject too
+    const runCode = await page.request.post("/api/run-code", {
+      data: { code: "print(1)", language: "python" },
+    });
+    expect(runCode.status()).toBe(401);
+
+    const uploadToken = await page.request.post("/api/upload/client", {
+      data: { type: "blob.generate-client-token", payload: {} },
+    });
+    expect(uploadToken.status()).toBe(401);
+    expect((await uploadToken.json()).error).toContain("no longer active");
   });
 });
