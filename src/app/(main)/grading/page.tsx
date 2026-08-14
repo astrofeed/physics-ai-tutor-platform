@@ -150,6 +150,7 @@ function GradingPageContent() {
   const [gradingMode, setGradingMode] = useState<GradingMode>("per-question");
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, { score: number; feedback: string }>>({});
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   // Consolidated: feedback file state (file object, url)
   const [feedbackFileState, setFeedbackFileState] = useState<FeedbackFileState>({
@@ -342,6 +343,17 @@ function GradingPageContent() {
     setGrades(initialGrades);
     if (restored) setGradingDraftRestored(true);
 
+    const storedSuggestions: Record<string, { score: number; feedback: string }> = {};
+    sub.answers.forEach((a) => {
+      if (a.aiSuggestedScore !== null) {
+        storedSuggestions[a.id] = {
+          score: a.aiSuggestedScore,
+          feedback: a.aiSuggestedFeedback ?? "",
+        };
+      }
+    });
+    setSuggestions(storedSuggestions);
+
     // Confirmed answers & overall grade (consolidated)
     setConfirmedAnswers(new Set(saved?.confirmedAnswers || []));
     setOverallGrade({
@@ -387,13 +399,11 @@ function GradingPageContent() {
       });
       if (res.ok) {
         const data = await res.json();
-        setGrades((prev) => ({
+        setSuggestions((prev) => ({
           ...prev,
-          [answerId]: {
-            score: data.suggestedScore,
-            feedback: data.suggestedFeedback,
-          },
+          [answerId]: { score: data.suggestedScore, feedback: data.suggestedFeedback },
         }));
+        toast.success("AI suggestion ready — review it, then apply to use it as the score");
       } else {
         const body = await res.json().catch(() => null);
         toast.error(body?.error || "AI suggestion failed. Your score and feedback are unchanged.");
@@ -404,6 +414,16 @@ function GradingPageContent() {
     } finally {
       setAiLoading(null);
     }
+  };
+
+  /** Copies a stored AI recommendation into the editable grade; saving is still the grader's call. */
+  const handleApplySuggestion = (answerId: string) => {
+    const suggestion = suggestions[answerId];
+    if (!suggestion) return;
+    setGrades((prev) => ({
+      ...prev,
+      [answerId]: { score: suggestion.score, feedback: suggestion.feedback },
+    }));
   };
 
   const handleUploadFeedbackFile = async (file: File) => {
@@ -962,6 +982,8 @@ function GradingPageContent() {
                       onToggleConfirm={handleToggleConfirm}
                       aiLoading={aiLoading}
                       onAIGrade={handleAIGrade}
+                      suggestions={suggestions}
+                      onApplySuggestion={handleApplySuggestion}
                       feedbackImages={feedbackImages}
                       onFeedbackImagesChange={(answerId, imgs) => setFeedbackImages((prev) => ({ ...prev, [answerId]: imgs }))}
                       onUploadImage={handleUploadImage}

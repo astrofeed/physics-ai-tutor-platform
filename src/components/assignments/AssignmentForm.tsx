@@ -23,6 +23,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { QuestionCard } from "./QuestionCard";
+import type { QuestionPayload } from "@/types/assignment";
 
 export interface QuestionFormData {
   /** Set for questions already saved in the database; absent for newly added ones. */
@@ -37,6 +38,9 @@ export interface QuestionFormData {
   imageUrl?: string | null;
   imageFile?: File | null;
   imagePreview?: string | null;
+  /** NUMERIC only: how far off an answer may be and still count as correct. */
+  tolerance?: number | null;
+  toleranceUnit: "ABSOLUTE" | "PERCENT";
 }
 
 export interface AssignmentFormData {
@@ -70,16 +74,7 @@ interface AssignmentFormProps {
   /** Render action buttons. Receives form data + helpers. */
   renderActions: (props: {
     formData: AssignmentFormData;
-    getQuestionsWithUrls: () => Promise<Array<{
-      id?: string;
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>;
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>;
     titleValid: boolean;
   }) => React.ReactNode;
 }
@@ -130,6 +125,8 @@ export function AssignmentForm({
         options: ["", "", "", ""],
         correctAnswer: "",
         points: 10,
+        tolerance: null,
+        toleranceUnit: "ABSOLUTE",
       },
     ]);
   };
@@ -240,6 +237,8 @@ export function AssignmentForm({
           points: q.points,
           ...(q.diagram && { diagram: q.diagram }),
           ...(imageUrl && { imageUrl }),
+          tolerance: q.questionType === "NUMERIC" ? q.tolerance ?? null : null,
+          toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
         };
       })
     );

@@ -103,6 +103,7 @@ async function applyGrades(
           data: {
             score: grade.score,
             feedback: grade.feedback,
+            autoGraded: false,
             ...(images?.length && { feedbackImageUrls: images }),
           },
         });
@@ -120,11 +121,14 @@ async function applyGrades(
         });
       }
     } else {
+      // A grader touching a score makes it theirs, so it stops being reported
+      // as machine-graded.
       await prisma.submissionAnswer.update({
         where: { id: grade.answerId },
         data: {
           score: grade.score,
           feedback: grade.feedback,
+          autoGraded: false,
           ...(images?.length && { feedbackImageUrls: images }),
         },
       });

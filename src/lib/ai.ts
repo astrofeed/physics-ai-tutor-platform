@@ -404,7 +404,10 @@ ${customInstructions ? `\nAdditional instructions: ${customInstructions}\n` : ""
 For each problem, provide:
 1. The question text using proper markdown with LaTeX math ($...$ for inline, $$...$$ for display math)
 2. ${questionType === "MC" ? "4 options labeled A, B, C, D (each option should also use LaTeX for any math)" : ""}
-3. The correct answer (use LaTeX for any math expressions)
+3. The correct answer, written so the platform's auto-grader can use it:
+   - MC: a single option letter (A, B, C or D) and nothing else — no option text, no explanation
+   - NUMERIC: one plain finite number (e.g. 9.8 or -3.2e-4) — no units, no LaTeX, no words, no ranges
+   - FREE_RESPONSE: a concise reference answer a grader can compare against
 4. A detailed step-by-step solution using markdown formatting and LaTeX for all math
 5. If the problem benefits from a visual diagram, include a "diagram" object with "type" ("svg" or "mermaid") and "content" (the diagram code)
 
@@ -412,7 +415,7 @@ ${formatInstruction} having these fields:
 - questionText: string (markdown + LaTeX)
 - questionType: "${questionType}"
 ${questionType === "MC" ? '- options: string[] (array of 4 options, each with LaTeX math as needed)' : ""}
-- correctAnswer: string (with LaTeX)
+- correctAnswer: string (MC: option letter only; NUMERIC: plain number only; FREE_RESPONSE: reference answer)
 - solution: string (markdown + LaTeX, step-by-step)
 - points: number (suggest appropriate points, typically 10-25)
 - diagram: { type: "svg" | "mermaid", content: string } (optional, include for problems with physical setups like circuits, force diagrams, EM fields, optics, etc.)`;

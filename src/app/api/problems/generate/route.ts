@@ -1,6 +1,32 @@
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { streamGenerateProblems, type AIProvider } from "@/lib/ai";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+
+const GenerateSchema = z.object({
+  topic: z.string().min(1).max(200),
+  difficulty: z.number().int().min(1).max(5),
+  count: z.number().int().min(1).max(20),
+  questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
+  customInstructions: z.string().max(5000).optional(),
+});
+
+/** Aligns a generated answer key with what the auto-grader expects. */
+function normalizeGeneratedAnswer(
+  answer: string,
+  questionType: string,
+  options: string[] | null
+): string {
+  if (questionType === "MC") {
+    return normalizeMcAnswerKey(answer, options ?? []) ?? answer.trim();
+  }
+  if (questionType === "NUMERIC") {
+    const numeric = answer.replace(/\$/g, "").match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/);
+    return numeric ? numeric[0] : answer.trim();
+  }
+  return answer;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeDiagram(raw: any): { type: string; content: string } | null {
@@ -120,7 +146,14 @@ export async function POST(req: Request) {
     if (isErrorResponse(auth)) return auth;
     const userId = auth.user.id;
 
-    const { topic, difficulty, count, questionType, customInstructions } = await req.json();
+    const parseResult = GenerateSchema.safeParse(await req.json());
+    if (!parseResult.success) {
+      return Response.json(
+        { error: parseResult.error.issues[0]?.message || "Invalid request" },
+        { status: 400 }
+      );
+    }
+    const { topic, difficulty, count, questionType, customInstructions } = parseResult.data;
 
     const aiConfig = await prisma.aIConfig.findFirst({
       where: { isActive: true },
@@ -187,11 +220,14 @@ export async function POST(req: Request) {
               }
             }
 
+            const type = p.questionType || questionType;
+            const options: string[] | null = Array.isArray(p.options) ? p.options : null;
+
             return {
               questionText,
-              questionType: p.questionType || questionType,
-              options: p.options || null,
-              correctAnswer: p.correctAnswer || "",
+              questionType: type,
+              options,
+              correctAnswer: normalizeGeneratedAnswer(String(p.correctAnswer || ""), type, options),
               solution: p.solution || "",
               points: p.points || 10,
               diagram,

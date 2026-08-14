@@ -5,6 +5,23 @@
  * NOT raw Prisma model types (which use Decimal, Date, etc.).
  */
 
+/** How a numeric answer's distance from the answer key is measured. */
+export type ToleranceUnit = "ABSOLUTE" | "PERCENT";
+
+/** Question payload sent to the assignment create/update APIs. */
+export interface QuestionPayload {
+  id?: string;
+  questionText: string;
+  questionType: string;
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  diagram?: unknown;
+  imageUrl?: string;
+  tolerance: number | null;
+  toleranceUnit: ToleranceUnit;
+}
+
 /** A single question on an assignment, as returned by the API. */
 export interface AssignmentQuestion {
   id: string;
@@ -14,6 +31,8 @@ export interface AssignmentQuestion {
   correctAnswer: string | null;
   points: number;
   order: number;
+  tolerance?: number | null;
+  toleranceUnit?: ToleranceUnit;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   diagram?: { type: "svg" | "mermaid"; content: string } | any;
   imageUrl?: string | null;

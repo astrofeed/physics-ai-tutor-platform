@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { aiAssistedGrading, type AIProvider } from "@/lib/ai";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
 import { GradingError, saveGrades, ungradeSubmission } from "@/lib/services/grading-service";
-import { toDataUri } from "@/lib/services/file-storage";
+import { suggestAnswerGrade } from "@/lib/services/ai-pregrade-service";
 
 const gradeItemSchema = z.object({
   answerId: z.string().min(1),
@@ -90,60 +88,14 @@ export async function PUT(req: Request) {
         { status: 400 }
       );
     }
-    const { answerId } = parseResult.data;
+    const suggestion = await suggestAnswerGrade(parseResult.data.answerId);
 
-    const answer = await prisma.submissionAnswer.findUnique({
-      where: { id: answerId },
-      include: {
-        question: {
-          include: { rubrics: true },
-        },
-      },
-    });
-
-    if (!answer) {
-      return NextResponse.json({ error: "Answer not found" }, { status: 404 });
-    }
-
-    const aiConfig = await prisma.aIConfig.findFirst({
-      where: { isActive: true },
-    });
-
-    const provider = (aiConfig?.provider as AIProvider) || "openai";
-
-    const rubricDesc = answer.question.rubrics
-      .map((r) => `${r.description} (${r.points} pts)`)
-      .join("\n");
-
-    const storedImageUrls = Array.isArray(answer.answerImageUrls)
-      ? (answer.answerImageUrls as string[])
-      : [];
-    // Answer images live behind an authenticated route, so the model cannot
-    // fetch them by URL — inline them as data URIs instead.
-    const imageUrls = (await Promise.all(storedImageUrls.map(toDataUri))).filter(
-      (url): url is string => Boolean(url)
-    );
-    const result = await aiAssistedGrading(
-      answer.question.questionText,
-      answer.question.correctAnswer || "",
-      answer.answer || "",
-      rubricDesc || "Grade based on correctness and completeness",
-      answer.question.points,
-      provider,
-      imageUrls.length > 0 ? imageUrls : undefined
-    );
-
-    if (!result) {
-      return NextResponse.json({ error: "AI grading failed" }, { status: 500 });
-    }
-
-    const parsed = JSON.parse(result);
-
-    return NextResponse.json({
-      suggestedScore: parsed.score,
-      suggestedFeedback: parsed.feedback,
-    });
+    return NextResponse.json(suggestion);
   } catch (error) {
+    if (error instanceof GradingError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     logger.error("AI-assisted grading error", {
       route: "/api/grading",
       error: error instanceof Error ? error.message : String(error),

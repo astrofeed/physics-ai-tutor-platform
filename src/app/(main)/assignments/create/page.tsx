@@ -9,6 +9,7 @@ import { NotifyUsersDialog } from "@/components/ui/notify-users-dialog";
 import { AssignmentForm, type AssignmentFormData } from "@/components/assignments/AssignmentForm";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
+import type { QuestionPayload } from "@/types/assignment";
 
 function CreateAssignmentPageContent() {
   const router = useRouter();
@@ -83,15 +84,7 @@ function CreateAssignmentPageContent() {
 
   const handleSubmit = async (
     formData: AssignmentFormData,
-    getQuestionsWithUrls: () => Promise<Array<{
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>,
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>,
     publish: boolean,
     schedule?: boolean,
   ) => {
@@ -142,15 +135,7 @@ function CreateAssignmentPageContent() {
 
   const handleSaveAndExportLatex = async (
     formData: AssignmentFormData,
-    getQuestionsWithUrls: () => Promise<Array<{
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>,
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>,
   ) => {
     if (!formData.title.trim()) {
       toast.error("Please enter a title for the assignment");

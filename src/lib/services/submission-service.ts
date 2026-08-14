@@ -1,8 +1,10 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isStaff } from "@/lib/constants";
 import { deleteFileByUrl } from "@/lib/services/file-storage";
 import type { UserRole } from "@/types/user";
 import { MAX_ANSWER_IMAGES, MAX_ANSWER_LENGTH } from "@/lib/answer-limits";
+import { autoGradeAnswer, type GradableQuestion, type ToleranceUnit } from "@/lib/auto-grade";
 
 export interface AnswerInput {
   questionId: string;
@@ -74,27 +76,21 @@ function validateAnswers(
   }
 }
 
-function autoGrade(
-  answer: AnswerInput,
-  question: { questionType: string; correctAnswer: string | null; points: number } | undefined
-) {
-  if (!question || (question.questionType !== "MC" && question.questionType !== "NUMERIC")) {
-    return { autoGraded: false, score: null as number | null };
-  }
+type QuestionRow = {
+  questionType: string;
+  correctAnswer: string | null;
+  points: number;
+  tolerance: Prisma.Decimal | null;
+  toleranceUnit: string;
+};
 
-  if (question.questionType === "NUMERIC") {
-    const given = Number(answer.answer.trim());
-    const expected = Number((question.correctAnswer || "").trim());
-    const correct =
-      Number.isFinite(given) && Number.isFinite(expected) && given === expected;
-    return { autoGraded: true, score: correct ? question.points : 0 };
-  }
-
-  const correct =
-    answer.answer.trim().toLowerCase() ===
-    (question.correctAnswer || "").trim().toLowerCase();
-  return { autoGraded: true, score: correct ? question.points : 0 };
-}
+const gradable = (question: QuestionRow): GradableQuestion => ({
+  questionType: question.questionType,
+  correctAnswer: question.correctAnswer,
+  points: question.points,
+  tolerance: question.tolerance === null ? null : Number(question.tolerance),
+  toleranceUnit: question.toleranceUnit as ToleranceUnit,
+});
 
 const answerRows = (answers: AnswerInput[]) =>
   answers.map((a) => ({
@@ -212,7 +208,8 @@ export async function saveSubmission(
       dueDateAtSubmission: assignment.dueDate,
       answers: {
         create: answers.map((a) => {
-          const graded = autoGrade(a, questionById.get(a.questionId));
+          const question = questionById.get(a.questionId);
+          const graded = autoGradeAnswer(a.answer, question && gradable(question));
           return {
             questionId: a.questionId,
             answer: a.answer,

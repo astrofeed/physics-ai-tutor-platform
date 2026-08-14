@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import type { QuestionPayload } from "@/types/assignment";
 
 interface DestructiveSave {
   questions: Array<{ id: string; questionText: string; answerCount: number }>;
@@ -63,6 +64,8 @@ function EditAssignmentPageContent({
               points: number;
               diagram?: { type: "svg" | "mermaid"; content: string } | null;
               imageUrl?: string | null;
+              tolerance?: number | null;
+              toleranceUnit?: "ABSOLUTE" | "PERCENT" | null;
             }) => ({
               id: q.id,
               questionText: q.questionText,
@@ -72,6 +75,8 @@ function EditAssignmentPageContent({
               points: q.points,
               diagram: q.diagram || null,
               imageUrl: q.imageUrl || null,
+              tolerance: q.tolerance ?? null,
+              toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
             })
           ) as QuestionFormData[],
         });
@@ -86,18 +91,7 @@ function EditAssignmentPageContent({
 
   const handleSave = async (
     formData: AssignmentFormData,
-    getQuestionsWithUrls: () => Promise<
-      Array<{
-        id?: string;
-        questionText: string;
-        questionType: string;
-        options: string[];
-        correctAnswer: string;
-        points: number;
-        diagram?: unknown;
-        imageUrl?: string;
-      }>
-    >,
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>,
     publish: boolean
   ) => {
     if (!formData.title.trim()) return;
