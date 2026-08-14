@@ -10,6 +10,7 @@ import { ChatInput } from "./ChatInput";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
 import { useExamMode } from "@/hooks/use-exam-mode";
+import { useStickyScroll } from "@/hooks/use-sticky-scroll";
 import { useTrackTime } from "@/lib/use-track-time";
 
 interface SideChatPanelProps {
@@ -73,12 +74,7 @@ export function SideChatPanel({
     onRestoreInput: setInput,
   });
 
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-    if (isNearBottom) container.scrollTop = container.scrollHeight;
-  }, [messages]);
+  const { isPinned, scrollToBottom } = useStickyScroll(scrollContainerRef, messages);
 
   const submitMessage = useCallback(async (messageText: string) => {
     if (!messageText.trim() && !attachments.length) return;
@@ -208,6 +204,8 @@ export function SideChatPanel({
         copiedMessageId={copiedMessageId}
         scrollContainerRef={scrollContainerRef}
         messagesEndRef={messagesEndRef}
+        showJumpToLatest={!isPinned && messages.length > 0}
+        onJumpToLatest={scrollToBottom}
         onSuggestedTopic={submitMessage}
         onCopyMessage={copyMessage}
       />
