@@ -16,8 +16,11 @@ export default async function DashboardPage() {
   const userId = user.id;
   const role = (user.role as string) || "STUDENT";
 
-  const [conversationCount, assignmentCount, submissionCount] = await Promise.all([
+  const [conversationCount, questionCount, assignmentCount, submissionCount] = await Promise.all([
     prisma.conversation.count({ where: { userId, isDeleted: false } }),
+    prisma.message.count({
+      where: { role: "user", conversation: { userId, isDeleted: false } },
+    }),
     prisma.assignment.count({ where: { published: true, isDeleted: false } }),
     prisma.submission.count({ where: { userId, assignment: { isDeleted: false } } }),
   ]);
@@ -103,6 +106,7 @@ export default async function DashboardPage() {
       date={formatDate(new Date())}
       stats={{
         conversationCount,
+        questionCount,
         assignmentCount,
         submissionCount,
       }}

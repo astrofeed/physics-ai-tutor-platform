@@ -21,6 +21,7 @@ interface DashboardClientProps {
   date: string;
   stats: {
     conversationCount: number;
+    questionCount: number;
     assignmentCount: number;
     submissionCount: number;
   };
@@ -142,7 +143,7 @@ export default function DashboardClient({
       ];
     }
     return [
-      { value: stats.conversationCount, label: "Questions asked", href: "/chat" },
+      { value: stats.questionCount, label: "Questions asked", href: "/chat" },
       { value: stats.assignmentCount, label: "Assignments", href: "/assignments" },
       { value: stats.submissionCount, label: "Submissions", href: "/grades" },
     ];
