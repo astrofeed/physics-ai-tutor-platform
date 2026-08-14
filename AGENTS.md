@@ -1467,8 +1467,8 @@ Duplicated pure functions and constant maps are consolidated into shared modules
 
 **Exports:**
 - `AssignmentForm` — The shared form component
-- `QuestionFormData` — Interface for question data (superset: includes `diagram?`, `imageUrl?`, `imageFile?`, `imagePreview?`)
-- `AssignmentFormData` — Interface for the full form data (title, description, dueDate, type, totalPoints, lockAfterSubmit, pdfUrl, questions)
+
+Form types now live in **`src/types/assignment.ts`** (`QuestionFormData`, `AssignmentFormData`, `QuestionPayload`) so the form, the question list hook, and the LaTeX import dialog share them. Question state (add/remove/reorder, option edits, staged images, import) lives in **`src/hooks/use-question-list.ts`**; the question UI lives in **`src/components/assignments/QuestionsSection.tsx`**.
 
 **Props:**
 - `mode`: `"create" | "edit"` — Currently informational
@@ -1482,6 +1482,22 @@ Duplicated pure functions and constant maps are consolidated into shared modules
 **Page wrappers:**
 - **`src/app/(main)/assignments/create/page.tsx`** (~302 lines) — Handles POST, publish, schedule, LaTeX export, NotifyUsersDialog
 - **`src/app/(main)/assignments/[id]/edit/page.tsx`** (~178 lines) — Handles fetch, PATCH, LaTeX export with AssignmentForm
+
+### LaTeX Question Import
+
+TAs can build an assignment from LaTeX instead of typing questions one by one. Entry point: the **Import from LaTeX** button in `QuestionsSection`, which opens `src/components/assignments/LatexImportDialog.tsx`.
+
+- **`src/lib/latex-import.ts`** — pure parser. `parseLatexAssignment(tex)` returns `{ title, description, questions, issues }` and throws `LatexImportError` only when nothing parseable is found. Limits: `MAX_IMPORT_LENGTH` (500k chars), `MAX_IMPORT_QUESTIONS` (200).
+  - Question headers: `\textbf{Question N} (P points)` (the `export-latex` format) and `\question[P]` (exam class).
+  - Options: `enumerate`, `itemize`, `choices`, `oneparchoices`, `\choice`, `\CorrectChoice`.
+  - Answers: `\textbf{Answer:} ...`, `\answer{...}`, `\correctanswer{...}`, `Answer:`/`Ans:`/`答案:` (multi-line answers are kept whole).
+  - Type inference: options → `MC`; no options + finite number → `NUMERIC`; otherwise `FREE_RESPONSE`.
+  - MC keys are normalized through `normalizeMcAnswerKey` so letters, 1-based indices, and exact option text all resolve to a letter.
+  - `\title` → assignment title (`\\` splits off a subtitle), leading prose and `\section*{...}` headings → description; `\author`/`\date` ignored.
+  - Per-question problems become `issues` (`{ questionNumber, severity, message }`) instead of aborting the import.
+- **`src/lib/latex-import-archive.ts`** — `readLatexImport(File | string)` accepts pasted LaTeX, a `.tex`, or the `.zip` produced by `Export LaTeX`. Archive entries are filtered for absolute/`..` paths and capped at 500 entries; images within `MAX_UPLOAD_BYTES` are staged as `imageFile` (uploaded by the existing `/api/upload` flow on save) and `.svg` files become `diagram: { type: "svg", content }`. A `.tex` that references figures it cannot carry produces per-question warnings.
+- **`src/lib/latex-import-example.ts`** / **`docs/latex-import-example.tex`** — the example TAs can download from the dialog.
+- Tests: `e2e/latex-import.spec.ts` (parser + archive only, no browser or DB needed).
 
 ### API Auth Middleware
 

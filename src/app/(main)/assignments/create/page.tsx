@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Download, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotifyUsersDialog } from "@/components/ui/notify-users-dialog";
-import { AssignmentForm, type AssignmentFormData } from "@/components/assignments/AssignmentForm";
+import { AssignmentForm } from "@/components/assignments/AssignmentForm";
+import type { AssignmentFormData } from "@/types/assignment";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
 

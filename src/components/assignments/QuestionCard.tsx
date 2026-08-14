@@ -24,7 +24,7 @@ import { MarkdownContent } from "@/components/ui/markdown-content";
 import { getDiagramContent } from "@/lib/diagram-utils";
 import { normalizeMcAnswerKey, optionLetter } from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
-import type { QuestionFormData } from "./AssignmentForm";
+import type { QuestionFormData } from "@/types/assignment";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
 

@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { AssignmentForm, type AssignmentFormData, type QuestionFormData } from "@/components/assignments/AssignmentForm";
+import { AssignmentForm } from "@/components/assignments/AssignmentForm";
+import type { AssignmentFormData, QuestionFormData } from "@/types/assignment";
 import {
   AlertDialog,
   AlertDialogAction,
