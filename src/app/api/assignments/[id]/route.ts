@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
+import { AssignmentError, syncQuestions } from "@/lib/services/assignment-service";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 
 const PatchQuestionSchema = z.object({
+  id: z.string().min(1).optional(),
   questionText: z.string().min(1).max(10000),
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).optional(),
   correctAnswer: z.string().max(2000).optional(),
-  points: z.number().min(0).max(1000).optional(),
+  points: z.number().positive().max(1000).optional(),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
 });
@@ -26,6 +28,8 @@ const PatchAssignmentSchema = z.object({
   scheduledPublishAt: z.string().nullable().optional(),
   notifyOnPublish: z.boolean().optional(),
   questions: z.array(PatchQuestionSchema).optional(),
+  /** Acknowledges that removed questions will delete existing student answers. */
+  confirmDestructive: z.boolean().optional(),
 });
 
 export async function GET(
@@ -60,7 +64,12 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (userRole === "STUDENT" && !assignment.published) {
+    // Mirrors the submit-time visibility rule, so a student never gets an
+    // editable page for an assignment whose answers the API would reject.
+    const scheduledInFuture =
+      assignment.scheduledPublishAt !== null &&
+      assignment.scheduledPublishAt > new Date();
+    if (userRole === "STUDENT" && (!assignment.published || scheduledInFuture)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -122,14 +131,40 @@ export async function GET(
       }
     }
 
-    // Ensure _count exists for frontend even for students
-    const assignmentData = isStaff
-      ? assignment
-      : { ...assignment, _count: { submissions: 0 } };
+    if (isStaff) {
+      return NextResponse.json({ assignment, submission: submission || null, appeals });
+    }
+
+    // Students only see grading data once their submission has been finalized,
+    // and never see the answer key for questions that are still gradable.
+    const released = submission?.gradedAt != null;
+
+    const assignmentData = {
+      ...assignment,
+      _count: { submissions: 0 },
+      questions: assignment.questions.map((q) => ({
+        ...q,
+        correctAnswer: released ? q.correctAnswer : null,
+      })),
+    };
+
+    const submissionData = submission
+      ? {
+          ...submission,
+          totalScore: released ? submission.totalScore : null,
+          overallFeedback: released ? submission.overallFeedback : null,
+          answers: submission.answers.map((a) => ({
+            ...a,
+            score: released ? a.score : null,
+            feedback: released ? a.feedback : null,
+            feedbackImageUrls: released ? a.feedbackImageUrls : null,
+          })),
+        }
+      : null;
 
     return NextResponse.json({
       assignment: assignmentData,
-      submission: submission || null,
+      submission: submissionData,
       appeals,
     });
   } catch (error) {
@@ -158,26 +193,6 @@ export async function PATCH(
     }
     const data = parsed.data;
 
-    // If questions are provided, delete existing and re-create
-    if (data.questions) {
-      await prisma.assignmentQuestion.deleteMany({
-        where: { assignmentId: params.id },
-      });
-      await prisma.assignmentQuestion.createMany({
-        data: data.questions.map((q, i) => ({
-          assignmentId: params.id,
-          questionText: q.questionText,
-          questionType: q.questionType,
-          options: q.options ?? Prisma.JsonNull,
-          correctAnswer: q.correctAnswer || null,
-          points: q.points || 10,
-          order: i,
-          diagram: q.diagram ?? Prisma.JsonNull,
-          imageUrl: q.imageUrl || null,
-        })),
-      });
-    }
-
     // Validate scheduledPublishAt if provided
     if (data.scheduledPublishAt !== undefined && data.scheduledPublishAt !== null) {
       const scheduledDate = new Date(data.scheduledPublishAt);
@@ -187,6 +202,24 @@ export async function PATCH(
       if (scheduledDate <= new Date()) {
         return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 });
       }
+      const dueDate = data.dueDate
+        ? new Date(data.dueDate)
+        : (await prisma.assignment.findUnique({
+            where: { id: params.id },
+            select: { dueDate: true },
+          }))?.dueDate ?? null;
+      if (dueDate && scheduledDate >= dueDate) {
+        return NextResponse.json(
+          { error: "Scheduled publish time must be before the due date" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (data.questions) {
+      await syncQuestions(params.id, data.questions, {
+        confirmDestructive: data.confirmDestructive,
+      });
     }
 
     // If publishing immediately, ignore any schedule
@@ -221,7 +254,8 @@ export async function PATCH(
           scheduledPublishAt: data.scheduledPublishAt ? new Date(data.scheduledPublishAt) : null,
         }),
         ...(data.notifyOnPublish !== undefined && { notifyOnPublish: data.notifyOnPublish }),
-        ...(data.totalPoints !== undefined && { totalPoints: data.totalPoints }),
+        // When questions were synced, their sum is authoritative (written by syncQuestions).
+        ...(data.totalPoints !== undefined && !data.questions && { totalPoints: data.totalPoints }),
         ...(data.pdfUrl !== undefined && { pdfUrl: data.pdfUrl || null }),
         ...(data.lockAfterSubmit !== undefined && { lockAfterSubmit: data.lockAfterSubmit }),
       },
@@ -232,7 +266,16 @@ export async function PATCH(
 
     return NextResponse.json({ assignment });
   } catch (error) {
-    console.error("Update assignment error:", error);
+    if (error instanceof AssignmentError) {
+      return NextResponse.json(
+        { error: error.message, ...error.extra },
+        { status: error.status }
+      );
+    }
+    logger.error("Update assignment error", {
+      route: "/api/assignments/[id]",
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

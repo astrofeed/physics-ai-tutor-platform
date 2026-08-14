@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import { Loader2, Download, Crown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,7 +102,7 @@ function UserAvatar({
   );
 }
 
-export default function AdminUserActivityPage() {
+function AdminUserActivityPageContent() {
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -452,5 +453,13 @@ export default function AdminUserActivityPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function AdminUserActivityPage() {
+  return (
+    <StaffOnly minRole="PROFESSOR">
+      <AdminUserActivityPageContent />
+    </StaffOnly>
   );
 }

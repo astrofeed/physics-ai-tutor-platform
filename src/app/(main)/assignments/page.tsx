@@ -386,7 +386,8 @@ export default function AssignmentsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Draft Assignment</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this draft assignment? This cannot be undone.
+              This hides the draft from every list. It stays in the database for records,
+              so it cannot be reopened from the app afterwards.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

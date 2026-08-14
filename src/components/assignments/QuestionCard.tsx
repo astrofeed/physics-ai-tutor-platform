@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { getDiagramContent } from "@/lib/diagram-utils";
+import { normalizeMcAnswerKey, optionLetter } from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
 import type { QuestionFormData } from "./AssignmentForm";
 
@@ -227,18 +228,35 @@ export function QuestionCard({
 
         <div className="space-y-2">
           <Label>Correct Answer</Label>
-          <Input
-            value={q.correctAnswer}
-            onChange={(e) => onUpdate("correctAnswer", e.target.value)}
-            placeholder={
-              q.questionType === "MC"
-                ? "e.g., A"
-                : q.questionType === "NUMERIC"
-                ? "e.g., 9.8"
-                : "Sample answer (for reference)"
-            }
-          />
-          {q.correctAnswer.includes("$") && (
+          {q.questionType === "MC" ? (
+            <Select
+              value={normalizeMcAnswerKey(q.correctAnswer, q.options) ?? ""}
+              onValueChange={(value) => onUpdate("correctAnswer", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select the correct option" />
+              </SelectTrigger>
+              <SelectContent>
+                {q.options.map((opt, oIndex) => (
+                  <SelectItem key={oIndex} value={optionLetter(oIndex)}>
+                    {optionLetter(oIndex)}
+                    {opt.trim() ? ` — ${opt}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={q.correctAnswer}
+              onChange={(e) => onUpdate("correctAnswer", e.target.value)}
+              placeholder={
+                q.questionType === "NUMERIC"
+                  ? "e.g., 9.8"
+                  : "Sample answer (for reference)"
+              }
+            />
+          )}
+          {q.questionType !== "MC" && q.correctAnswer.includes("$") && (
             <div className="text-sm mt-1 overflow-x-auto">
               <MarkdownContent content={q.correctAnswer} />
             </div>

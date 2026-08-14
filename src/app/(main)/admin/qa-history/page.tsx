@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Loader2,
@@ -46,7 +47,7 @@ interface UserOption {
   email: string;
 }
 
-export default function QAHistoryPage() {
+function QAHistoryPageContent() {
   const [conversations, setConversations] = useState<ConversationEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -329,5 +330,13 @@ export default function QAHistoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function QAHistoryPage() {
+  return (
+    <StaffOnly>
+      <QAHistoryPageContent />
+    </StaffOnly>
   );
 }

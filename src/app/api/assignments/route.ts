@@ -4,13 +4,17 @@ import { Prisma } from "@prisma/client";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
+import {
+  AssignmentError,
+  normalizeAnswerKeys,
+} from "@/lib/services/assignment-service";
 
 const QuestionSchema = z.object({
   questionText: z.string().min(1).max(10000),
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).nullable().optional().default([]),
   correctAnswer: z.string().max(2000).nullable().optional().default(""),
-  points: z.number().min(0).max(1000).optional().default(10),
+  points: z.number().positive("Question points must be greater than 0").max(1000).optional().default(10),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
 });
@@ -43,7 +47,15 @@ export async function GET(req: Request) {
     const hasSubmissions = searchParams.get("hasSubmissions") === "true";
 
     const whereClause: Prisma.AssignmentWhereInput = userRole === "STUDENT"
-      ? { published: true, isDeleted: false }
+      ? {
+          published: true,
+          isDeleted: false,
+          // A pending publish schedule means submissions are not open yet.
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
+        }
       : filterType === "published"
         ? { published: true, isDeleted: false }
         : filterType === "drafts"
@@ -140,7 +152,8 @@ export async function GET(req: Request) {
       return {
         ...a,
         submissions: undefined,
-        myScore: mySubmission?.totalScore ?? null,
+        // Only released grades (`gradedAt` set) are shown to the student.
+        myScore: mySubmission?.gradedAt ? mySubmission.totalScore ?? null : null,
         mySubmitted: !!mySubmission,
         myGraded: mySubmission?.gradedAt !== null && mySubmission?.gradedAt !== undefined,
         myProgress,
@@ -180,7 +193,14 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const { title, description, dueDate, type, totalPoints, questions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const questions = normalizeAnswerKeys(
+      submittedQuestions.map((q) => ({
+        ...q,
+        options: q.options ?? undefined,
+        correctAnswer: q.correctAnswer ?? undefined,
+      }))
+    );
 
     // Validate scheduledPublishAt if provided
     if (scheduledPublishAt) {
@@ -191,6 +211,12 @@ export async function POST(req: Request) {
       if (scheduledDate <= new Date()) {
         return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 });
       }
+      if (dueDate && scheduledDate >= new Date(dueDate)) {
+        return NextResponse.json(
+          { error: "Scheduled publish time must be before the due date" },
+          { status: 400 }
+        );
+      }
     }
 
     const assignment = await prisma.assignment.create({
@@ -199,7 +225,10 @@ export async function POST(req: Request) {
         description,
         dueDate: dueDate ? new Date(dueDate) : null,
         type,
-        totalPoints,
+        // Questions are authoritative when present, so the two can never disagree.
+        totalPoints: questions.length
+          ? questions.reduce((sum, q) => sum + (q.points ?? 10), 0)
+          : totalPoints,
         pdfUrl: pdfUrl || null,
         lockAfterSubmit,
         scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : null,
@@ -227,6 +256,10 @@ export async function POST(req: Request) {
       route: "/api/assignments",
       error: error instanceof Error ? error.message : String(error),
     });
+
+    if (error instanceof AssignmentError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
 
     if (error instanceof SyntaxError) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });

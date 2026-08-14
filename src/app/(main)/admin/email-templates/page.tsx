@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import {
   FileText,
@@ -64,7 +65,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export default function EmailTemplatesPage() {
+function EmailTemplatesPageContent() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("ALL");
@@ -411,5 +412,13 @@ export default function EmailTemplatesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function EmailTemplatesPage() {
+  return (
+    <StaffOnly minRole="PROFESSOR">
+      <EmailTemplatesPageContent />
+    </StaffOnly>
   );
 }

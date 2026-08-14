@@ -12,6 +12,7 @@ import dynamic from "next/dynamic";
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
 import { getDiagramContent } from "@/lib/diagram-utils";
 import type { AssignmentQuestion } from "@/types/assignment";
+import { MAX_ANSWER_LENGTH } from "@/lib/answer-limits";
 
 interface QuestionRendererProps {
   question: AssignmentQuestion;
@@ -105,10 +106,17 @@ export function QuestionRenderer({
             <Label>Your Answer</Label>
             <Input
               type="text"
+              inputMode="decimal"
               value={answer}
               onChange={(e) => onAnswerChange(question.id, e.target.value)}
               placeholder="Enter a numeric value"
             />
+            {answer.trim() !== "" && !Number.isFinite(Number(answer.trim())) && (
+              <p className="text-xs text-red-600 dark:text-red-400">
+                This question is graded as a number, so &quot;{answer.trim()}&quot; will not
+                match the answer key.
+              </p>
+            )}
           </div>
         )}
 
@@ -120,7 +128,13 @@ export function QuestionRenderer({
               onChange={(e) => onAnswerChange(question.id, e.target.value)}
               placeholder="Write your answer... (supports LaTeX: $...$)"
               rows={4}
+              maxLength={MAX_ANSWER_LENGTH}
             />
+            {answer.length > MAX_ANSWER_LENGTH - 500 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-right">
+                {answer.length} / {MAX_ANSWER_LENGTH}
+              </p>
+            )}
           </div>
         )}
 

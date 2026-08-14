@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import { Mail, CalendarClock, Send, Clock, Users } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -42,7 +43,7 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   FAILED: { label: "Failed", className: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" },
 };
 
-export default function EmailRecordsPage() {
+function EmailRecordsPageContent() {
   const [records, setRecords] = useState<EmailRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -290,5 +291,13 @@ export default function EmailRecordsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function EmailRecordsPage() {
+  return (
+    <StaffOnly>
+      <EmailRecordsPageContent />
+    </StaffOnly>
   );
 }
