@@ -15,7 +15,12 @@ export async function GET(req: Request) {
     }
 
     const submission = await prisma.submission.findFirst({
-      where: { assignmentId, userId, isDeleted: false },
+      where: {
+        assignmentId,
+        userId,
+        isDeleted: false,
+        assignment: { isDeleted: false },
+      },
       include: { answers: true },
     });
 

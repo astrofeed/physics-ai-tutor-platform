@@ -85,6 +85,13 @@ test.describe("Deleted assignment recycle bin", () => {
     ).json();
     expect(studentList.assignments.map((a) => a.id)).not.toContain(assignmentId);
 
+    // Their own submission is unreachable too, scores included
+    const ownSubmission = await page.request.get(
+      `/api/submissions?assignmentId=${assignmentId}`
+    );
+    expect(ownSubmission.status()).toBe(200);
+    expect((await ownSubmission.json()).submission).toBeNull();
+
     expect((await page.request.post(`/api/assignments/${assignmentId}/restore`)).status()).toBe(403);
   });
 });

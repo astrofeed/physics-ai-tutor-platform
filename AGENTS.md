@@ -428,7 +428,8 @@ Soft-deleting an `Assignment` must not hide its history irrecoverably. Deleted a
 
 - `assignmentListWhere(role, filter)` in `src/lib/services/assignment-service.ts` is the single source of truth for list visibility; `filter=deleted` is the only branch that returns `isDeleted: true`, and students are always forced to `{ published: true, isDeleted: false }`.
 - Any query that reaches submissions, answers, grades, appeals, or exports must also filter the parent assignment: `assignment: { isDeleted: false }` (`Submission.isDeleted` alone is not enough). Use `APPEAL_ON_LIVE_ASSIGNMENT` for appeal queues.
-- Grading reads/mutations for a deleted assignment return 404 so the UI can tell staff to restore it first.
+- Grading reads/mutations for a deleted assignment return 404, and `/grading` renders a persistent empty state ("restore it from Assignments → Deleted") instead of only a toast, so a deep link never leaves an empty grading shell behind.
+- Delete confirmations must say what soft delete actually does — history is kept and the assignment can be restored. Never write "cannot be undone" for an assignment delete.
 - `restoreAssignment()` clears only `isDeleted`/`deletedAt` and writes an `assignment_restored` audit log. Never re-create rows on restore.
 
 #### 3.7 Re-read Account State on Every API Call

@@ -405,7 +405,8 @@ export function useAssignmentDetail(assignmentId: string) {
     setConfirmDialog({
       open: true,
       title: "Delete Assignment",
-      description: "Are you sure you want to delete this assignment? This will also delete all submissions and cannot be undone.",
+      description:
+        "This hides the assignment from students and removes it from grading queues and exports. Submissions, grades, and appeals are kept — you can restore it from Assignments → Deleted.",
       onConfirm: async () => {
         setDeleting(true);
         try {

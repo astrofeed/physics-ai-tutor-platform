@@ -16,6 +16,7 @@ import {
   Search,
   ChevronDown,
   Filter,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,6 +138,7 @@ export default function GradingPage() {
   const [submissions, setSubmissions] = useState<SubmissionForGrading[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [assignmentUnavailable, setAssignmentUnavailable] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionForGrading | null>(null);
   const [grades, setGrades] = useState<Record<string, { score: number; feedback: string }>>({});
   // Consolidated: overall grade state (score, feedback, confirmed)
@@ -281,17 +283,19 @@ export default function GradingPage() {
     if (!assignmentId) return;
     setLoadingSubmissions(true);
     setSelectedSubmission(null);
+    setAssignmentUnavailable(null);
     fetch(`/api/assignments/${assignmentId}/submissions`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) {
           setAssignmentInfo(null);
           setSubmissions([]);
-          toast.error(
+          const message =
             res.status === 404
-              ? "This assignment was deleted. Restore it from Assignments → Deleted to grade it."
-              : data.error || "Failed to load submissions"
-          );
+              ? "This assignment was deleted. Its submissions, grades and appeals are kept — restore it from Assignments → Deleted to grade it."
+              : data.error || "Failed to load submissions";
+          setAssignmentUnavailable(message);
+          toast.error(message);
           return;
         }
         setAssignmentInfo(data.assignment || null);
@@ -780,6 +784,12 @@ export default function GradingPage() {
         />
       ) : loadingSubmissions ? (
         <LoadingSpinner />
+      ) : assignmentUnavailable ? (
+        <EmptyState
+          icon={Trash2}
+          title="This assignment is not available for grading"
+          description={assignmentUnavailable}
+        />
       ) : (
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:h-[calc(100vh-16rem)]">
           {/* Submission List */}
