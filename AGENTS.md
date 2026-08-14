@@ -1553,6 +1553,22 @@ Email-based forgot/reset password for credentials accounts:
 - **Appeals**: `PATCH /api/appeals` validates `newScore` (finite, 0…question points) *before* touching status, so an out-of-range score leaves the appeal `OPEN`. `src/hooks/useAssignmentAppeals.ts` mirrors that client-side and warns when a typed score would be discarded by reject/reopen.
 - **Page-level role gating**: `src/components/auth/StaffOnly.tsx` wraps staff pages (`/grading`, `/assignments/create`, `/assignments/[id]/edit`, `/problems/generate`, `/admin/*`) so students get an explicit denial instead of an empty shell. API routes still enforce their own authorization.
 
+### Concurrency (autosave races, connection pool)
+
+- **One live submission per student**: `saveSubmission()` runs every read-then-write path inside `withSubmissionLock()`, a `prisma.$transaction` that takes `pg_advisory_xact_lock(4271, hashtext("<assignmentId>:<userId>"))` first. The lock is held by Postgres, so it serializes saves across tabs *and* across server instances; concurrent autosaves would otherwise each read "no submission" and each create one. The transaction also covers deleting the previous final submission on resubmit; replaced upload URLs are collected and deleted only after it commits.
+- `migrations/20260814110000_one_live_submission_per_student` de-duplicates existing rows (keeping the newest non-draft per student) and adds a partial unique index `Submission(assignmentId, userId) WHERE isDeleted = false`, so a duplicate can never be created even if a code path skips the lock. Soft-deleted rows stay outside the index, which is what resubmission relies on.
+- `existing`-submission lookups filter `isDeleted: false` so a soft-deleted submission no longer blocks a new one.
+- **Pool size**: `src/lib/prisma.ts` sizes the `pg` pool from `DATABASE_POOL_MAX` (default 25) with a 10s `connectionTimeoutMillis`. Keep `instances × DATABASE_POOL_MAX` under the database's `max_connections`.
+- **Load testing** (disposable database only — never point these at a real one):
+  ```bash
+  DATABASE_URL=<disposable> LOAD_PASSWORD=<throwaway> npx tsx scripts/seed-load-test.ts   # 200 students + a published quiz
+  BASE_URL=http://localhost:3100 LOAD_PASSWORD=<throwaway> npx tsx scripts/load-test.ts   # 200 students: page, GET, 5 drafts, submit
+  BASE_URL=http://localhost:3100 LOAD_PASSWORD=<throwaway> RACE_PARALLEL=8 \
+    npx tsx scripts/race-test.ts <assignmentId> <questionId,...> [email]                  # same-student autosave race
+  ```
+  These log in through real NextAuth credentials (no E2E bypass), so run them against a production-mode build. `LOAD_PASSWORD` has no default on purpose. Coverage stops at assignment page/API, drafts and submit — chat SSE and file uploads are not exercised.
+- `e2e/concurrent-autosave.spec.ts` is the regression test: parallel drafts and parallel finals must leave exactly one submission with a full set of answers.
+
 ### Prisma Migrations
 
 ```bash
