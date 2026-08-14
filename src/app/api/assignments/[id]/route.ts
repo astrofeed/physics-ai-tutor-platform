@@ -15,6 +15,8 @@ const PatchQuestionSchema = z.object({
   points: z.number().positive().max(1000).optional(),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
+  tolerance: z.number().min(0).max(1_000_000).nullable().optional(),
+  toleranceUnit: z.enum(["ABSOLUTE", "PERCENT"]).optional(),
 });
 
 const PatchAssignmentSchema = z.object({
@@ -131,8 +133,17 @@ export async function GET(
       }
     }
 
+    const questions = assignment.questions.map((q) => ({
+      ...q,
+      tolerance: q.tolerance === null ? null : Number(q.tolerance),
+    }));
+
     if (isStaff) {
-      return NextResponse.json({ assignment, submission: submission || null, appeals });
+      return NextResponse.json({
+        assignment: { ...assignment, questions },
+        submission: submission || null,
+        appeals,
+      });
     }
 
     // Students only see grading data once their submission has been finalized,
@@ -142,7 +153,7 @@ export async function GET(
     const assignmentData = {
       ...assignment,
       _count: { submissions: 0 },
-      questions: assignment.questions.map((q) => ({
+      questions: questions.map((q) => ({
         ...q,
         correctAnswer: released ? q.correctAnswer : null,
       })),

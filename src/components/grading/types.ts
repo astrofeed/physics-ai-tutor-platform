@@ -33,6 +33,10 @@ export interface SubmissionAnswer {
   score: number | null;
   feedback: string | null;
   autoGraded: boolean;
+  /** AI pre-grade recommendation; never an official score until a grader applies it. */
+  aiSuggestedScore: number | null;
+  aiSuggestedFeedback: string | null;
+  aiSuggestedAt: string | null;
   maxPoints: number;
   leftBlank?: boolean;
   appeals: Appeal[];

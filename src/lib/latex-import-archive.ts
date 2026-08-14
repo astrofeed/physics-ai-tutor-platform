@@ -93,6 +93,8 @@ function toFormQuestion(
     options: question.questionType === "MC" ? question.options : [],
     correctAnswer: question.correctAnswer,
     points: question.points,
+    tolerance: null,
+    toleranceUnit: "ABSOLUTE",
     ...(image && { imageFile: image, imagePreview: URL.createObjectURL(image) }),
     ...(svg && { diagram: { type: "svg" as const, content: svg } }),
   };

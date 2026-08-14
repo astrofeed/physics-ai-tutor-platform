@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteFileByUrl } from "@/lib/services/file-storage";
 import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+import { validateTolerance, type ToleranceUnit } from "@/lib/auto-grade";
 
 export interface QuestionInput {
   id?: string;
@@ -12,6 +13,8 @@ export interface QuestionInput {
   points?: number;
   diagram?: { type: string; content: string } | null;
   imageUrl?: string | null;
+  tolerance?: number | null;
+  toleranceUnit?: ToleranceUnit;
 }
 
 export class AssignmentError extends Error {
@@ -45,6 +48,23 @@ export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[]
   });
 }
 
+/**
+ * Numeric tolerances are graded against, so a bad value would mis-score a whole
+ * class. Reject them at the boundary instead.
+ */
+export function assertValidTolerances(questions: QuestionInput[]) {
+  questions.forEach((question, index) => {
+    const problem = validateTolerance(
+      question.questionType,
+      question.tolerance,
+      question.toleranceUnit ?? "ABSOLUTE"
+    );
+    if (problem) {
+      throw new AssignmentError(`Question ${index + 1}: ${problem}`, 400);
+    }
+  });
+}
+
 const questionFields = (q: QuestionInput, order: number) => ({
   questionText: q.questionText,
   questionType: q.questionType,
@@ -54,6 +74,8 @@ const questionFields = (q: QuestionInput, order: number) => ({
   order,
   diagram: q.diagram ?? Prisma.JsonNull,
   imageUrl: q.imageUrl || null,
+  tolerance: q.questionType === "NUMERIC" && q.tolerance != null ? q.tolerance : null,
+  toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
 });
 
 /**
@@ -103,6 +125,7 @@ export async function syncQuestions(
   options: { confirmDestructive?: boolean } = {}
 ) {
   const questions = normalizeAnswerKeys(submitted);
+  assertValidTolerances(questions);
 
   const existing = await prisma.assignmentQuestion.findMany({
     where: { assignmentId },

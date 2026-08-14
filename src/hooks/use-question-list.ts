@@ -12,6 +12,8 @@ const EMPTY_QUESTION: QuestionFormData = {
   options: ["", "", "", ""],
   correctAnswer: "",
   points: 10,
+  tolerance: null,
+  toleranceUnit: "ABSOLUTE",
 };
 
 async function uploadImage(file: File): Promise<string> {
@@ -108,6 +110,8 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
             points: q.points,
             ...(q.diagram && { diagram: q.diagram }),
             ...(imageUrl && { imageUrl }),
+            tolerance: q.questionType === "NUMERIC" ? q.tolerance ?? null : null,
+            toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
           };
         })
       ),

@@ -262,6 +262,43 @@ export function QuestionCard({
             </div>
           )}
         </div>
+
+        {q.questionType === "NUMERIC" && (
+          <div className="space-y-2">
+            <Label>Accepted tolerance (optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={q.tolerance ?? ""}
+                onChange={(e) =>
+                  onUpdate("tolerance", e.target.value === "" ? null : Number(e.target.value))
+                }
+                placeholder="Blank = exact match"
+              />
+              <Select
+                value={q.toleranceUnit}
+                onValueChange={(value) => onUpdate("toleranceUnit", value)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ABSOLUTE">± absolute</SelectItem>
+                  <SelectItem value="PERCENT">± percent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {q.tolerance
+                ? q.toleranceUnit === "PERCENT"
+                  ? `Answers within ${q.tolerance}% of ${q.correctAnswer || "the answer"} are marked correct.`
+                  : `Answers within ±${q.tolerance} of ${q.correctAnswer || "the answer"} are marked correct.`
+                : "Trailing zeros and spaces are always ignored (9.8 = 9.80), but significant figures are not enforced."}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

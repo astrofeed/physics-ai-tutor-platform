@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { z } from "zod";
 import {
   AssignmentError,
+  assertValidTolerances,
   normalizeAnswerKeys,
 } from "@/lib/services/assignment-service";
 
@@ -17,6 +18,8 @@ const QuestionSchema = z.object({
   points: z.number().positive("Question points must be greater than 0").max(1000).optional().default(10),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
+  tolerance: z.number().min(0).max(1_000_000).nullable().optional(),
+  toleranceUnit: z.enum(["ABSOLUTE", "PERCENT"]).optional().default("ABSOLUTE"),
 });
 
 const CreateAssignmentSchema = z.object({
@@ -201,6 +204,7 @@ export async function POST(req: Request) {
         correctAnswer: q.correctAnswer ?? undefined,
       }))
     );
+    assertValidTolerances(questions);
 
     // Validate scheduledPublishAt if provided
     if (scheduledPublishAt) {
@@ -244,6 +248,8 @@ export async function POST(req: Request) {
             order: i,
             diagram: q.diagram ?? Prisma.JsonNull,
             imageUrl: q.imageUrl || null,
+            tolerance: q.questionType === "NUMERIC" && q.tolerance != null ? q.tolerance : null,
+            toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
           })),
         },
       },
