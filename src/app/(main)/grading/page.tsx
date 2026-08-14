@@ -59,7 +59,13 @@ import type {
   Appeal,
   GradingMode,
   FilterMode,
+  OverallGradeState,
 } from "@/components/grading/types";
+import {
+  overallGradePayload,
+  overrideConfirmAction,
+  sumQuestionScores,
+} from "@/lib/grade-release";
 
 interface AssignmentOption {
   id: string;
@@ -74,12 +80,6 @@ interface AssignmentOption {
 
 // --- Consolidated state types ---
 
-interface OverallGradeState {
-  score: number;
-  feedback: string;
-  confirmed: boolean;
-}
-
 interface AssignmentPickerState {
   filter: "all" | "ungraded" | "pending";
   search: string;
@@ -93,13 +93,13 @@ interface FeedbackFileState {
 
 // --- localStorage schema versioning ---
 
-const GRADING_STATE_VERSION = 1;
+const GRADING_STATE_VERSION = 2;
 
 interface GradingDraftData {
   _version: number;
   grades: Record<string, { score: number; feedback: string }>;
   confirmedAnswers: string[];
-  overallGrade: { score: number; feedback: string; confirmed: boolean };
+  overallGrade: { score: number | null; feedback: string; confirmed: boolean };
   feedbackImages: Record<string, string[]>;
   feedbackFileUrl: string | null;
   gradingMode: GradingMode;
@@ -113,7 +113,8 @@ function isValidGradingDraft(data: unknown): data is GradingDraftData {
   if (!Array.isArray(d.confirmedAnswers)) return false;
   if (typeof d.overallGrade !== "object" || d.overallGrade === null) return false;
   const og = d.overallGrade as Record<string, unknown>;
-  if (typeof og.score !== "number" || typeof og.feedback !== "string" || typeof og.confirmed !== "boolean") return false;
+  if (og.score !== null && typeof og.score !== "number") return false;
+  if (typeof og.feedback !== "string" || typeof og.confirmed !== "boolean") return false;
   if (typeof d.feedbackImages !== "object" || d.feedbackImages === null) return false;
   if (typeof d.gradingMode !== "string") return false;
   return true;
@@ -145,10 +146,11 @@ function GradingPageContent() {
   const [grades, setGrades] = useState<Record<string, { score: number; feedback: string }>>({});
   // Consolidated: overall grade state (score, feedback, confirmed)
   const [overallGrade, setOverallGrade] = useState<OverallGradeState>({
-    score: 0,
+    score: null,
     feedback: "",
     confirmed: false,
   });
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
   const [gradingMode, setGradingMode] = useState<GradingMode>("per-question");
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
@@ -250,7 +252,12 @@ function GradingPageContent() {
     }
   }, [selectedSubmission]);
 
-  const { status: gradingAutoSaveStatus, lastSavedAt: gradingAutoSavedAt, saveNow: flushGradingSave } = useAutoSave({
+  const {
+    status: gradingAutoSaveStatus,
+    lastSavedAt: gradingAutoSavedAt,
+    saveNow: flushGradingSave,
+    markSaved: markGradesSaved,
+  } = useAutoSave({
     data: grades,
     saveFn: saveGradingDraft,
     delayMs: 5000,
@@ -355,6 +362,8 @@ function GradingPageContent() {
       }
     });
     setGrades(initialGrades);
+    // Hydration is not an edit, so it must not trigger the autosave.
+    markGradesSaved(initialGrades);
     if (restored) setGradingDraftRestored(true);
 
     const storedSuggestions: Record<string, { score: number; feedback: string }> = {};
@@ -371,7 +380,7 @@ function GradingPageContent() {
     // Confirmed answers & overall grade (consolidated)
     setConfirmedAnswers(new Set(saved?.confirmedAnswers || []));
     setOverallGrade({
-      score: saved?.overallGrade?.score ?? sub.totalScore ?? 0,
+      score: saved?.overallGrade?.score ?? sub.totalScore ?? null,
       feedback: saved?.overallGrade?.feedback ?? sub.overallFeedback ?? "",
       confirmed: saved?.overallGrade?.confirmed ?? false,
     });
@@ -465,8 +474,33 @@ function GradingPageContent() {
     });
   };
 
+  const perQuestionTotal = sumQuestionScores(Object.values(grades));
+
+  const handleToggleOverallConfirm = () => {
+    switch (overrideConfirmAction(overallGrade, perQuestionTotal, gradingMode)) {
+      case "clear":
+        setOverallGrade((prev) => ({ ...prev, confirmed: false }));
+        return;
+      case "reject-blank":
+        toast.error(
+          "Enter an overall score first, or leave it blank to release the per-question total."
+        );
+        return;
+      case "warn-differs":
+        setShowOverrideConfirm(true);
+        return;
+      case "confirm":
+        setOverallGrade((prev) => ({ ...prev, confirmed: true }));
+    }
+  };
+
   const handleSaveGrades = async () => {
     if (!selectedSubmission) return;
+
+    if (gradingMode === "overall" && !overallGradePayload(overallGrade)) {
+      toast.error("Enter an overall score and confirm it before finalizing.");
+      return;
+    }
 
     // In per-question mode, warn if not all answers are confirmed
     if (gradingMode === "per-question") {
@@ -492,11 +526,8 @@ function GradingPageContent() {
         body.feedbackFileUrl = feedbackFileState.url;
       }
 
-      // Include overall score and feedback when confirmed
-      if (overallGrade.confirmed) {
-        body.overallScore = overallGrade.score;
-        body.overallFeedback = overallGrade.feedback;
-      }
+      // Only an explicitly confirmed override replaces the per-question total.
+      Object.assign(body, overallGradePayload(overallGrade) ?? {});
 
       if (gradingMode === "per-question") {
         body.grades = Object.entries(grades).map(([answerId, g]) => ({
@@ -1027,11 +1058,18 @@ function GradingPageContent() {
                     <OverallGradeForm
                       totalPoints={assignmentInfo?.totalPoints || 100}
                       overallScore={overallGrade.score}
-                      onOverallScoreChange={(score) => setOverallGrade((prev) => ({ ...prev, score }))}
+                      onOverallScoreChange={(score) =>
+                        setOverallGrade((prev) => ({
+                          ...prev,
+                          score,
+                          confirmed: score === null ? false : prev.confirmed,
+                        }))
+                      }
+                      perQuestionTotal={perQuestionTotal}
                       overallFeedback={overallGrade.feedback}
                       onOverallFeedbackChange={(feedback) => setOverallGrade((prev) => ({ ...prev, feedback }))}
                       overallGradeConfirmed={overallGrade.confirmed}
-                      onToggleOverallConfirm={() => setOverallGrade((prev) => ({ ...prev, confirmed: !prev.confirmed }))}
+                      onToggleOverallConfirm={handleToggleOverallConfirm}
                       feedbackFileUrl={feedbackFileState.url}
                       feedbackFileName={feedbackFileState.file?.name || null}
                       uploadingFeedback={uploadingFeedback}
@@ -1072,6 +1110,28 @@ function GradingPageContent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); executeSaveGrades(); }}>
               Finalize
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showOverrideConfirm} onOpenChange={setShowOverrideConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Override the Per-Question Total?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The per-question scores add up to {perQuestionTotal}/{assignmentInfo?.totalPoints ?? 0}.
+              Confirming this override releases {overallGrade.score}/{assignmentInfo?.totalPoints ?? 0}
+              {" "}to the student instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowOverrideConfirm(false);
+              setOverallGrade((prev) => ({ ...prev, confirmed: true }));
+            }}>
+              Use override
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

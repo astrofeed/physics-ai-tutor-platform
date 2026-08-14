@@ -57,5 +57,12 @@ export interface SubmissionForGrading {
   answers: SubmissionAnswer[];
 }
 
+export interface OverallGradeState {
+  /** `null` means "no override" — the per-question total is released instead. */
+  score: number | null;
+  feedback: string;
+  confirmed: boolean;
+}
+
 export type GradingMode = "per-question" | "overall";
 export type FilterMode = "all" | "ungraded" | "graded" | "appeals";
