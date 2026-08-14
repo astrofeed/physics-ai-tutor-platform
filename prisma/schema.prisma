@@ -68,6 +68,7 @@ model User {
   passwordResetTokens    PasswordResetToken[]
   uploadEvents           UploadEvent[]
   uploadedFiles          UploadedFile[]
+  rateLimitHits          RateLimitHit[]
 }
 
 model Account {
@@ -234,6 +235,19 @@ model AuthAttempt {
   createdAt DateTime @default(now())
 
   @@index([kind, ipHash, createdAt])
+}
+
+/// One row per rate-limited action attempt. Counting rows in the window keeps
+/// limits correct across serverless instances, unlike per-process counters.
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String // "run_code"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, action, createdAt])
 }
 
 model Course {

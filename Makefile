@@ -1,4 +1,4 @@
-.PHONY: install dev build start db-up db-down db-setup db-migrate db-studio db-reset prisma-generate clean kill-port
+.PHONY: install dev build start db-up db-down db-setup db-deploy db-baseline db-migrate db-studio db-reset prisma-generate clean kill-port
 
 # Install all dependencies
 install:
@@ -7,7 +7,7 @@ install:
 # Run development server (ensures deps, DB, and Prisma client are ready)
 # Kills any stale process on port 3000 first, then starts Next.js dev server.
 # Ctrl+C will cleanly stop the server.
-dev: install prisma-generate db-push kill-port
+dev: install prisma-generate db-deploy kill-port
 	@trap 'echo "\nShutting down dev server..."; kill %1 2>/dev/null; lsof -ti :3000 | xargs kill 2>/dev/null; echo "Dev server stopped."' INT TERM; \
 	npm run dev & \
 	bash scripts/warmup.sh & \
@@ -33,14 +33,21 @@ db-up:
 db-down:
 	docker compose down
 
-# Full database setup (start Docker, generate client, sync schema)
-db-setup: db-up prisma-generate db-push
+# Full database setup (start Docker, generate client, apply migrations)
+db-setup: db-up prisma-generate db-deploy
 
-# Sync database schema with Prisma schema (no migration files needed)
-db-push:
-	npx prisma db push
+# Apply committed migrations (never `db push`: it can drop columns)
+db-deploy:
+	npx prisma migrate deploy
 
-# Run Prisma migrations (for production or when using migration workflow)
+# Mark existing migrations as applied, for a dev database that predates the
+# migration workflow (was created with `db push`). Run once, then `db-deploy`.
+db-baseline:
+	@for m in $$(ls prisma/migrations | grep -v migration_lock.toml); do \
+		npx prisma migrate resolve --applied $$m; \
+	done
+
+# Create a new migration from schema changes
 db-migrate:
 	npx prisma migrate dev
 

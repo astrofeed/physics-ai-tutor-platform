@@ -822,21 +822,16 @@ catch (error) {
 
 ### 8. Performance
 
-#### 8.1 No In-Memory Rate Limiting Without Cleanup
+#### 8.1 No In-Memory Rate Limiting
 
-In-memory `Map` rate limiters (in `src/lib/rate-limit.ts`, `src/lib/abuse-detection.ts`) leak memory because expired entries are never cleaned up. In serverless (Vercel), they also reset on cold starts, making them unreliable.
+A per-process `Map` limiter resets on every cold start and is not shared between serverless instances, so the real limit becomes "N × configured limit". Never add one.
 
-**Required mitigations:**
-- For production: Use Redis (Upstash) for rate limiting.
-- If using in-memory (dev/testing only): Add periodic cleanup:
-  ```ts
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimitMap) {
-      if (now > entry.resetAt) rateLimitMap.delete(key);
-    }
-  }, 60_000); // clean up every minute
-  ```
+**Count attempts in the database instead:**
+- Authenticated actions: `consumeActionRateLimit({ userId, action, limit, windowMs })` in `src/lib/services/action-rate-limit.ts`. It counts `RateLimitHit` rows in the window under a `pg_advisory_xact_lock` keyed by `action:userId` (so parallel requests cannot both pass the last slot), inserts the attempt, and prunes rows older than the window. `/api/run-code` uses it with `action: "run_code"`.
+- Chat messages: `checkRateLimit` in `src/lib/rate-limit.ts` counts the user's own `Message` rows.
+- Unauthenticated endpoints: `consumeAuthAttempt(kind, ip)` in `src/lib/services/auth-attempt-limit.ts` (`AuthAttempt` rows, hashed IP).
+
+Adding a new limited action means adding it to `RateLimitedAction` and calling `consumeActionRateLimit`; no schema change is needed.
 
 #### 8.2 Configure Database Connection Pooling
 
@@ -1632,7 +1627,7 @@ Email-based forgot/reset password for credentials accounts:
 - **Student visibility**: `GET /api/assignments/[id]` 404s for students, and the student branch of `GET /api/assignments` filters out, assignments that are unpublished or still waiting on `scheduledPublishAt` — the same rule submit time enforces, so students never get an editable page whose autosave must fail.
 - **Submissions**: `src/lib/services/submission-service.ts` owns all submit logic. It rejects unpublished / future-scheduled / deleted assignments for students, FILE_UPLOAD without a file, and resubmission once locked or grading started. Past-due submits return 409 `{ pastDue, dueDate }` until the client sends `acknowledgeLate: true`, then persist `isLate` and `dueDateAtSubmission` — lateness is never recomputed from the current due date. A QUIZ is marked `gradedAt` only when *every* question got an auto score.
 - **Grade release**: `src/lib/services/grading-service.ts` writes drafts to `Submission.draftTotalScore` and only a finalized save sets `totalScore`/`gradedAt`/`gradedById`. `gradedAt` is the single release gate: `GET /api/assignments/[id]`, `/api/grades` and `/api/assignments` withhold scores, feedback and `correctAnswer` until it is set. Audit actions: `grade_draft_saved`, `grade_finalized`, `grade_ungraded`, `appeal_resolved`, `appeal_rejected`.
-- **Private files**: uploads go through `src/lib/services/file-storage.ts` into `private/uploads` (or Vercel Blob) with an `UploadedFile` metadata row; clients only ever see `/api/files/<id>`, which requires auth and checks uploader/staff access. Nothing new is written to `public/uploads`. Caveat: `@vercel/blob` v2.2.0 only supports `access: "public"`, so on Blob the underlying URL stays guessable-if-leaked — the blob URL is kept server-side only.
+- **Private files**: uploads go through `src/lib/services/file-storage.ts` into `private/uploads` (or Vercel Blob) with an `UploadedFile` metadata row; clients only ever see `/api/files/<id>`, which requires auth and checks uploader/staff access. Nothing new is written to `public/uploads`. Blob is used whenever `BLOB_READ_WRITE_TOKEN` is set; the local-disk branch is a development convenience only, so with `NODE_ENV=production` and no token `storeUploadedFile` throws `FileStorageUnavailableError` and `/api/upload` answers 503 instead of writing to a filesystem the next deploy will wipe. Caveat: `@vercel/blob` v2.2.0 only supports `access: "public"`, so on Blob the underlying URL stays guessable-if-leaked — the blob URL is kept server-side only.
 - **Shared limits**: `src/lib/upload-constraints.ts` (20 MB, PDF/PNG/JPEG/GIF/WebP) and `src/lib/answer-limits.ts` (10k chars, 3 images) are imported by both the UI and the API so the accept list can't drift from server validation.
 - **Appeals**: `PATCH /api/appeals` validates `newScore` (finite, 0…question points) *before* touching status, so an out-of-range score leaves the appeal `OPEN`. `src/hooks/useAssignmentAppeals.ts` mirrors that client-side and warns when a typed score would be discarded by reject/reopen.
 - **Page-level role gating**: `src/components/auth/StaffOnly.tsx` wraps staff pages (`/grading`, `/assignments/create`, `/assignments/[id]/edit`, `/problems/generate`, `/admin/*`) so students get an explicit denial instead of an empty shell. API routes still enforce their own authorization.

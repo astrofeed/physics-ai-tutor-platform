@@ -11,14 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make setup              # Install deps, start DB, generate Prisma client, sync schema, start dev
 
 # Development
-make dev                # Start development server (auto-runs prisma generate & db push)
+make dev                # Start development server (auto-runs prisma generate & migrate deploy)
 npm run dev             # Alternative: just start Next.js dev server
 
 # Database
 make db-up              # Start PostgreSQL in Docker
-make db-push            # Sync Prisma schema to database (no migration files)
+make db-deploy          # Apply committed migrations
+make db-baseline        # One-off: mark migrations applied on a dev DB created by the old `db push`
+make db-migrate         # Create a migration from schema changes
 make db-studio          # Open Prisma Studio (database GUI)
-npx prisma db push --accept-data-loss  # When adding nullable unique columns
 
 # Build & Production
 make build              # Build for production
@@ -84,8 +85,7 @@ prisma/
 - Location: `src/lib/ai.ts`
 
 #### Database & Prisma
-- Use `npx prisma db push` for schema changes (no migration files workflow)
-- When adding nullable unique columns, use `npx prisma db push --accept-data-loss`
+- Schema changes go through migrations: `npx prisma migrate dev --name <name>` locally, `prisma migrate deploy` elsewhere. Never `db push` (AGENTS.md Rule 3.1)
 - Prisma client is a singleton at `src/lib/prisma.ts`
 - Main models: `User`, `Conversation`, `Message`, `Assignment`, `Question`, `Submission`, `GradeAppeal`
 
@@ -137,13 +137,13 @@ prisma/
 ## Important Implementation Details
 
 ### File Uploads
-- Currently stored locally in `public/uploads/`
-- **Not production-ready**: Ephemeral filesystems (Vercel) will lose files
-- Before production: Switch to Vercel Blob, AWS S3, or Cloudflare R2
+- Stored in Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set, and served only through `/api/files/<id>`, which authorizes every read
+- Without the token uploads fall back to a private local directory in development, and are **rejected with 503 in production** (an ephemeral filesystem would lose student work)
+- Chat attachments upload straight to Blob from the browser via `/api/upload/client`
 
 ### Code Execution Security
 - All code runs in Piston API sandbox (third-party service)
-- Rate limiting: 20 executions/hour per user (in-memory)
+- Rate limiting: 20 executions/hour per user, counted in the database (`RateLimitHit`) so it holds across serverless instances
 - First-time confirmation dialog warns users about third-party execution
 - Supported languages: Python, JavaScript, TypeScript, Java, C++, C, Go, Rust, Ruby, PHP
 
