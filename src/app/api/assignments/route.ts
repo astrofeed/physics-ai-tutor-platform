@@ -43,7 +43,15 @@ export async function GET(req: Request) {
     const hasSubmissions = searchParams.get("hasSubmissions") === "true";
 
     const whereClause: Prisma.AssignmentWhereInput = userRole === "STUDENT"
-      ? { published: true, isDeleted: false }
+      ? {
+          published: true,
+          isDeleted: false,
+          // A pending publish schedule means submissions are not open yet.
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
+        }
       : filterType === "published"
         ? { published: true, isDeleted: false }
         : filterType === "drafts"

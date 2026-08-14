@@ -35,11 +35,45 @@ const questionFields = (q: QuestionInput, order: number) => ({
 });
 
 /**
+ * Recomputes every submission total for an assignment from the surviving
+ * answers. Needed after questions are deleted: the cascade removes their
+ * answers, so a stored total would keep counting points that no longer exist.
+ */
+async function recomputeSubmissionTotals(
+  tx: Prisma.TransactionClient,
+  assignmentId: string
+) {
+  const submissions = await tx.submission.findMany({
+    where: { assignmentId },
+    select: {
+      id: true,
+      gradedAt: true,
+      draftTotalScore: true,
+      answers: { select: { score: true } },
+    },
+  });
+
+  for (const submission of submissions) {
+    const total = submission.answers.reduce((sum, a) => sum + (a.score ?? 0), 0);
+    await tx.submission.update({
+      where: { id: submission.id },
+      data: {
+        ...(submission.gradedAt !== null && { totalScore: total }),
+        ...(submission.draftTotalScore !== null && { draftTotalScore: total }),
+      },
+    });
+  }
+}
+
+/**
  * Reconciles an assignment's questions with the submitted list, updating rows
  * in place so existing `SubmissionAnswer` rows (and their grades and appeals)
  * survive an edit. Deleting a question still cascades to its answers, so that
  * only happens for questions nobody answered unless the caller explicitly
  * confirms the data loss.
+ *
+ * Returns the assignment's points total derived from the synced questions; it is
+ * written here so it can never disagree with the questions that exist.
  */
 export async function syncQuestions(
   assignmentId: string,
@@ -80,6 +114,7 @@ export async function syncQuestions(
 
   const existingById = new Map(existing.map((q) => [q.id, q]));
   const replacedImageUrls: string[] = [];
+  const totalPoints = questions.reduce((sum, q) => sum + (q.points ?? 10), 0);
 
   await prisma.$transaction(async (tx) => {
     for (let index = 0; index < questions.length; index++) {
@@ -104,10 +139,21 @@ export async function syncQuestions(
       if (question.imageUrl) replacedImageUrls.push(question.imageUrl);
       await tx.assignmentQuestion.delete({ where: { id: question.id } });
     }
+
+    await tx.assignment.update({
+      where: { id: assignmentId },
+      data: { totalPoints },
+    });
+
+    if (removedWithAnswers.length > 0) {
+      await recomputeSubmissionTotals(tx, assignmentId);
+    }
   });
 
   // Only revoke image files once the question rows no longer reference them.
   for (const url of replacedImageUrls) {
     await deleteFileByUrl(url);
   }
+
+  return { totalPoints };
 }

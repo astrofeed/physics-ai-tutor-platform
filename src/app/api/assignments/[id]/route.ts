@@ -64,7 +64,12 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (userRole === "STUDENT" && !assignment.published) {
+    // Mirrors the submit-time visibility rule, so a student never gets an
+    // editable page for an assignment whose answers the API would reject.
+    const scheduledInFuture =
+      assignment.scheduledPublishAt !== null &&
+      assignment.scheduledPublishAt > new Date();
+    if (userRole === "STUDENT" && (!assignment.published || scheduledInFuture)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -249,7 +254,8 @@ export async function PATCH(
           scheduledPublishAt: data.scheduledPublishAt ? new Date(data.scheduledPublishAt) : null,
         }),
         ...(data.notifyOnPublish !== undefined && { notifyOnPublish: data.notifyOnPublish }),
-        ...(data.totalPoints !== undefined && { totalPoints: data.totalPoints }),
+        // When questions were synced, their sum is authoritative (written by syncQuestions).
+        ...(data.totalPoints !== undefined && !data.questions && { totalPoints: data.totalPoints }),
         ...(data.pdfUrl !== undefined && { pdfUrl: data.pdfUrl || null }),
         ...(data.lockAfterSubmit !== undefined && { lockAfterSubmit: data.lockAfterSubmit }),
       },
