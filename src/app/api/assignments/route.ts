@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { assignmentListWhere } from "@/lib/services/assignment-service";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 import {
@@ -45,27 +46,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "15")));
-    const filterType = searchParams.get("filter"); // "published" | "drafts" | "scheduled" | null
+    const filterType = searchParams.get("filter"); // "published" | "drafts" | "scheduled" | "deleted" | null
 
     const hasSubmissions = searchParams.get("hasSubmissions") === "true";
 
-    const whereClause: Prisma.AssignmentWhereInput = userRole === "STUDENT"
-      ? {
-          published: true,
-          isDeleted: false,
-          // A pending publish schedule means submissions are not open yet.
-          OR: [
-            { scheduledPublishAt: null },
-            { scheduledPublishAt: { lte: new Date() } },
-          ],
-        }
-      : filterType === "published"
-        ? { published: true, isDeleted: false }
-        : filterType === "drafts"
-          ? { published: false, scheduledPublishAt: null, isDeleted: false }
-          : filterType === "scheduled"
-            ? { published: false, scheduledPublishAt: { not: null }, isDeleted: false }
-            : { isDeleted: false };
+    const whereClause: Prisma.AssignmentWhereInput = assignmentListWhere(
+      userRole,
+      filterType
+    );
 
     if (hasSubmissions) {
       whereClause.submissions = { some: { isDraft: false } };

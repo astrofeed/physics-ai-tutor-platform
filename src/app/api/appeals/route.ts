@@ -6,6 +6,7 @@ import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
 import { recordGradeAudit } from "@/lib/services/grading-service";
 import { logger } from "@/lib/logger";
+import { APPEAL_ON_LIVE_ASSIGNMENT } from "@/lib/services/assignment-service";
 
 const appealPostSchema = z.object({
   submissionAnswerId: z.string().min(1, "submissionAnswerId is required"),
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
     if (!submissionId && !assignmentId) {
       if (isStaffRole(userRole)) {
         const appeals = await prisma.gradeAppeal.findMany({
-          where: { status: "OPEN" },
+          where: { status: "OPEN", ...APPEAL_ON_LIVE_ASSIGNMENT },
           include: {
             student: { select: { id: true, name: true } },
             submissionAnswer: {
@@ -175,10 +176,18 @@ export async function POST(req: Request) {
     // Verify the answer belongs to this student's submission
     const answer = await prisma.submissionAnswer.findUnique({
       where: { id: submissionAnswerId },
-      include: { submission: { select: { userId: true, gradedAt: true } } },
+      include: {
+        submission: {
+          select: {
+            userId: true,
+            gradedAt: true,
+            assignment: { select: { isDeleted: true } },
+          },
+        },
+      },
     });
 
-    if (!answer) {
+    if (!answer || answer.submission.assignment.isDeleted) {
       return NextResponse.json({ error: "Answer not found" }, { status: 404 });
     }
 

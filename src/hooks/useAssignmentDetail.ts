@@ -346,7 +346,8 @@ export function useAssignmentDetail(assignmentId: string) {
     if (!assignment) return;
     requestConfirm({
       title: "Delete Assignment",
-      description: "This removes the assignment for everyone and hides it from students' grades. Submissions are retained in the database for records, and staff can no longer open the assignment page. Continue?",
+      description:
+        "This hides the assignment from students and removes it from grading queues and exports. Submissions, grades, and appeals are kept — you can restore it from Assignments → Deleted.",
       onConfirm: async () => {
         setDeleting(true);
         try {

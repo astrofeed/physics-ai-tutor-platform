@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 
@@ -18,9 +19,12 @@ export async function GET(req: NextRequest) {
 
     const assignmentId = req.nextUrl.searchParams.get("assignmentId");
 
-    const where = assignmentId
-      ? { assignmentId, isDraft: false, isDeleted: false }
-      : { isDraft: false, isDeleted: false };
+    const where: Prisma.SubmissionWhereInput = {
+      isDraft: false,
+      isDeleted: false,
+      assignment: { isDeleted: false },
+      ...(assignmentId && { assignmentId }),
+    };
 
     const submissions = await prisma.submission.findMany({
       where,

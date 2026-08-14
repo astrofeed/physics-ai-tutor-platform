@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
     const [submissions, messages, conversations, totalMessages, activities] = await Promise.all([
       prisma.submission.findMany({
-        where: { userId },
+        where: { userId, assignment: { isDeleted: false } },
         include: {
           assignment: { select: { title: true, totalPoints: true, type: true } },
           answers: {

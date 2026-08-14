@@ -5,6 +5,7 @@ import { getEffectiveSession } from "@/lib/impersonate";
 import { prisma } from "@/lib/prisma";
 import { classifyAttachment, formatBytes } from "@/lib/chat-attachments";
 import { checkUploadQuota, recordUpload } from "@/lib/services/upload-quota";
+import { BANNED_MESSAGE, DELETED_MESSAGE } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
 
 const ClientPayloadSchema = z.object({
@@ -31,12 +32,25 @@ export async function POST(request: Request): Promise<NextResponse> {
   const account = session?.user?.id
     ? await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { id: true, isBanned: true, emailVerified: true },
+        select: {
+          id: true,
+          isBanned: true,
+          isDeleted: true,
+          emailVerified: true,
+        },
       })
     : null;
 
-  if (!account || account.isBanned) {
+  // This route cannot use requireApiAuth: handleUpload needs the raw session,
+  // so the account-state checks are repeated here.
+  if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (account.isDeleted) {
+    return NextResponse.json({ error: DELETED_MESSAGE }, { status: 401 });
+  }
+  if (account.isBanned) {
+    return NextResponse.json({ error: BANNED_MESSAGE }, { status: 403 });
   }
   if (!account.emailVerified) {
     return NextResponse.json(

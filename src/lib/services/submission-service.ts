@@ -112,7 +112,7 @@ export async function saveSubmission(
     where: { id: assignmentId },
     include: { questions: true },
   });
-  if (!assignment) {
+  if (!assignment || assignment.isDeleted) {
     throw new SubmissionError("Assignment not found", 404);
   }
   if (!isStaff(user.role)) {

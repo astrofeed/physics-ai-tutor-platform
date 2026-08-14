@@ -5,27 +5,10 @@ import Link from "next/link";
 import { useEffectiveSession } from "@/lib/effective-session-context";
 import { useTrackTime } from "@/lib/use-track-time";
 import { api } from "@/lib/api-client";
-import {
-  FileText,
-  Plus,
-  Clock,
-  Users,
-  Loader2,
-  CheckCircle2,
-  BookOpen,
-  Upload,
-  ShieldAlert,
-  Trash2,
-  Search,
-  Lock,
-  Unlock,
-  CalendarClock,
-} from "lucide-react";
+import { FileText, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatShortDate } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
@@ -42,14 +25,32 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { AssignmentListItem } from "@/types";
+import { AssignmentCard } from "./components/AssignmentCard";
+
+type AssignmentFilter = "ALL" | "PUBLISHED" | "DRAFTS" | "SCHEDULED" | "DELETED";
+
+const FILTER_LABELS: Record<AssignmentFilter, string> = {
+  ALL: "All",
+  PUBLISHED: "Published",
+  SCHEDULED: "Scheduled",
+  DRAFTS: "Drafts",
+  DELETED: "Deleted",
+};
+
+const FILTER_PARAMS: Partial<Record<AssignmentFilter, string>> = {
+  PUBLISHED: "published",
+  DRAFTS: "drafts",
+  SCHEDULED: "scheduled",
+  DELETED: "deleted",
+};
 
 export default function AssignmentsPage() {
   useTrackTime("ASSIGNMENT_VIEW");
   const effectiveSession = useEffectiveSession();
   const [assignments, setAssignments] = useState<AssignmentListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"ALL" | "PUBLISHED" | "DRAFTS" | "SCHEDULED">("ALL");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<AssignmentFilter>("ALL");
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -66,10 +67,8 @@ export default function AssignmentsPage() {
     const params = new URLSearchParams();
     params.set("page", String(p ?? 1));
     params.set("pageSize", String(ps ?? 10));
-    const filterVal = f ?? "ALL";
-    if (filterVal === "PUBLISHED") params.set("filter", "published");
-    else if (filterVal === "DRAFTS") params.set("filter", "drafts");
-    else if (filterVal === "SCHEDULED") params.set("filter", "scheduled");
+    const filterParam = FILTER_PARAMS[(f ?? "ALL") as AssignmentFilter];
+    if (filterParam) params.set("filter", filterParam);
     if (q) params.set("search", q);
     api.get<{ assignments: AssignmentListItem[]; totalCount: number }>(`/api/assignments?${params}`)
       .then((data) => {
@@ -84,7 +83,7 @@ export default function AssignmentsPage() {
     fetchAssignments(filter, page, pageSize, activeSearch);
   }, [fetchAssignments, filter, page, pageSize, activeSearch]);
 
-  const handleFilterChange = (f: "ALL" | "PUBLISHED" | "DRAFTS" | "SCHEDULED") => {
+  const handleFilterChange = (f: AssignmentFilter) => {
     setFilter(f);
     setPage(1);
   };
@@ -94,13 +93,8 @@ export default function AssignmentsPage() {
     setPage(1);
   };
 
-  const isDueSoon = (dueDate: string | null) => {
-    if (!dueDate) return false;
-    const diff = new Date(dueDate).getTime() - Date.now();
-    return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
-  };
-
   const canManage = isStaff(userRole);
+  const showingDeleted = filter === "DELETED";
 
   const handleDeleteDraft = (e: React.MouseEvent, assignmentId: string) => {
     e.preventDefault();
@@ -112,7 +106,7 @@ export default function AssignmentsPage() {
     if (!pendingDeleteId) return;
     const assignmentId = pendingDeleteId;
     setPendingDeleteId(null);
-    setDeletingId(assignmentId);
+    setBusyId(assignmentId);
     try {
       const res = await fetch(`/api/assignments/${assignmentId}`, { method: "DELETE" });
       if (res.ok) {
@@ -124,7 +118,28 @@ export default function AssignmentsPage() {
     } catch {
       toast.error("Failed to delete assignment");
     } finally {
-      setDeletingId(null);
+      setBusyId(null);
+    }
+  };
+
+  const handleRestore = async (e: React.MouseEvent, assignmentId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setBusyId(assignmentId);
+    try {
+      const res = await fetch(`/api/assignments/${assignmentId}/restore`, { method: "POST" });
+      if (res.ok) {
+        setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+        setTotalCount((c) => Math.max(0, c - 1));
+        toast.success("Assignment restored with its submissions and grades");
+      } else {
+        const data = await res.json().catch(() => ({ error: "Failed to restore assignment" }));
+        toast.error(data.error || "Failed to restore assignment");
+      }
+    } catch {
+      toast.error("Failed to restore assignment");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -180,7 +195,7 @@ export default function AssignmentsPage() {
         </div>
       {canManage && (
         <div className="flex items-center gap-2">
-          {(["ALL", "PUBLISHED", "SCHEDULED", "DRAFTS"] as const).map((type) => (
+          {(["ALL", "PUBLISHED", "SCHEDULED", "DRAFTS", "DELETED"] as const).map((type) => (
             <button
               key={type}
               onClick={() => handleFilterChange(type)}
@@ -190,12 +205,22 @@ export default function AssignmentsPage() {
                   : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700"
               }`}
             >
-              {type === "ALL" ? "All" : type === "PUBLISHED" ? "Published" : type === "SCHEDULED" ? "Scheduled" : "Drafts"}
+              {FILTER_LABELS[type]}
             </button>
           ))}
         </div>
       )}
       </div>
+
+      {canManage && showingDeleted && (
+        <div className="flex items-start gap-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-400">
+          <Trash2 className="h-4 w-4 mt-0.5 shrink-0" />
+          <p>
+            Deleted assignments are hidden from students and excluded from grading queues and
+            exports. Submissions, grades, and appeals are kept — restoring brings them all back.
+          </p>
+        </div>
+      )}
 
       {/* Loading */}
       {loading ? (
@@ -203,13 +228,15 @@ export default function AssignmentsPage() {
       ) : assignments.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="No assignments found"
+          title={showingDeleted ? "Recycle bin is empty" : "No assignments found"}
           description={
-            filter !== "ALL"
-              ? "No assignments match this filter. Try selecting a different type."
-              : userRole === "STUDENT"
-                ? "Check back later for new assignments."
-                : "Create your first assignment to get started."
+            showingDeleted
+              ? "Deleted assignments appear here so you can restore them."
+              : filter !== "ALL"
+                ? "No assignments match this filter. Try selecting a different type."
+                : userRole === "STUDENT"
+                  ? "Check back later for new assignments."
+                  : "Create your first assignment to get started."
           }
         />
       ) : (
@@ -217,146 +244,16 @@ export default function AssignmentsPage() {
           {/* Assignment Cards */}
           <div className="grid gap-3" role="list" aria-label="Assignments">
             {assignments.map((assignment) => (
-              <Link key={assignment.id} href={`/assignments/${assignment.id}`}>
-                <div className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 hover:shadow-md transition-all cursor-pointer shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mb-1.5">
-                        <div className="p-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 shrink-0 hidden sm:block">
-                          {assignment.type === "QUIZ" ? (
-                            <BookOpen className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                          ) : (
-                            <Upload className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                          )}
-                        </div>
-                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors break-words min-w-0">
-                          {assignment.title}
-                        </h3>
-                        {!assignment.published && !assignment.scheduledPublishAt && (
-                          <Badge className="bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">
-                            Draft
-                          </Badge>
-                        )}
-                        {!assignment.published && assignment.scheduledPublishAt && (
-                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800 text-xs gap-1">
-                            <CalendarClock className="h-3 w-3" />
-                            Scheduled: {new Date(assignment.scheduledPublishAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                          </Badge>
-                        )}
-                        {isDueSoon(assignment.dueDate) && (
-                          <Badge className="bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 text-xs">
-                            Due Soon
-                          </Badge>
-                        )}
-                      </div>
-                      {assignment.description && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-1 mb-3 sm:ml-9">
-                          {assignment.description}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-400 dark:text-gray-500 ml-0 sm:ml-9">
-                        <Badge variant="secondary" className="font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700">
-                          {assignment.type === "QUIZ" ? "Quiz" : "File Upload"}
-                        </Badge>
-                        {assignment.lockAfterSubmit ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
-                            <Lock className="h-3 w-3" />
-                            Locked after submit
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                            <Unlock className="h-3 w-3" />
-                            Resubmit allowed
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          {assignment._count.questions} questions
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3.5 w-3.5" />
-                          {assignment._count.submissions} submissions
-                        </span>
-                        {isStaff(userRole) && assignment.ungradedCount !== undefined && assignment.ungradedCount > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
-                            <Clock className="h-3 w-3" />
-                            {assignment.ungradedCount} ungraded
-                          </span>
-                        )}
-                        {assignment.openAppealCount !== undefined && assignment.openAppealCount > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800">
-                            <ShieldAlert className="h-3 w-3" />
-                            {assignment.openAppealCount} open appeal{assignment.openAppealCount !== 1 ? "s" : ""}
-                          </span>
-                        )}
-                        {assignment.dueDate && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5" />
-                            Due {formatShortDate(assignment.dueDate)}
-                          </span>
-                        )}
-                        {userRole === "STUDENT" && assignment.mySubmitted && (() => {
-                          const canResubmit = !assignment.lockAfterSubmit && !assignment.myGraded;
-                          return canResubmit ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                              Can resubmit
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-700">
-                              {assignment.lockAfterSubmit ? "Locked" : "Graded"}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-4 shrink-0">
-                      {canManage && !assignment.published && !assignment.scheduledPublishAt && (
-                        <button
-                          onClick={(e) => handleDeleteDraft(e, assignment.id)}
-                          disabled={deletingId === assignment.id}
-                          className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
-                          title="Delete draft"
-                        >
-                          {deletingId === assignment.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
-                      )}
-                      <div className="text-right">
-                        {canManage && !assignment.mySubmitted ? (
-                          <>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                              {assignment._count.submissions}
-                            </p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-                              submission{assignment._count.submissions !== 1 ? "s" : ""}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                              <span className={assignment.myScore !== null ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}>
-                                {assignment.myScore !== null ? assignment.myScore : "_"}
-                              </span>
-                              <span className="text-gray-300 dark:text-gray-600">/</span>
-                              {assignment.totalPoints}
-                            </p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-                              {assignment.myScore !== null
-                                ? "graded"
-                                : assignment.mySubmitted
-                                  ? "submitted"
-                                  : "points"}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+              <AssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                userRole={userRole}
+                canManage={canManage}
+                busyId={busyId}
+                onDelete={handleDeleteDraft}
+                onRestore={handleRestore}
+                deleted={showingDeleted}
+              />
             ))}
           </div>
 
@@ -386,8 +283,8 @@ export default function AssignmentsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Draft Assignment</AlertDialogTitle>
             <AlertDialogDescription>
-              This hides the draft from every list. It stays in the database for records,
-              so it cannot be reopened from the app afterwards.
+              This draft moves to the Deleted tab, where you can restore it. Submissions, grades,
+              and appeals are kept.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

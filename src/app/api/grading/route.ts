@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
 import { GradingError, saveGrades, ungradeSubmission } from "@/lib/services/grading-service";
@@ -41,6 +42,19 @@ export async function POST(req: Request) {
       );
     }
     const { ungrade, ...input } = parseResult.data;
+
+    const gradable = await prisma.submission.findFirst({
+      where: {
+        id: input.submissionId,
+        isDeleted: false,
+        assignment: { isDeleted: false },
+      },
+      select: { id: true },
+    });
+
+    if (!gradable) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
 
     if (ungrade) {
       await ungradeSubmission(graderId, input.submissionId);
