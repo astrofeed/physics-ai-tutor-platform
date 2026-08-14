@@ -19,6 +19,11 @@ export async function GET(
         messages: {
           orderBy: { createdAt: "asc" },
           take: 200,
+          include: {
+            attachments: {
+              select: { url: true, filename: true, mimeType: true, sizeBytes: true },
+            },
+          },
         },
       },
     });
@@ -37,6 +42,7 @@ export async function GET(
         role: m.role,
         content: m.content,
         imageUrls: m.imageUrls,
+        documents: m.attachments,
         model: m.model,
         createdAt: m.createdAt,
       })),

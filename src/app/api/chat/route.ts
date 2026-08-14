@@ -2,17 +2,34 @@ import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, type ChatMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { checkContentFlags, handleContentFlag, trackRateLimitAbuse } from "@/lib/abuse-detection";
+import { checkContentFlags, handleContentFlag, trackMessageVolume, trackRateLimitAbuse } from "@/lib/abuse-detection";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
+import { extractDocumentText } from "@/lib/services/document-extraction";
+import { withAttachmentText } from "@/lib/services/chat-context";
+import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_PDF_BYTES, isUploadedBlobUrl } from "@/lib/chat-attachments";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
-const ChatInputSchema = z.object({
-  conversationId: z.string().max(100).nullish(),
-  message: z.string().max(50000),
-  imageUrls: z.array(z.string().url()).max(5).optional(),
-  mode: z.enum(["normal", "socratic"]).optional(),
+const DocumentSchema = z.object({
+  url: z.string().url(),
+  filename: z.string().min(1).max(300),
+  mimeType: z.string().min(1).max(200),
+  sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
 });
+
+const ChatInputSchema = z
+  .object({
+    conversationId: z.string().max(100).nullish(),
+    message: z.string().max(50000),
+    imageUrls: z.array(z.string().url()).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
+    documents: z.array(DocumentSchema).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
+    mode: z.enum(["normal", "socratic"]).optional(),
+  })
+  .refine(
+    (input) =>
+      (input.imageUrls?.length ?? 0) + (input.documents?.length ?? 0) <= MAX_ATTACHMENTS_PER_MESSAGE,
+    { message: `At most ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message` }
+  );
 
 export async function POST(req: Request) {
   try {
@@ -23,7 +40,7 @@ export async function POST(req: Request) {
     // Check if user is banned or restricted from using AI chat
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { isBanned: true, isRestricted: true },
+      select: { isBanned: true, isRestricted: true, emailVerified: true },
     });
 
     if (!user) {
@@ -40,6 +57,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!user.emailVerified) {
+      return Response.json(
+        { error: "Please verify your email address before using the tutor. Check your inbox for the verification link." },
+        { status: 403 }
+      );
+    }
+
     if (user?.isRestricted) {
       return Response.json(
         { error: "Your account has been restricted from using AI chat. Please contact your instructor." },
@@ -49,7 +73,7 @@ export async function POST(req: Request) {
 
     const userName = auth.user.name || "Unknown";
 
-    const rateCheck = checkRateLimit(userId, user?.isRestricted || false);
+    const rateCheck = await checkRateLimit(userId, user?.isRestricted || false);
     if (!rateCheck.allowed) {
       await prisma.auditLog.create({
         data: {
@@ -79,7 +103,12 @@ export async function POST(req: Request) {
       }
       return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
-    const { conversationId, message, imageUrls, mode } = parsed.data;
+    const { conversationId, message, imageUrls, documents, mode } = parsed.data;
+
+    const attachedDocuments = (documents ?? []).filter((doc) => isUploadedBlobUrl(doc.url));
+    if (attachedDocuments.length !== (documents?.length ?? 0)) {
+      return Response.json({ error: "Unrecognized attachment URL" }, { status: 400 });
+    }
 
     // Fire-and-forget: check content for jailbreak/prompt injection patterns
     const contentFlags = checkContentFlags(message);
@@ -110,6 +139,22 @@ export async function POST(req: Request) {
       convId = conversation.id;
     }
 
+    // Documents are turned into text here so every provider can use them,
+    // including ones without document or vision support.
+    const extractedDocuments = await Promise.all(
+      attachedDocuments.map(async (doc) => {
+        const extracted = await extractDocumentText(doc);
+        return {
+          url: doc.url,
+          filename: doc.filename,
+          mimeType: doc.mimeType,
+          sizeBytes: doc.sizeBytes,
+          extractedText: extracted?.text ?? null,
+          truncated: extracted?.truncated ?? false,
+        };
+      })
+    );
+
     await prisma.message.create({
       data: {
         conversationId: convId,
@@ -117,25 +162,31 @@ export async function POST(req: Request) {
         content: message,
         imageUrls: imageUrls || [],
         mode: mode || "normal",
+        attachments: extractedDocuments.length
+          ? { create: extractedDocuments }
+          : undefined,
       },
     });
 
     // Check for chat spam (30 messages/min auto-ban, non-blocking)
     checkAndBanSpammer({ userId, source: "chat" }).catch((err) => console.error("[spam] Failed to check spammer:", err));
+    trackMessageVolume(userId, userName).catch((err) => console.error("[abuse] Failed to track message volume:", err));
 
     // Load last 50 messages for AI context (avoids unbounded query + token limits)
     const recentMessages = await prisma.message.findMany({
       where: { conversationId: convId },
       orderBy: { createdAt: "desc" },
       take: 50,
+      include: {
+        attachments: { select: { filename: true, extractedText: true, truncated: true } },
+      },
     });
     const previousMessages = recentMessages.reverse();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatMessages: ChatMessage[] = previousMessages.map((m: any) => ({
+    const chatMessages: ChatMessage[] = previousMessages.map((m) => ({
       role: m.role as "user" | "assistant",
-      content: m.content,
-      imageUrls: m.imageUrls?.length ? m.imageUrls : undefined,
+      content: withAttachmentText(m.content, m.attachments),
+      imageUrls: m.imageUrls.length ? m.imageUrls : undefined,
     }));
 
     const aiConfig = await prisma.aIConfig.findFirst({

@@ -1512,10 +1512,33 @@ if (isErrorResponse(auth)) return auth;
 Email-based forgot/reset password for credentials accounts:
 
 - **Pages**: `/forgot-password` (request link) and `/reset-password?token=...` (set new password), both under `src/app/(auth)/`. Login page links to `/forgot-password`.
-- **API**: `POST /api/auth/forgot-password` (Zod-validated email, IP rate-limited via `checkIpRateLimit`, always returns a generic success message to prevent account enumeration) and `POST /api/auth/reset-password` (Zod-validated token + password with the same complexity rules as registration).
+- **API**: `POST /api/auth/forgot-password` (Zod-validated email, IP rate-limited via `consumeAuthAttempt("forgot_password", ...)`, always returns a generic success message to prevent account enumeration) and `POST /api/auth/reset-password` (Zod-validated token + password with the same complexity rules as registration).
 - **Service**: `src/lib/services/password-reset-service.ts` — generates a 32-byte random token, stores only its SHA-256 hash in `PasswordResetToken` (30-minute expiry, one-time use via `usedAt`, prior tokens deleted on new request), and emails the raw token link using `passwordResetEmail` from `src/lib/email-templates.ts`.
 - **Schema**: `PasswordResetToken` model (`tokenHash` unique, `userId` cascade FK). Google-only accounts (no `passwordHash`) and deleted users are silently ignored.
-- **Rate limiting**: `checkIpRateLimit(key, maxRequests, windowMs)` in `src/lib/rate-limit.ts` for unauthenticated endpoints.
+- **Rate limiting**: `consumeAuthAttempt(kind, ip)` in `src/lib/services/auth-attempt-limit.ts` for unauthenticated endpoints (DB-backed, see below).
+
+### Email Verification (self-registration)
+
+- **Flow**: `POST /api/auth/register` creates an *unverified* account and emails a link to `/verify-email?token=...`; `POST /api/auth/verify-email` either consumes a token or (given `{ email }`) resends the link with a deliberately generic response.
+- **Service**: `src/lib/services/email-verification-service.ts` — 32-byte token, only its SHA-256 hash stored in `VerificationToken` (24h expiry, prior tokens deleted), sets both `emailVerified` and `isVerified` on success.
+- **Registration**: `src/lib/services/registration-service.ts` — normalizes email, returns one generic failure for both duplicate email and duplicate `studentId` (no account enumeration), never activates an account when email delivery fails.
+- **Gates**: `/api/chat` and `/api/upload/client` reject users with `emailVerified == null`. Google sign-in marks the account verified in the NextAuth `events.signIn` hook. Accounts created before this feature were grandfathered in by the migration's backfill `UPDATE`.
+
+### Unauthenticated Rate Limits (`AuthAttempt`)
+
+`src/lib/services/auth-attempt-limit.ts` counts attempts per SHA-256-hashed IP in the `AuthAttempt` table (5/hour per `kind`: `register`, `verify_resend`, `forgot_password`). DB-backed because in-memory counters are per-instance on Vercel and therefore ineffective. The chat message limit in `src/lib/rate-limit.ts` counts the user's own `Message` rows in the window for the same reason (`checkRateLimit` is now async).
+
+### Chat Attachments (images + PDF/Markdown/text)
+
+- **Limits** live only in `src/lib/chat-attachments.ts` and are shared by client pre-flight and server enforcement: 5 attachments per message; 5 MB per image, 10 MB per PDF, 1 MB per `.md`/`.txt`; 60 image uploads/hour; 30 documents and 150 MB of documents per rolling day (images deliberately excluded from the daily budget). Types are classified server-side from MIME type *and* extension, because Markdown often arrives with an empty MIME type.
+- **Quota**: `src/lib/services/upload-quota.ts` counts `UploadEvent` rows. `/api/upload/client` authenticates, rejects banned/unverified users, validates the client payload with Zod, and records the `UploadEvent` when issuing the Blob token — deliberately conservative: an abandoned upload still costs quota. `GET /api/upload/quota` exposes remaining allowances so the UI can explain a rejection before uploading.
+- **Extraction**: `src/lib/services/document-extraction.ts` (unpdf) downloads the blob, re-checks the *actual* byte size against the limit, reads at most 30 PDF pages and truncates to 30k chars. Text is persisted on `MessageAttachment` so later turns reuse it instead of re-downloading.
+- **Model context**: `src/lib/services/chat-context.ts` inlines document text as `<document>` blocks with an instruction that file contents are data, filenames stripped of quoting characters and `</document>` neutralized. Provider-independent, so DeepSeek (no vision/document support) works too.
+- **Client**: `src/hooks/use-chat-attachments.ts` owns staging, validation, previews and upload; `ChatInput` renders image previews plus document chips, `MessageDocuments` renders them in the transcript.
+
+### Abuse Alerts
+
+`src/lib/abuse-detection.ts` emails active TA/PROFESSOR/ADMIN users plus every address in `ABUSE_ALERT_EMAILS` (comma separated). `trackMessageVolume` fires when a single user exceeds `MESSAGE_VOLUME_ALERT_THRESHOLD` user messages in an hour (default 60); repeat alerts are suppressed by looking for a recent `AuditLog` entry. Student-facing mail is unchanged: only the spam-guard auto-ban notifies the student.
 
 ### Prisma Migrations
 

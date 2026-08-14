@@ -1,22 +1,24 @@
 "use client";
 
 import React, { useRef, useCallback, useEffect } from "react";
-import { Send, ImageIcon, X, Square, RotateCcw } from "lucide-react";
+import { Send, Paperclip, X, Square, RotateCcw, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const MAX_IMAGES = 5;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  formatBytes,
+} from "@/lib/chat-attachments";
+import type { PendingAttachment } from "@/hooks/use-chat-attachments";
 
 interface ChatInputProps {
   input: string;
   onInputChange: (value: string) => void;
   loading: boolean;
-  imageFiles: File[];
-  imagePreviews: string[];
-  imageError: string | null;
-  onImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemoveImage: (index: number) => void;
-  onClearImageError: () => void;
+  attachments: PendingAttachment[];
+  attachmentError: string | null;
+  onSelectFiles: (files: File[]) => void;
+  onRemoveAttachment: (index: number) => void;
+  onClearAttachmentError: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onStop: () => void;
@@ -28,12 +30,11 @@ export function ChatInput({
   input,
   onInputChange,
   loading,
-  imageFiles,
-  imagePreviews,
-  imageError,
-  onImageSelect,
-  onRemoveImage,
-  onClearImageError,
+  attachments,
+  attachmentError,
+  onSelectFiles,
+  onRemoveAttachment,
+  onClearAttachmentError,
   onSubmit,
   onKeyDown,
   onStop,
@@ -59,12 +60,12 @@ export function ChatInput({
 
   return (
     <>
-      {imageError && (
+      {attachmentError && (
         <div className="px-4 py-2 border-t border-red-100 dark:border-red-800 bg-red-50 dark:bg-red-950/50">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
-            <span className="text-sm text-red-600 dark:text-red-400">{imageError}</span>
+            <span className="text-sm text-red-600 dark:text-red-400">{attachmentError}</span>
             <button
-              onClick={onClearImageError}
+              onClick={onClearAttachmentError}
               className="text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
             >
               <X className="h-4 w-4" />
@@ -73,18 +74,32 @@ export function ChatInput({
         </div>
       )}
 
-      {imagePreviews.length > 0 && (
+      {attachments.length > 0 && (
         <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800">
           <div className="max-w-3xl mx-auto flex gap-2 flex-wrap">
-            {imagePreviews.map((preview, idx) => (
+            {attachments.map((attachment, idx) => (
               <div key={idx} className="relative inline-block">
-                <img
-                  src={preview}
-                  alt={`Preview ${idx + 1}`}
-                  className="h-20 rounded-lg object-contain border border-gray-200 dark:border-gray-700"
-                />
+                {attachment.previewUrl ? (
+                  <img
+                    src={attachment.previewUrl}
+                    alt={attachment.file.name}
+                    className="h-20 rounded-lg object-contain border border-gray-200 dark:border-gray-700"
+                  />
+                ) : (
+                  <div className="h-20 w-44 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 flex flex-col justify-center gap-1">
+                    <FileText className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+                      {attachment.file.name}
+                    </span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      {formatBytes(attachment.file.size)}
+                    </span>
+                  </div>
+                )}
                 <button
-                  onClick={() => onRemoveImage(idx)}
+                  type="button"
+                  onClick={() => onRemoveAttachment(idx)}
+                  aria-label={`Remove ${attachment.file.name}`}
                   className="absolute -top-2 -right-2 bg-gray-900 hover:bg-gray-800 text-white rounded-full p-1 shadow-sm transition-colors"
                 >
                   <X className="h-3 w-3" />
@@ -92,7 +107,7 @@ export function ChatInput({
               </div>
             ))}
             <span className="self-end text-xs text-gray-400 dark:text-gray-500 pb-1">
-              {imagePreviews.length}/{MAX_IMAGES}
+              {attachments.length}/{MAX_ATTACHMENTS_PER_MESSAGE}
             </span>
           </div>
         </div>
@@ -116,19 +131,23 @@ export function ChatInput({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={ATTACHMENT_ACCEPT}
               multiple
-              onChange={onImageSelect}
+              onChange={(e) => {
+                onSelectFiles(Array.from(e.target.files || []));
+                e.target.value = "";
+              }}
               className="hidden"
-              aria-label="Upload image"
+              aria-label="Upload image, PDF, or Markdown file"
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              aria-label="Attach image"
+              aria-label="Attach a file"
+              title="Attach an image, PDF, .md, or .txt file"
             >
-              <ImageIcon className="h-4 w-4" />
+              <Paperclip className="h-4 w-4" />
             </button>
             <textarea
               ref={textareaRef}
@@ -158,10 +177,10 @@ export function ChatInput({
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim() && !imageFiles.length}
+                disabled={!input.trim() && !attachments.length}
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all",
-                  !input.trim() && !imageFiles.length
+                  !input.trim() && !attachments.length
                     ? "bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed"
                     : "bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900"
                 )}

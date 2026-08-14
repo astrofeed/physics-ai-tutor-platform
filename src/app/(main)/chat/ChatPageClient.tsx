@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { upload } from "@vercel/blob/client";
 import { useTrackTime } from "@/lib/use-track-time";
 import {
   PanelLeftOpen,
@@ -29,6 +28,7 @@ import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversation";
 import { useChatStream } from "@/hooks/use-chat-stream";
+import { useChatAttachments } from "@/hooks/use-chat-attachments";
 import { useConversationFolders } from "@/hooks/use-conversation-folders";
 import type { Conversation, ConversationFolder } from "@/components/chat/types";
 
@@ -39,9 +39,6 @@ interface ChatPageClientProps {
   conversationLimit: number;
 }
 
-const MAX_IMAGES = 5;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-
 export default function ChatPageClient({
   conversations: initialConversations,
   folders: initialFolders,
@@ -51,9 +48,6 @@ export default function ChatPageClient({
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [imageError, setImageError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpenRaw] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -68,6 +62,16 @@ export default function ChatPageClient({
 
   const { folders, createFolder, renameFolder, deleteFolder, moveConversation } =
     useConversationFolders({ initialFolders, setConversations });
+
+  const {
+    attachments,
+    error: attachmentError,
+    selectFiles,
+    remove: removeAttachment,
+    clear: clearAttachments,
+    clearError: clearAttachmentError,
+    uploadAll,
+  } = useChatAttachments();
 
   const {
     messages,
@@ -164,63 +168,16 @@ export default function ChatPageClient({
     setSidebarOpen(false);
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    if (imageFiles.length + files.length > MAX_IMAGES) {
-      setImageError(`You can upload at most ${MAX_IMAGES} images at a time.`);
-      return;
-    }
-    const oversized = files.find((f) => f.size > MAX_IMAGE_SIZE);
-    if (oversized) {
-      setImageError(`Image "${oversized.name}" exceeds the 5 MB limit. Please use a smaller image.`);
-      return;
-    }
-    setImageError(null);
-    setImageFiles((prev) => [...prev, ...files]);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreviews((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const removeImage = (index: number) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-    setImageError(null);
-  };
-
-  const clearImages = () => {
-    setImageFiles([]);
-    setImagePreviews([]);
-    setImageError(null);
-  };
-
   const submitMessage = useCallback(async (messageText: string) => {
-    if (!messageText.trim() && !imageFiles.length) return;
+    if (!messageText.trim() && !attachments.length) return;
 
-    const uploadedUrls: string[] = [];
-
-    for (const file of imageFiles) {
-      try {
-        const blob = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload/client",
-        });
-        uploadedUrls.push(blob.url);
-      } catch {
-        setImageError("Failed to upload image. Please try again.");
-        return;
-      }
-    }
+    const uploaded = await uploadAll();
+    if (!uploaded) return;
 
     setInput("");
-    clearImages();
-    await sendMessage(messageText, uploadedUrls);
-  }, [imageFiles, sendMessage]);
+    clearAttachments();
+    await sendMessage(messageText, uploaded.imageUrls, uploaded.documents);
+  }, [attachments.length, uploadAll, clearAttachments, sendMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,7 +187,7 @@ export default function ChatPageClient({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      if (input.trim() || imageFiles.length) {
+      if (input.trim() || attachments.length) {
         submitMessage(input);
       }
     }
@@ -436,12 +393,11 @@ export default function ChatPageClient({
           input={input}
           onInputChange={setInput}
           loading={loading}
-          imageFiles={imageFiles}
-          imagePreviews={imagePreviews}
-          imageError={imageError}
-          onImageSelect={handleImageSelect}
-          onRemoveImage={removeImage}
-          onClearImageError={() => setImageError(null)}
+          attachments={attachments}
+          attachmentError={attachmentError}
+          onSelectFiles={selectFiles}
+          onRemoveAttachment={removeAttachment}
+          onClearAttachmentError={clearAttachmentError}
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
           onStop={stopGeneration}

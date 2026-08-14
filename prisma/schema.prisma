@@ -61,6 +61,7 @@ model User {
   createdEmailTemplates  EmailTemplate[]
   createdScheduledEmails ScheduledEmail[]
   passwordResetTokens    PasswordResetToken[]
+  uploadEvents           UploadEvent[]
 }
 
 model Account {
@@ -152,9 +153,56 @@ model Message {
   mode           String?  // "normal" or "socratic"
   createdAt      DateTime @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  MessageAttachment[]
 
   @@index([conversationId, createdAt])
+}
+
+/// Documents (PDF / Markdown / plain text) attached to a chat message.
+/// `extractedText` holds the text handed to the model, so later turns in the
+/// same conversation reuse it without re-fetching or re-parsing the file.
+model MessageAttachment {
+  id            String   @id @default(cuid())
+  messageId     String
+  url           String
+  filename      String
+  mimeType      String
+  sizeBytes     Int
+  extractedText String?  @db.Text
+  truncated     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+/// One row per issued upload token, used to enforce per-user upload quotas
+/// (images per hour, documents per day) across serverless instances.
+model UploadEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // "image" | "document"
+  mimeType  String
+  filename  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+}
+
+/// Unauthenticated auth attempts per client IP (hashed), used to rate limit
+/// signups and verification-email resends.
+model AuthAttempt {
+  id        String   @id @default(cuid())
+  kind      String // "register" | "verify_resend"
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([kind, ipHash, createdAt])
 }
 
 model Course {

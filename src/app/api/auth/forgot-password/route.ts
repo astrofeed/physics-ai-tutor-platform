@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requestPasswordReset } from "@/lib/services/password-reset-service";
-import { checkIpRateLimit } from "@/lib/rate-limit";
+import { clientIp, consumeAuthAttempt } from "@/lib/services/auth-attempt-limit";
 
 const ForgotPasswordSchema = z.object({
   email: z.string().email().max(254),
@@ -13,8 +13,7 @@ const GENERIC_RESPONSE = {
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const limit = checkIpRateLimit(`forgot-password:${ip}`, 5, 15 * 60_000);
+    const limit = await consumeAuthAttempt("forgot_password", clientIp(req));
     if (!limit.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },
