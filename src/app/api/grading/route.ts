@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client";
 import { aiAssistedGrading, type AIProvider } from "@/lib/ai";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
+import { GradingError, saveGrades, ungradeSubmission } from "@/lib/services/grading-service";
+import { toDataUri } from "@/lib/services/file-storage";
 
 const gradeItemSchema = z.object({
   answerId: z.string().min(1),
@@ -40,147 +42,20 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const { submissionId, grades, overallScore, overallFeedback, feedbackFileUrl, feedbackImages, isDraft, ungrade } = parseResult.data;
+    const { ungrade, ...input } = parseResult.data;
 
-    // Ungrade: clear gradedAt and gradedById
-    if (ungrade && submissionId) {
-      await prisma.submission.update({
-        where: { id: submissionId },
-        data: { totalScore: null, gradedAt: null, gradedById: null },
-      });
+    if (ungrade) {
+      await ungradeSubmission(graderId, input.submissionId);
       return NextResponse.json({ success: true, ungraded: true });
     }
 
-    const submission = await prisma.submission.findUnique({
-      where: { id: submissionId },
-      include: { answers: { include: { question: true } } },
-    });
-
-    if (!submission) {
-      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
-    }
-
-    // Per-question grading with score bounds validation
-    if (grades && grades.length > 0) {
-      // Build a lookup of questionId -> max points for bounds checking
-      const questionPointsMap = new Map<string, number>();
-      for (const ans of submission.answers) {
-        questionPointsMap.set(ans.questionId, ans.question.points);
-        questionPointsMap.set(ans.id, ans.question.points); // also index by answerId
-      }
-
-      for (const grade of grades) {
-        let questionId: string;
-        let maxPoints: number | undefined;
-
-        if (grade.answerId.startsWith("blank-")) {
-          questionId = grade.answerId.replace("blank-", "");
-          // Fetch the question directly for blank answers not in the submission
-          if (!questionPointsMap.has(questionId)) {
-            const question = await prisma.assignmentQuestion.findUnique({
-              where: { id: questionId },
-              select: { points: true },
-            });
-            if (question) {
-              questionPointsMap.set(questionId, question.points);
-            }
-          }
-          maxPoints = questionPointsMap.get(questionId);
-        } else {
-          maxPoints = questionPointsMap.get(grade.answerId);
-          if (maxPoints === undefined) {
-            // Fetch via the answer record if not already in the map
-            const answer = await prisma.submissionAnswer.findUnique({
-              where: { id: grade.answerId },
-              include: { question: { select: { points: true } } },
-            });
-            if (answer) {
-              maxPoints = answer.question.points;
-              questionPointsMap.set(grade.answerId, maxPoints);
-            }
-          }
-        }
-
-        if (maxPoints !== undefined && grade.score > maxPoints) {
-          return NextResponse.json(
-            { error: `Score ${grade.score} exceeds maximum points (${maxPoints}) for answer ${grade.answerId}` },
-            { status: 400 }
-          );
-        }
-
-        if (grade.answerId.startsWith("blank-")) {
-          questionId = grade.answerId.replace("blank-", "");
-          // Create a SubmissionAnswer for a question the student left blank
-          await prisma.submissionAnswer.create({
-            data: {
-              submissionId,
-              questionId,
-              answer: null,
-              score: grade.score,
-              feedback: grade.feedback,
-              autoGraded: false,
-              ...(feedbackImages?.[grade.answerId]?.length && {
-                feedbackImageUrls: feedbackImages[grade.answerId],
-              }),
-            },
-          });
-        } else {
-          await prisma.submissionAnswer.update({
-            where: { id: grade.answerId },
-            data: {
-              score: grade.score,
-              feedback: grade.feedback,
-              ...(feedbackImages?.[grade.answerId]?.length && {
-                feedbackImageUrls: feedbackImages[grade.answerId],
-              }),
-            },
-          });
-        }
-      }
-    }
-
-    // Determine total score: use overallScore if provided, otherwise sum per-question scores
-    let finalTotalScore: number;
-    if (overallScore !== undefined) {
-      finalTotalScore = overallScore;
-    } else if (grades && grades.length > 0) {
-      const updatedAnswers = await prisma.submissionAnswer.findMany({
-        where: { submissionId },
-      });
-      finalTotalScore = updatedAnswers.reduce(
-        (sum, ans) => sum + (ans.score || 0),
-        0
-      );
-    } else {
-      return NextResponse.json({ error: "No grades provided" }, { status: 400 });
-    }
-
-    if (isDraft) {
-      // Draft grading: save scores but don't mark as graded
-      await prisma.submission.update({
-        where: { id: submissionId },
-        data: {
-          totalScore: finalTotalScore,
-          ...(feedbackFileUrl !== undefined && { fileUrl: feedbackFileUrl }),
-          ...(overallFeedback !== undefined && { overallFeedback }),
-        },
-      });
-      return NextResponse.json({ success: true, totalScore: finalTotalScore, isDraft: true });
-    }
-
-    await prisma.submission.update({
-      where: { id: submissionId },
-      data: {
-        totalScore: finalTotalScore,
-        gradedAt: new Date(),
-        gradedById: graderId,
-        ...(feedbackFileUrl !== undefined && { fileUrl: feedbackFileUrl }),
-        ...(overallFeedback !== undefined && { overallFeedback }),
-      },
-    });
-
-    return NextResponse.json({ success: true, totalScore: finalTotalScore });
+    const result = await saveGrades(graderId, input);
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
+    if (error instanceof GradingError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     logger.error("Grading POST error", {
       route: "/api/grading",
       error: error instanceof Error ? error.message : String(error),
@@ -240,8 +115,14 @@ export async function PUT(req: Request) {
       .map((r) => `${r.description} (${r.points} pts)`)
       .join("\n");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const imageUrls = ((answer as any).answerImageUrls as string[] | null) || [];
+    const storedImageUrls = Array.isArray(answer.answerImageUrls)
+      ? (answer.answerImageUrls as string[])
+      : [];
+    // Answer images live behind an authenticated route, so the model cannot
+    // fetch them by URL — inline them as data URIs instead.
+    const imageUrls = (await Promise.all(storedImageUrls.map(toDataUri))).filter(
+      (url): url is string => Boolean(url)
+    );
     const result = await aiAssistedGrading(
       answer.question.questionText,
       answer.question.correctAnswer || "",

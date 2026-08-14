@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Download, CalendarClock } from "lucide-react";
@@ -9,7 +10,7 @@ import { AssignmentForm, type AssignmentFormData } from "@/components/assignment
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
 
-export default function CreateAssignmentPage() {
+function CreateAssignmentPageContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [exportingLatex, setExportingLatex] = useState(false);
@@ -328,5 +329,13 @@ export default function CreateAssignmentPage() {
         />
       )}
     </>
+  );
+}
+
+export default function CreateAssignmentPage() {
+  return (
+    <StaffOnly>
+      <CreateAssignmentPageContent />
+    </StaffOnly>
   );
 }

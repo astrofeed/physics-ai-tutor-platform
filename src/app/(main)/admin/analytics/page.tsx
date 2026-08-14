@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +28,7 @@ interface AdminAnalyticsData {
   assignmentAvgs: { title: string; avgPercent: number; submissions: number }[];
 }
 
-export default function AdminAnalyticsPage() {
+function AdminAnalyticsPageContent() {
   const [data, setData] = useState<AdminAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -161,5 +162,13 @@ export default function AdminAnalyticsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function AdminAnalyticsPage() {
+  return (
+    <StaffOnly minRole="PROFESSOR">
+      <AdminAnalyticsPageContent />
+    </StaffOnly>
   );
 }

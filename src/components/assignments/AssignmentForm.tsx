@@ -25,6 +25,8 @@ import { toast } from "sonner";
 import { QuestionCard } from "./QuestionCard";
 
 export interface QuestionFormData {
+  /** Set for questions already saved in the database; absent for newly added ones. */
+  id?: string;
   questionText: string;
   questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
   options: string[];
@@ -69,6 +71,7 @@ interface AssignmentFormProps {
   renderActions: (props: {
     formData: AssignmentFormData;
     getQuestionsWithUrls: () => Promise<Array<{
+      id?: string;
       questionText: string;
       questionType: string;
       options: string[];
@@ -222,12 +225,14 @@ export function AssignmentForm({
             method: "POST",
             body: formData,
           });
-          if (uploadRes.ok) {
-            const data = await uploadRes.json();
-            imageUrl = data.url;
+          if (!uploadRes.ok) {
+            const body = await uploadRes.json().catch(() => null);
+            throw new Error(body?.error || "Failed to upload a question image");
           }
+          imageUrl = (await uploadRes.json()).url;
         }
         return {
+          ...(q.id && { id: q.id }),
           questionText: q.questionText,
           questionType: q.questionType,
           options: q.options,

@@ -10,7 +10,7 @@ const QuestionSchema = z.object({
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).nullable().optional().default([]),
   correctAnswer: z.string().max(2000).nullable().optional().default(""),
-  points: z.number().min(0).max(1000).optional().default(10),
+  points: z.number().positive("Question points must be greater than 0").max(1000).optional().default(10),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
 });
@@ -140,7 +140,8 @@ export async function GET(req: Request) {
       return {
         ...a,
         submissions: undefined,
-        myScore: mySubmission?.totalScore ?? null,
+        // Only released grades (`gradedAt` set) are shown to the student.
+        myScore: mySubmission?.gradedAt ? mySubmission.totalScore ?? null : null,
         mySubmitted: !!mySubmission,
         myGraded: mySubmission?.gradedAt !== null && mySubmission?.gradedAt !== undefined,
         myProgress,
@@ -190,6 +191,12 @@ export async function POST(req: Request) {
       }
       if (scheduledDate <= new Date()) {
         return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 });
+      }
+      if (dueDate && scheduledDate >= new Date(dueDate)) {
+        return NextResponse.json(
+          { error: "Scheduled publish time must be before the due date" },
+          { status: 400 }
+        );
       }
     }
 

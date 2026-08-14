@@ -6,8 +6,9 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
+import { useAssignmentAppeals } from "@/hooks/useAssignmentAppeals";
 import type { AssignmentDetail } from "@/types/assignment";
-import type { ExistingSubmission, GradeAppealData } from "@/types/submission";
+import type { ExistingSubmission } from "@/types/submission";
 
 interface ConfirmDialogState {
   open: boolean;
@@ -39,17 +40,6 @@ export function useAssignmentDetail(assignmentId: string) {
   // --- Submission state ---
   const [existingSubmission, setExistingSubmission] = useState<ExistingSubmission | null>(null);
 
-  // --- Appeal state ---
-  const [appeals, setAppeals] = useState<GradeAppealData[]>([]);
-  const [appealReasons, setAppealReasons] = useState<Record<string, string>>({});
-  const [appealMessages, setAppealMessages] = useState<Record<string, string>>({});
-  const [appealNewScores, setAppealNewScores] = useState<Record<string, string>>({});
-  const [appealImages, setAppealImages] = useState<Record<string, string[]>>({});
-  const [submittingAppeal, setSubmittingAppeal] = useState<string | null>(null);
-  const [expandedAppeals, setExpandedAppeals] = useState<Record<string, boolean>>({});
-  const [resolvingAppeal, setResolvingAppeal] = useState<string | null>(null);
-  const [appealFilter, setAppealFilter] = useState<"ALL" | "OPEN">("OPEN");
-
   // --- Image upload ---
   const { upload: handleUploadImage, uploading: uploadingImage } = useUploadFile();
 
@@ -70,6 +60,19 @@ export function useAssignmentDetail(assignmentId: string) {
 
   const userRole = effectiveSession.role;
 
+  const requestConfirm = useCallback(
+    (request: { title: string; description: string; onConfirm: () => void }) =>
+      setConfirmDialog({ open: true, ...request }),
+    []
+  );
+
+  const appealState = useAssignmentAppeals({
+    assignmentId,
+    requestConfirm,
+    onSubmissionRefetched: setExistingSubmission,
+  });
+  const { setAppeals, setExpandedAppeals } = appealState;
+
   // --- Auto-save ---
   const isQuizInProgress = assignment?.type === "QUIZ" && (!existingSubmission || existingSubmission.isDraft === true) && !submitted && userRole === "STUDENT";
 
@@ -77,7 +80,7 @@ export function useAssignmentDetail(assignmentId: string) {
     if (!assignment) return;
     const answerEntries = Object.entries(data).filter(([qId, v]) => v.trim() !== "" || (answerImages[qId]?.length ?? 0) > 0);
     if (answerEntries.length === 0) return;
-    await fetch("/api/submissions", {
+    const res = await fetch("/api/submissions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -90,9 +93,14 @@ export function useAssignmentDetail(assignmentId: string) {
         })),
       }),
     });
+    // Throwing keeps the indicator on "error" instead of claiming "Saved".
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || "Failed to save draft");
+    }
   }, [assignment, answerImages]);
 
-  const { status: autoSaveStatus, saveNow: flushAutoSave, markSaved } = useAutoSave({
+  const { status: autoSaveStatus, lastSavedAt, saveNow: flushAutoSave, markSaved } = useAutoSave({
     data: answers,
     saveFn: saveDraft,
     delayMs: 2000,
@@ -152,7 +160,7 @@ export function useAssignmentDetail(assignmentId: string) {
     setAnswerImages((prev) => ({ ...prev, [questionId]: images }));
   };
 
-  const doSubmit = useCallback(async () => {
+  const doSubmit: (options?: { acknowledgeLate?: boolean }) => Promise<void> = useCallback(async (options: { acknowledgeLate?: boolean } = {}) => {
     if (!assignment) return;
     setSubmitting(true);
     try {
@@ -162,10 +170,17 @@ export function useAssignmentDetail(assignmentId: string) {
         const formData = new FormData();
         formData.append("file", fileToUpload);
         const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-        if (uploadRes.ok) {
-          const data = await uploadRes.json();
-          fileUrl = data.url;
+        // Submitting after a failed upload is what made empty submissions look
+        // successful, so the upload failure aborts the whole submission.
+        if (!uploadRes.ok) {
+          const body = await uploadRes.json().catch(() => null);
+          toast.error(body?.error || "Upload failed — your work was not submitted");
+          return;
         }
+        fileUrl = (await uploadRes.json()).url;
+      } else if (assignment.type === "FILE_UPLOAD" && !existingSubmission?.fileUrl) {
+        toast.error("Attach a file before submitting this assignment");
+        return;
       }
       if (isQuizInProgress) flushAutoSave();
 
@@ -187,6 +202,7 @@ export function useAssignmentDetail(assignmentId: string) {
             }));
           })(),
           fileUrl,
+          acknowledgeLate: options.acknowledgeLate,
         }),
       });
 
@@ -200,16 +216,27 @@ export function useAssignmentDetail(assignmentId: string) {
           answers: data.submission.answers || [],
         });
         setSubmitted(true);
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Submission failed");
+        return;
       }
+
+      const data = await res.json().catch(() => null);
+      if (res.status === 409 && data?.pastDue) {
+        setConfirmDialog({
+          open: true,
+          title: "Submit late?",
+          description: `This assignment was due ${data.dueDate ? new Date(data.dueDate).toLocaleString() : "earlier"}. Your submission will be marked as late. Submit anyway?`,
+          onConfirm: () => doSubmit({ acknowledgeLate: true }),
+        });
+        return;
+      }
+      toast.error(data?.error || "Submission failed");
     } catch (err) {
       console.error(err);
+      toast.error("Submission failed");
     } finally {
       setSubmitting(false);
     }
-  }, [assignment, file, attachmentFile, answers, answerImages, isQuizInProgress, flushAutoSave]);
+  }, [assignment, file, attachmentFile, answers, answerImages, existingSubmission, isQuizInProgress, flushAutoSave]);
 
   const handleSubmit = () => {
     if (!assignment) return;
@@ -242,129 +269,39 @@ export function useAssignmentDetail(assignmentId: string) {
 
   const handleEditSubmission = async () => {
     if (!existingSubmission) return;
-    setConfirmDialog({
-      open: true,
+    const hasFile = Boolean(existingSubmission.fileUrl);
+    requestConfirm({
       title: "Edit Submission",
-      description: "This will reopen your submission for editing. You'll need to resubmit when done. Continue?",
+      description: hasFile
+        ? "This reopens your submission for editing. Your submitted file stays attached unless you upload a replacement, and you must resubmit when done. Continue?"
+        : "This will reopen your submission for editing. You'll need to resubmit when done. Continue?",
       onConfirm: async () => {
         setDeletingSubmission(true);
         try {
           const res = await fetch(`/api/submissions/${existingSubmission.id}`, { method: "PATCH" });
-          if (res.ok) {
-            const restored: Record<string, string> = {};
-            const restoredImages: Record<string, string[]> = {};
-            for (const a of existingSubmission.answers) {
-              if (a.answer) restored[a.questionId] = a.answer;
-              if (a.answerImageUrls?.length) restoredImages[a.questionId] = a.answerImageUrls;
-            }
-            setAnswers(restored);
-            setAnswerImages(restoredImages);
-            setExistingSubmission({ ...existingSubmission, isDraft: true });
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            toast.error(body?.error || "Failed to reopen submission");
+            return;
           }
+          const restored: Record<string, string> = {};
+          const restoredImages: Record<string, string[]> = {};
+          for (const a of existingSubmission.answers) {
+            if (a.answer) restored[a.questionId] = a.answer;
+            if (a.answerImageUrls?.length) restoredImages[a.questionId] = a.answerImageUrls;
+          }
+          setAnswers(restored);
+          setAnswerImages(restoredImages);
+          setExistingSubmission({ ...existingSubmission, isDraft: true });
         } catch (err) {
           console.error(err);
+          toast.error("Failed to reopen submission");
         } finally {
           setDeletingSubmission(false);
         }
       },
     });
   };
-
-  const handleSubmitAppeal = async (answerId: string) => {
-    const reason = appealReasons[answerId];
-    if (!reason?.trim()) return;
-    setSubmittingAppeal(answerId);
-    try {
-      const res = await fetch("/api/appeals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionAnswerId: answerId,
-          reason: reason.trim(),
-          imageUrls: appealImages[answerId]?.length ? appealImages[answerId] : undefined,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAppeals((prev) => [data.appeal, ...prev]);
-        setAppealReasons((prev) => ({ ...prev, [answerId]: "" }));
-        setAppealImages((prev) => ({ ...prev, [answerId]: [] }));
-        setExpandedAppeals((prev) => ({ ...prev, [data.appeal.id]: true }));
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Failed to submit appeal");
-      }
-    } catch {
-      toast.error("Failed to submit appeal");
-    } finally {
-      setSubmittingAppeal(null);
-    }
-  };
-
-  const handleAppealMessage = async (appealId: string) => {
-    const message = appealMessages[appealId];
-    if (!message?.trim()) return;
-    try {
-      const res = await fetch("/api/appeals", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appealId,
-          message: message.trim(),
-          imageUrls: appealImages[appealId]?.length ? appealImages[appealId] : undefined,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAppeals((prev) => prev.map((a) => (a.id === appealId ? data.appeal : a)));
-        setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
-        setAppealImages((prev) => ({ ...prev, [appealId]: [] }));
-      }
-    } catch {
-      toast.error("Failed to send message");
-    }
-  };
-
-  const handleResolveAppeal = (appealId: string, status: "RESOLVED" | "REJECTED" | "OPEN") => {
-    const action = status === "RESOLVED" ? "resolve" : status === "REJECTED" ? "reject" : "reopen";
-    setConfirmDialog({
-      open: true,
-      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Appeal`,
-      description: `Are you sure you want to ${action} this appeal?`,
-      onConfirm: async () => {
-        const newScoreStr = appealNewScores[appealId];
-        const newScore = status === "RESOLVED" && newScoreStr ? parseFloat(newScoreStr) : undefined;
-        const message = appealMessages[appealId];
-        setResolvingAppeal(appealId);
-        try {
-          const res = await fetch("/api/appeals", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ appealId, status, newScore, message: message?.trim() || undefined }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setAppeals((prev) => prev.map((a) => (a.id === appealId ? data.appeal : a)));
-            setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
-            setAppealNewScores((prev) => ({ ...prev, [appealId]: "" }));
-            if (status === "RESOLVED" && newScore !== undefined) {
-              fetch(`/api/submissions?assignmentId=${assignmentId}`)
-                .then((r) => r.json())
-                .then((d) => { if (d.submission) setExistingSubmission(d.submission); })
-                .catch((err) => console.error("[submission] Failed to refresh submission:", err));
-            }
-          }
-        } catch {
-          toast.error("Failed to update appeal");
-        } finally {
-          setResolvingAppeal(null);
-        }
-      },
-    });
-  };
-
-  const getAppealForAnswer = (answerId: string) =>
-    appeals.find((a) => a.submissionAnswerId === answerId);
 
   const handlePublish = () => {
     if (!assignment) return;
@@ -389,11 +326,16 @@ export function useAssignmentDetail(assignmentId: string) {
   const handleToggleLock = async () => {
     if (!assignment) return;
     try {
-      await fetch(`/api/assignments/${assignment.id}`, {
+      const res = await fetch(`/api/assignments/${assignment.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lockAfterSubmit: !assignment.lockAfterSubmit }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to toggle lock setting");
+        return;
+      }
       setAssignment({ ...assignment, lockAfterSubmit: !assignment.lockAfterSubmit });
     } catch {
       toast.error("Failed to toggle lock setting");
@@ -402,10 +344,9 @@ export function useAssignmentDetail(assignmentId: string) {
 
   const handleDelete = () => {
     if (!assignment) return;
-    setConfirmDialog({
-      open: true,
+    requestConfirm({
       title: "Delete Assignment",
-      description: "Are you sure you want to delete this assignment? This will also delete all submissions and cannot be undone.",
+      description: "This removes the assignment for everyone and hides it from students' grades. Submissions are retained in the database for records, and staff can no longer open the assignment page. Continue?",
       onConfirm: async () => {
         setDeleting(true);
         try {
@@ -454,12 +395,9 @@ export function useAssignmentDetail(assignmentId: string) {
     submitting, deleting, deletingSubmission, existingSubmission,
     answers, answerImages, file, setFile, attachmentFile, setAttachmentFile,
     // Auto-save
-    autoSaveStatus, draftRestored, setDraftRestored, isQuizInProgress,
+    autoSaveStatus, lastSavedAt, draftRestored, setDraftRestored, isQuizInProgress,
     // Appeals
-    appeals, appealReasons, setAppealReasons, appealMessages, setAppealMessages,
-    appealNewScores, setAppealNewScores, appealImages, setAppealImages,
-    submittingAppeal, expandedAppeals, setExpandedAppeals, resolvingAppeal,
-    appealFilter, setAppealFilter,
+    ...appealState,
     // Image upload
     handleUploadImage, uploadingImage,
     // Dialogs
@@ -473,8 +411,6 @@ export function useAssignmentDetail(assignmentId: string) {
     // Handlers
     handleAnswerChange, handleAnswerImagesChange,
     handleSubmit, handleEditSubmission,
-    handleSubmitAppeal, handleAppealMessage, handleResolveAppeal,
-    getAppealForAnswer,
     handlePublish, handleSchedule, handleToggleLock, handleDelete, handleExportLatex,
   };
 }

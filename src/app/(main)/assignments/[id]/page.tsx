@@ -172,7 +172,12 @@ export default function AssignmentDetailPage({
       )}
 
       {assignment.type === "FILE_UPLOAD" && isStudentDraft && (
-        <FileUploadSection variant="main" file={s.file} onFileChange={s.setFile} />
+        <FileUploadSection
+          variant="main"
+          file={s.file}
+          onFileChange={s.setFile}
+          currentFileUrl={s.existingSubmission?.fileUrl ?? null}
+        />
       )}
 
       {isStudentDraft && (
@@ -197,7 +202,7 @@ export default function AssignmentDetailPage({
                 </span>
               );
             })()}
-            <SaveStatusIndicator status={s.autoSaveStatus} />
+            <SaveStatusIndicator status={s.autoSaveStatus} lastSavedAt={s.lastSavedAt} />
             <Button onClick={s.handleSubmit} disabled={s.submitting} className="gap-2">
               {s.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Submit

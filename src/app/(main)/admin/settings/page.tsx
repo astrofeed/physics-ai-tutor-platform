@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState } from "react";
 import { Loader2, Save, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function AdminSettingsPage() {
+function AdminSettingsPageContent() {
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("gpt-5.2");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -156,5 +157,13 @@ export default function AdminSettingsPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function AdminSettingsPage() {
+  return (
+    <StaffOnly minRole="PROFESSOR">
+      <AdminSettingsPageContent />
+    </StaffOnly>
   );
 }

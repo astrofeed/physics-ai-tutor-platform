@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useSearchParams } from "next/navigation";
@@ -35,6 +36,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -116,7 +118,7 @@ function isValidGradingDraft(data: unknown): data is GradingDraftData {
   return true;
 }
 
-export default function GradingPage() {
+function GradingPageContent() {
   useTrackTime("GRADING");
   const searchParams = useSearchParams();
   const initialAssignmentId = searchParams.get("assignmentId");
@@ -226,7 +228,7 @@ export default function GradingPage() {
     if (!selectedSubmission) return;
     const gradeEntries = Object.entries(data);
     if (gradeEntries.length === 0) return;
-    await fetch("/api/grading", {
+    const res = await fetch("/api/grading", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -239,9 +241,13 @@ export default function GradingPage() {
         })),
       }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || "Failed to save grading draft");
+    }
   }, [selectedSubmission]);
 
-  const { status: gradingAutoSaveStatus, saveNow: flushGradingSave } = useAutoSave({
+  const { status: gradingAutoSaveStatus, lastSavedAt: gradingAutoSavedAt, saveNow: flushGradingSave } = useAutoSave({
     data: grades,
     saveFn: saveGradingDraft,
     delayMs: 5000,
@@ -270,7 +276,10 @@ export default function GradingPage() {
         setAssignmentTotalCount(data.totalCount ?? 0);
         if (!silent) setLoading(false);
       })
-      .catch(() => { if (!silent) setLoading(false); });
+      .catch((err) => {
+        logger.error("Failed to load grading assignment list", { error: String(err) });
+        if (!silent) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -288,7 +297,10 @@ export default function GradingPage() {
         setSubmissions(data.submissions || []);
         setLoadingSubmissions(false);
       })
-      .catch(() => setLoadingSubmissions(false));
+      .catch((err) => {
+        logger.error("Failed to load submissions for grading", { assignmentId, error: String(err) });
+        setLoadingSubmissions(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -382,9 +394,13 @@ export default function GradingPage() {
             feedback: data.suggestedFeedback,
           },
         }));
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "AI suggestion failed. Your score and feedback are unchanged.");
       }
     } catch (err) {
-      console.error(err);
+      logger.error("AI grading suggestion request failed", { answerId, error: String(err) });
+      toast.error("AI suggestion failed. Your score and feedback are unchanged.");
     } finally {
       setAiLoading(null);
     }
@@ -487,9 +503,16 @@ export default function GradingPage() {
           prev ? { ...prev, totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" } : prev
         );
         fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to save grades");
       }
     } catch (err) {
-      console.error(err);
+      logger.error("Save grades request failed", {
+        submissionId: selectedSubmission.id,
+        error: String(err),
+      });
+      toast.error("Failed to save grades");
     } finally {
       setSaving(false);
     }
@@ -513,8 +536,12 @@ export default function GradingPage() {
         updateAppealInSubmissions(appealId, data.appeal);
         setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
         setAppealImages((prev) => ({ ...prev, [appealId]: [] }));
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to send message");
       }
-    } catch {
+    } catch (err) {
+      logger.error("Appeal message request failed", { appealId, error: String(err) });
       toast.error("Failed to send message");
     }
   };
@@ -554,8 +581,12 @@ export default function GradingPage() {
           fetchSubmissions(selectedAssignmentId);
         }
         fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to update appeal");
       }
-    } catch {
+    } catch (err) {
+      logger.error("Appeal decision request failed", { appealId, status, error: String(err) });
       toast.error("Failed to update appeal");
     } finally {
       setResolvingAppeal(null);
@@ -832,7 +863,7 @@ export default function GradingPage() {
                         </SelectContent>
                       </Select>
                     )}
-                    <SaveStatusIndicator status={gradingAutoSaveStatus} />
+                    <SaveStatusIndicator status={gradingAutoSaveStatus} lastSavedAt={gradingAutoSavedAt} />
                     {selectedSubmission.gradedAt ? (
                       <Button
                         onClick={() => setShowUnfinalizeConfirm(true)}
@@ -1028,7 +1059,8 @@ export default function GradingPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unfinalize Submission</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark this submission as ungraded. Continue?
+              This clears the released score and gradedAt, so the student stops seeing a
+              grade for this submission until you finalize it again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1047,7 +1079,16 @@ export default function GradingPage() {
                   setSubmissions((prev) => prev.map((s) => s.id !== selectedSubmission.id ? s : { ...s, totalScore: null, gradedAt: null, gradedByName: null }));
                   setSelectedSubmission((prev) => prev ? { ...prev, totalScore: null, gradedAt: null, gradedByName: null } : prev);
                   fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+                } else {
+                  const body = await res.json().catch(() => null);
+                  toast.error(body?.error || "Failed to unfinalize this submission");
                 }
+              } catch (err) {
+                logger.error("Ungrade request failed", {
+                  submissionId: selectedSubmission.id,
+                  error: String(err),
+                });
+                toast.error("Failed to unfinalize this submission");
               } finally { setSaving(false); }
             }} className="bg-amber-600 hover:bg-amber-700 text-white">
               Unfinalize
@@ -1056,5 +1097,13 @@ export default function GradingPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function GradingPage() {
+  return (
+    <StaffOnly>
+      <GradingPageContent />
+    </StaffOnly>
   );
 }

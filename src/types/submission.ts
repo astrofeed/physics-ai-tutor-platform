@@ -23,6 +23,9 @@ export interface ExistingSubmission {
   fileUrl: string | null;
   submittedAt: string;
   totalScore: number | null;
+  gradedAt?: string | null;
+  /** Recorded when the submission was made; not recomputed from the current due date. */
+  isLate?: boolean;
   isDraft?: boolean;
   overallFeedback?: string | null;
   answers: SubmissionAnswer[];

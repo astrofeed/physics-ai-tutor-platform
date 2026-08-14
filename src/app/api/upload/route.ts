@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
+import { storeUploadedFile, visibilityForUploader } from "@/lib/services/file-storage";
+import { logger } from "@/lib/logger";
+import {
+  ALLOWED_UPLOAD_EXTENSIONS,
+  ALLOWED_UPLOAD_MIME_TYPES,
+  MAX_UPLOAD_BYTES,
+} from "@/lib/upload-constraints";
 
 export async function POST(req: Request) {
   try {
@@ -18,59 +24,37 @@ export async function POST(req: Request) {
     // For production hardening, consider using presigned upload URLs (e.g., Vercel Blob
     // client uploads or S3 presigned URLs) so the server never buffers the full file.
     // This is a known limitation; the current check still prevents storage of oversized files.
-    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json({ error: "File exceeds the 20 MB size limit" }, { status: 413 });
     }
 
-    // Validate file type
-    const ALLOWED_MIME_TYPES = [
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-      "image/jpg",
-      "image/gif",
-      "image/webp",
-    ];
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    if (!ALLOWED_UPLOAD_MIME_TYPES.includes(file.type)) {
       return NextResponse.json(
         { error: "Invalid file type. Allowed: PDF, PNG, JPEG, GIF, WebP" },
         { status: 400 }
       );
     }
 
-    // Validate file extension
     const ext = file.name.split(".").pop()?.toLowerCase();
-    const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "gif", "webp"];
-    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
       return NextResponse.json(
-        { error: "Invalid file extension" },
+        { error: "Invalid file extension. Allowed: .pdf, .png, .jpg, .jpeg, .gif, .webp" },
         { status: 400 }
       );
     }
 
-    const uniqueName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+    const stored = await storeUploadedFile({
+      file,
+      userId: auth.user.id,
+      visibility: visibilityForUploader(auth.user.role),
+    });
 
-    // Use Vercel Blob in production, fall back to local storage in dev
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const blob = await put(uniqueName, file, { access: "public" });
-      return NextResponse.json({ url: blob.url });
-    }
-
-    // Local fallback: save to public/uploads/
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-    const filePath = path.join(uploadsDir, uniqueName);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(filePath, buffer);
-    return NextResponse.json({ url: `/uploads/${uniqueName}` });
+    return NextResponse.json({ url: stored.url });
   } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json(
-      { error: "Upload failed" },
-      { status: 500 }
-    );
+    logger.error("Upload failed", {
+      route: "/api/upload",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

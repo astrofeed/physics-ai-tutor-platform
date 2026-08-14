@@ -1,14 +1,30 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AssignmentForm, type AssignmentFormData, type QuestionFormData } from "@/components/assignments/AssignmentForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
-export default function EditAssignmentPage({
+interface DestructiveSave {
+  questions: Array<{ id: string; questionText: string; answerCount: number }>;
+  confirm: () => Promise<void>;
+}
+
+function EditAssignmentPageContent({
   params,
 }: {
   params: { id: string };
@@ -18,13 +34,17 @@ export default function EditAssignmentPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exportingLatex, setExportingLatex] = useState(false);
+  const [pendingDestructive, setPendingDestructive] = useState<DestructiveSave | null>(null);
 
   useEffect(() => {
     fetch(`/api/assignments/${params.id}`)
       .then((res) => res.json())
       .then((data) => {
         const a = data.assignment;
-        if (!a) return;
+        if (!a) {
+          toast.error(data?.error || "Failed to load assignment");
+          return;
+        }
         setInitialData({
           title: a.title,
           description: a.description || "",
@@ -35,6 +55,7 @@ export default function EditAssignmentPage({
           pdfUrl: a.pdfUrl || null,
           questions: (a.questions || []).map(
             (q: {
+              id: string;
               questionText: string;
               questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
               options: string[] | null;
@@ -43,6 +64,7 @@ export default function EditAssignmentPage({
               diagram?: { type: "svg" | "mermaid"; content: string } | null;
               imageUrl?: string | null;
             }) => ({
+              id: q.id,
               questionText: q.questionText,
               questionType: q.questionType,
               options: q.options || ["", "", "", ""],
@@ -55,13 +77,18 @@ export default function EditAssignmentPage({
         });
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error("[assignment-edit] Failed to load assignment:", err);
+        toast.error("Failed to load assignment");
+        setLoading(false);
+      });
   }, [params.id]);
 
   const handleSave = async (
     formData: AssignmentFormData,
     getQuestionsWithUrls: () => Promise<
       Array<{
+        id?: string;
         questionText: string;
         questionType: string;
         options: string[];
@@ -79,24 +106,54 @@ export default function EditAssignmentPage({
     try {
       const questionsWithUrls = await getQuestionsWithUrls();
 
-      await fetch(`/api/assignments/${params.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          dueDate: formData.dueDate || null,
-          totalPoints: formData.totalPoints,
-          pdfUrl: formData.pdfUrl || null,
-          lockAfterSubmit: formData.lockAfterSubmit,
-          published: publish ? true : undefined,
-          questions: formData.type === "QUIZ" ? questionsWithUrls : [],
-        }),
-      });
+      const save = (confirmDestructive: boolean) =>
+        fetch(`/api/assignments/${params.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: formData.title,
+            description: formData.description,
+            dueDate: formData.dueDate || null,
+            totalPoints: formData.totalPoints,
+            pdfUrl: formData.pdfUrl || null,
+            lockAfterSubmit: formData.lockAfterSubmit,
+            published: publish ? true : undefined,
+            questions: formData.type === "QUIZ" ? questionsWithUrls : undefined,
+            ...(confirmDestructive && { confirmDestructive: true }),
+          }),
+        });
+
+      const res = await save(false);
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok && body?.requiresConfirmation) {
+        setPendingDestructive({
+          questions: body.questionsWithAnswers ?? [],
+          confirm: async () => {
+            setPendingDestructive(null);
+            setSaving(true);
+            const retry = await save(true);
+            if (!retry.ok) {
+              const retryBody = await retry.json().catch(() => null);
+              toast.error(retryBody?.error || "Failed to save assignment");
+              setSaving(false);
+              return;
+            }
+            router.push(`/assignments/${params.id}`);
+          },
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        toast.error(body?.error || "Failed to save assignment");
+        return;
+      }
 
       router.push(`/assignments/${params.id}`);
     } catch (err) {
-      console.error(err);
+      console.error("[assignment-edit] Save failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to save assignment");
     } finally {
       setSaving(false);
     }
@@ -107,6 +164,7 @@ export default function EditAssignmentPage({
   }
 
   return (
+    <>
     <AssignmentForm
       mode="edit"
       initialData={initialData ?? undefined}
@@ -174,5 +232,41 @@ export default function EditAssignmentPage({
         </div>
       )}
     />
+
+    <AlertDialog
+      open={pendingDestructive !== null}
+      onOpenChange={(open) => { if (!open) setPendingDestructive(null); }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete answered questions?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingDestructive?.questions.length} question(s) you removed already
+            have student answers
+            {pendingDestructive
+              ? ` (${pendingDestructive.questions.reduce((n, q) => n + q.answerCount, 0)} answers)`
+              : ""}
+            . Saving deletes those answers, their grades, and any appeals on them.
+            This cannot be undone. Cancel and re-add the questions if you only
+            meant to reword them.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => pendingDestructive?.confirm()}>
+            Delete answers and save
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
+  );
+}
+
+export default function EditAssignmentPage(props: React.ComponentProps<typeof EditAssignmentPageContent>) {
+  return (
+    <StaffOnly>
+      <EditAssignmentPageContent {...props} />
+    </StaffOnly>
   );
 }

@@ -62,6 +62,7 @@ model User {
   createdScheduledEmails ScheduledEmail[]
   passwordResetTokens    PasswordResetToken[]
   uploadEvents           UploadEvent[]
+  uploadedFiles          UploadedFile[]
 }
 
 model Account {
@@ -194,6 +195,31 @@ model UploadEvent {
   @@index([userId, kind, createdAt])
 }
 
+/// One row per file accepted by `/api/upload`. Files are never served as public
+/// static assets: clients only ever see `/api/files/<id>`, which checks access
+/// before streaming the bytes. `visibility` is `PUBLIC` for staff-authored
+/// material (question images, feedback images) and `RESTRICTED` for anything a
+/// student uploads, which only the uploader and course staff may read.
+model UploadedFile {
+  id          String    @id @default(cuid())
+  userId      String
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  /// Local path relative to the private uploads dir, when stored on disk.
+  storagePath String?
+  /// Remote object URL (e.g. Vercel Blob), when stored off-box.
+  storageUrl  String?
+  visibility  String    @default("RESTRICTED") // "PUBLIC" | "RESTRICTED"
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 /// Unauthenticated auth attempts per client IP (hashed), used to rate limit
 /// signups and verification-email resends.
 model AuthAttempt {
@@ -272,6 +298,13 @@ model Submission {
   isDeleted        Boolean   @default(false)
   deletedAt        DateTime?
   overallFeedback  String?   @db.Text
+  /// Lateness is decided once, at submit time, against the deadline then in
+  /// force — later due-date edits must not re-label existing submissions.
+  isLate               Boolean   @default(false)
+  dueDateAtSubmission  DateTime?
+  /// In-progress grading total, visible to staff only. `totalScore` is written
+  /// once grading is finalized, which is what students are ever shown.
+  draftTotalScore      Float?
 
   assignment Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
