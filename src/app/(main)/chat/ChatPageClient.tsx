@@ -31,6 +31,7 @@ import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
 import { useConversationFolders } from "@/hooks/use-conversation-folders";
 import { useExamMode } from "@/hooks/use-exam-mode";
+import { useStickyScroll } from "@/hooks/use-sticky-scroll";
 import type { Conversation, ConversationFolder } from "@/components/chat/types";
 
 interface ChatPageClientProps {
@@ -116,14 +117,11 @@ export default function ChatPageClient({
     });
   }, []);
 
+  const { isPinned, scrollToBottom } = useStickyScroll(scrollContainerRef, messages);
+
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-    if (isNearBottom) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [messages]);
+    scrollToBottom("auto");
+  }, [activeConversationId, scrollToBottom]);
 
   const loadConversation = useCallback(async (convId: string) => {
     setActiveConversationId(convId);
@@ -180,8 +178,9 @@ export default function ChatPageClient({
 
     setInput("");
     clearAttachments();
+    scrollToBottom();
     await sendMessage(messageText, uploaded.imageUrls, uploaded.documents);
-  }, [attachments.length, uploadAll, clearAttachments, sendMessage]);
+  }, [attachments.length, uploadAll, clearAttachments, sendMessage, scrollToBottom]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,6 +388,8 @@ export default function ChatPageClient({
           copiedMessageId={copiedMessageId}
           scrollContainerRef={scrollContainerRef}
           messagesEndRef={messagesEndRef}
+          showJumpToLatest={!isPinned && messages.length > 0}
+          onJumpToLatest={scrollToBottom}
           onSuggestedTopic={handleSuggestedTopic}
           onCopyMessage={copyMessage}
         />

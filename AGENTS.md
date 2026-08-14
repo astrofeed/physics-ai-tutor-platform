@@ -1207,6 +1207,7 @@ OpenAI/Anthropic clients in `src/lib/ai.ts` are created lazily via `getOpenAI()`
 - DeepSeek streams through `streamDeepSeek` (Chat Completions), which adapts chunks to the OpenAI Responses event shapes the route consumes; `reasoning_content` deltas map to `thinking`. DeepSeek has no image input or web search — image attachments are ignored and no citations are produced while it is active.
 - Web search runs via OpenAI's `web_search_preview` tool. `url_citation` annotations are collected during the stream and appended to the answer as a markdown `**Sources:**` list, so citations persist in the DB and render as links.
 - Conversation folders: users can organize chats into folders (`ConversationFolder` model; `Conversation.folderId` nullable, `onDelete: SetNull` so deleting a folder keeps its conversations). CRUD in `src/lib/services/conversation-folder-service.ts` via `/api/folders` + `/api/folders/[id]`; moving a chat is `PATCH /api/conversations/[id]` with `{ folderId }`. Client state in `src/hooks/use-conversation-folders.ts`; sidebar UI in `ChatSidebar.tsx` composing `FolderSection.tsx` / `ConversationItem.tsx`.
+- Scroll position is owned by `useStickyScroll` (`src/hooks/use-sticky-scroll.ts`): the reader counts as pinned until they scroll more than 80px above the bottom, new content only follows while pinned, and a `ResizeObserver` re-pins after markdown/KaTeX/images change the content height. Pinned state is never measured on mount, so opening a conversation always lands on the newest message. When not pinned, `ChatMessageList` shows a "Jump to latest" button (absolutely positioned over the scroll container, not inside it — a sticky child inside the message list renders behind the bubbles). Never restore the old "scroll to bottom on every `messages` change" effect; it fights the reader.
 - Conversation export: `src/components/chat/export-conversation.ts` (Markdown download; PDF via `window.print()` scoped to `#chat-print-area` by `@media print` rules in `globals.css`).
 
 ## Design System
@@ -1308,6 +1309,8 @@ e2e/
 - **TA: grading page shows appeal and feedback content** — Verifies appeal section visible
 - **TA: can attach images to grading feedback** — Uploads image to feedback area
 - **TA: can attach images to appeal reply** — Uploads image to appeal reply area
+
+**`chat-scroll.spec.ts`** — 1 test: opening a long conversation lands on the newest message, scrolling up reveals "Jump to latest", and the button returns the reader to the bottom. Seeds and removes its own 40-message conversation via Prisma.
 
 ### Writing New Tests
 
