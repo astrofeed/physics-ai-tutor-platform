@@ -280,7 +280,9 @@ function GradingPageContent() {
     data: grades,
     saveFn: saveGradingDraft,
     delayMs: 5000,
-    enabled: !!selectedSubmission,
+    // A finalized submission is edited through Unfinalize, so drafts must not drift
+    // its per-answer scores away from the released total.
+    enabled: !!selectedSubmission && !selectedSubmission.gradedAt,
   });
 
   // Fetch assignment list with pagination and search
