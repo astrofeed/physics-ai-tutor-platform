@@ -3,7 +3,9 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
+import type { Role } from "@prisma/client";
 import { prisma } from "./prisma";
+import { isAllowedGoogleEmail, isGoogleAuthConfigured } from "./google-auth";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -14,10 +16,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: "/login",
   },
   providers: [
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(isGoogleAuthConfigured
       ? [GoogleProvider({
-          clientId: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          // Staff and students who already registered with a password use the
+          // same school address; linking is safe because Google proves the
+          // address and the domain allow-list is enforced in `signIn` below.
+          allowDangerousEmailAccountLinking: true,
         })]
       : []),
     CredentialsProvider({
@@ -66,12 +72,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
-        const email = user.email;
-        if (!email?.endsWith("@gapp.nthu.edu.tw")) {
-          return false;
-        }
+        if (!isAllowedGoogleEmail(user.email)) return false;
+        if (profile?.email_verified === false) return false;
       }
       // Block banned or soft-deleted users from signing in
       if (user.email) {
@@ -89,8 +93,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Credentials provider doesn't go through the adapter, so skip DB lookup for it
       if (account?.provider === "credentials") {
         token.id = user.id;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.role = (user as any).role;
+        token.role = user.role;
         return token;
       }
       if (user) {
@@ -107,8 +110,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session.user as any).role = token.role;
+        session.user.role = token.role as Role;
       }
       return session;
     },
