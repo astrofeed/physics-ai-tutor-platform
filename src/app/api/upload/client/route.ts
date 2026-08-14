@@ -25,27 +25,31 @@ function parseClientPayload(clientPayload: string | null) {
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
 
+  // Access is checked before `handleUpload`, which turns anything thrown inside
+  // it into a 400 and would hide the real status from the client.
+  const session = await getEffectiveSession();
+  const account = session?.user?.id
+    ? await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { id: true, isBanned: true, emailVerified: true },
+      })
+    : null;
+
+  if (!account || account.isBanned) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!account.emailVerified) {
+    return NextResponse.json(
+      { error: "Please verify your email address before uploading files" },
+      { status: 403 }
+    );
+  }
+
   try {
     const jsonResponse = await handleUpload({
       body,
       request,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        const session = await getEffectiveSession();
-        if (!session?.user?.id) {
-          throw new Error("Unauthorized");
-        }
-
-        const account = await prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: { isBanned: true, emailVerified: true },
-        });
-        if (!account || account.isBanned) {
-          throw new Error("Unauthorized");
-        }
-        if (!account.emailVerified) {
-          throw new Error("Please verify your email address before uploading files");
-        }
-
         const payload = parseClientPayload(clientPayload);
         if (!payload) {
           throw new Error("Upload metadata is missing or invalid");
@@ -60,7 +64,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error(`"${filename}" exceeds the ${formatBytes(spec.maxBytes)} limit for this file type`);
         }
 
-        const quota = await checkUploadQuota(session.user.id, spec.kind, sizeBytes);
+        const quota = await checkUploadQuota(account.id, spec.kind, sizeBytes);
         if (!quota.allowed) {
           throw new Error(quota.error ?? "Upload quota exceeded");
         }
@@ -68,7 +72,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // The declared size is what the quota was charged for, so make it the
         // hard ceiling for the token: a larger file is rejected by Blob itself.
         await recordUpload({
-          userId: session.user.id,
+          userId: account.id,
           kind: spec.kind,
           mimeType: spec.mimeType,
           filename: filename.slice(0, 300),
