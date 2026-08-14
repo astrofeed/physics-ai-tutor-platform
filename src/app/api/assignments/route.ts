@@ -4,6 +4,10 @@ import { Prisma } from "@prisma/client";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
+import {
+  AssignmentError,
+  normalizeAnswerKeys,
+} from "@/lib/services/assignment-service";
 
 const QuestionSchema = z.object({
   questionText: z.string().min(1).max(10000),
@@ -189,7 +193,14 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const { title, description, dueDate, type, totalPoints, questions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const questions = normalizeAnswerKeys(
+      submittedQuestions.map((q) => ({
+        ...q,
+        options: q.options ?? undefined,
+        correctAnswer: q.correctAnswer ?? undefined,
+      }))
+    );
 
     // Validate scheduledPublishAt if provided
     if (scheduledPublishAt) {
@@ -214,7 +225,10 @@ export async function POST(req: Request) {
         description,
         dueDate: dueDate ? new Date(dueDate) : null,
         type,
-        totalPoints,
+        // Questions are authoritative when present, so the two can never disagree.
+        totalPoints: questions.length
+          ? questions.reduce((sum, q) => sum + (q.points ?? 10), 0)
+          : totalPoints,
         pdfUrl: pdfUrl || null,
         lockAfterSubmit,
         scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : null,
@@ -242,6 +256,10 @@ export async function POST(req: Request) {
       route: "/api/assignments",
       error: error instanceof Error ? error.message : String(error),
     });
+
+    if (error instanceof AssignmentError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
 
     if (error instanceof SyntaxError) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });

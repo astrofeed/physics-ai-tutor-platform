@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteFileByUrl } from "@/lib/services/file-storage";
+import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
 
 export interface QuestionInput {
   id?: string;
@@ -21,6 +22,27 @@ export class AssignmentError extends Error {
   ) {
     super(message);
   }
+}
+
+/**
+ * Rewrites MC answer keys to the option letter students actually submit, so a key
+ * entered as option text (or as "2") cannot silently score everyone zero.
+ */
+export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[] {
+  return questions.map((question, index) => {
+    if (question.questionType !== "MC") return question;
+
+    const options = question.options ?? [];
+    const letter = normalizeMcAnswerKey(question.correctAnswer ?? "", options);
+    if (!letter) {
+      throw new AssignmentError(
+        `Question ${index + 1}: the correct answer must be one of its options (a letter such as "A", or the option's text).`,
+        400
+      );
+    }
+
+    return { ...question, correctAnswer: letter };
+  });
 }
 
 const questionFields = (q: QuestionInput, order: number) => ({
@@ -77,9 +99,11 @@ async function recomputeSubmissionTotals(
  */
 export async function syncQuestions(
   assignmentId: string,
-  questions: QuestionInput[],
+  submitted: QuestionInput[],
   options: { confirmDestructive?: boolean } = {}
 ) {
+  const questions = normalizeAnswerKeys(submitted);
+
   const existing = await prisma.assignmentQuestion.findMany({
     where: { assignmentId },
     select: {
