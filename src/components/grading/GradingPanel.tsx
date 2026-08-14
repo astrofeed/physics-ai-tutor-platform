@@ -6,6 +6,9 @@ import {
   Sparkles,
   MessageSquare,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +31,9 @@ interface GradingPanelProps {
   onToggleConfirm: (answerId: string) => void;
   aiLoading: string | null;
   onAIGrade: (answerId: string) => void;
+  /** Stored AI recommendations, keyed by answer id. */
+  suggestions: Record<string, { score: number; feedback: string }>;
+  onApplySuggestion: (answerId: string) => void;
   feedbackImages: Record<string, string[]>;
   onFeedbackImagesChange: (answerId: string, images: string[]) => void;
   onUploadImage: (file: File) => Promise<string | null>;
@@ -49,6 +55,63 @@ interface GradingPanelProps {
   onSendAppealMessage: (appealId: string) => void;
 }
 
+function ReferenceAnswer({ answer }: { answer: string }) {
+  const [visible, setVisible] = React.useState(false);
+  return (
+    <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+      <div className="flex items-center gap-1.5">
+        <KeyRound className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          Reference answer
+        </p>
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline"
+        >
+          {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {visible ? "Hide" : "Show"}
+        </button>
+      </div>
+      {visible && (
+        <MarkdownContent
+          content={answer}
+          className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
+        />
+      )}
+    </div>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+  maxPoints,
+  onApply,
+}: {
+  suggestion: { score: number; feedback: string };
+  maxPoints: number;
+  onApply: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30 p-4 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">
+          AI suggestion: {suggestion.score}/{maxPoints} — applying it only fills the score box; the
+          student sees nothing until you finalize
+        </p>
+        <Button size="sm" variant="outline" onClick={onApply} className="rounded-lg">
+          Apply
+        </Button>
+      </div>
+      {suggestion.feedback && (
+        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+          {suggestion.feedback}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function GradingPanel({
   answers,
   grades,
@@ -57,6 +120,8 @@ export function GradingPanel({
   onToggleConfirm,
   aiLoading,
   onAIGrade,
+  suggestions,
+  onApplySuggestion,
   feedbackImages,
   onFeedbackImagesChange,
   onUploadImage,
@@ -73,6 +138,32 @@ export function GradingPanel({
   onResolveAppeal,
   onSendAppealMessage,
 }: GradingPanelProps) {
+  /**
+   * Enter in a score box confirms that question and moves to the next one, so a
+   * submission can be graded without reaching for the mouse; Alt+F fills the max.
+   */
+  const handleScoreKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    answer: SubmissionAnswer,
+    index: number
+  ) => {
+    if (event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      onGradeChange(answer.id, "score", answer.maxPoints);
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (!answer.autoGraded && !confirmedAnswers.has(answer.id)) {
+      onToggleConfirm(answer.id);
+    }
+    const next = document.querySelector<HTMLInputElement>(
+      `[data-score-input="${index + 1}"]`
+    );
+    next?.focus();
+    next?.select();
+  };
+
   return (
     <>
       {answers.map((answer, index) => (
@@ -95,7 +186,7 @@ export function GradingPanel({
             </div>
             {answer.autoGraded && (
               <Badge className="bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs">
-                Auto-graded
+                Auto-graded — edit the score to override
               </Badge>
             )}
           </div>
@@ -163,11 +254,12 @@ export function GradingPanel({
                     type="number"
                     min={0}
                     max={answer.maxPoints}
+                    data-score-input={index}
                     value={grades[answer.id]?.score || 0}
                     onChange={(e) =>
                       onGradeChange(answer.id, "score", Number(e.target.value))
                     }
-                    disabled={answer.autoGraded}
+                    onKeyDown={(e) => handleScoreKeyDown(e, answer, index)}
                     className="font-semibold text-center"
                   />
                   {!answer.autoGraded && (
@@ -210,32 +302,38 @@ export function GradingPanel({
               )}
             </div>
 
-            {/* Feedback */}
-            {!answer.autoGraded && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Feedback
-                </label>
-                <Textarea
-                  value={grades[answer.id]?.feedback || ""}
-                  onChange={(e) =>
-                    onGradeChange(answer.id, "feedback", e.target.value)
-                  }
-                  placeholder="Add feedback for the student..."
-                  rows={2}
-                  className="resize-none"
-                />
-                <ImageUpload
-                  images={feedbackImages[answer.id] || []}
-                  onImagesChange={(imgs) =>
-                    onFeedbackImagesChange(answer.id, imgs)
-                  }
-                  onUpload={onUploadImage}
-                  uploading={uploadingImage}
-                  maxImages={3}
-                />
-              </div>
+            {answer.referenceAnswer && (
+              <ReferenceAnswer answer={answer.referenceAnswer} />
             )}
+
+            {suggestions[answer.id] && (
+              <SuggestionCard
+                suggestion={suggestions[answer.id]}
+                maxPoints={answer.maxPoints}
+                onApply={() => onApplySuggestion(answer.id)}
+              />
+            )}
+
+            {/* Feedback */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                Feedback
+              </label>
+              <Textarea
+                value={grades[answer.id]?.feedback || ""}
+                onChange={(e) => onGradeChange(answer.id, "feedback", e.target.value)}
+                placeholder="Add feedback for the student..."
+                rows={2}
+                className="resize-none"
+              />
+              <ImageUpload
+                images={feedbackImages[answer.id] || []}
+                onImagesChange={(imgs) => onFeedbackImagesChange(answer.id, imgs)}
+                onUpload={onUploadImage}
+                uploading={uploadingImage}
+                maxImages={3}
+              />
+            </div>
 
             {/* Appeals for this question */}
             {answer.appeals.length > 0 && (

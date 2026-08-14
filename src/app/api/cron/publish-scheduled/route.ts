@@ -57,7 +57,7 @@ export async function GET(req: Request) {
         if (assignment.notifyOnPublish) {
           try {
             const students = await prisma.user.findMany({
-              where: { role: "STUDENT", isBanned: false },
+              where: { role: "STUDENT", isBanned: false, isDeleted: false },
               select: { id: true },
             });
 
@@ -89,7 +89,7 @@ export async function GET(req: Request) {
                   title: `New Assignment: ${assignment.title}`,
                   message: `A new assignment "${assignment.title}" has been published.${assignment.dueDate ? ` Due: ${dueDateStr}` : ""}`,
                   createdById: assignment.createdById,
-                  isGlobal: true,
+                  audienceRoles: ["STUDENT"],
                 },
               });
             }

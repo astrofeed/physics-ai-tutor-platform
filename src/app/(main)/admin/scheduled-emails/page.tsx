@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import {
   CalendarClock,
@@ -94,7 +95,7 @@ function timeUntil(dateStr: string): string {
   return `in ${days}d ${hours % 24}h`;
 }
 
-export default function ScheduledEmailsPage() {
+function ScheduledEmailsPageContent() {
   const [emails, setEmails] = useState<ScheduledEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("ALL");
@@ -421,5 +422,13 @@ export default function ScheduledEmailsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ScheduledEmailsPage() {
+  return (
+    <StaffOnly minRole="PROFESSOR">
+      <ScheduledEmailsPageContent />
+    </StaffOnly>
   );
 }

@@ -1,15 +1,18 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Download, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotifyUsersDialog } from "@/components/ui/notify-users-dialog";
-import { AssignmentForm, type AssignmentFormData } from "@/components/assignments/AssignmentForm";
+import { AssignmentForm } from "@/components/assignments/AssignmentForm";
+import type { AssignmentFormData } from "@/types/assignment";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
+import type { QuestionPayload } from "@/types/assignment";
 
-export default function CreateAssignmentPage() {
+function CreateAssignmentPageContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [exportingLatex, setExportingLatex] = useState(false);
@@ -82,15 +85,7 @@ export default function CreateAssignmentPage() {
 
   const handleSubmit = async (
     formData: AssignmentFormData,
-    getQuestionsWithUrls: () => Promise<Array<{
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>,
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>,
     publish: boolean,
     schedule?: boolean,
   ) => {
@@ -141,15 +136,7 @@ export default function CreateAssignmentPage() {
 
   const handleSaveAndExportLatex = async (
     formData: AssignmentFormData,
-    getQuestionsWithUrls: () => Promise<Array<{
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>,
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>,
   ) => {
     if (!formData.title.trim()) {
       toast.error("Please enter a title for the assignment");
@@ -268,7 +255,7 @@ export default function CreateAssignmentPage() {
               toast.error(err instanceof Error ? err.message : "Failed to create assignment");
             }
           }}
-          onBeforeSend={async (subj, msg) => {
+          onBeforeSend={async (subj, msg, { audienceRoles }) => {
             const id = await createAssignment();
             if (!id) return;
             createdIdRef.current = id;
@@ -280,7 +267,7 @@ export default function CreateAssignmentPage() {
             await fetch("/api/notifications", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title: subj, message: msg }),
+              body: JSON.stringify({ title: subj, message: msg, audienceRoles }),
             });
           }}
           onSent={() => {
@@ -303,7 +290,7 @@ export default function CreateAssignmentPage() {
           dialogDescription="Set a publish time and select who to notify when it goes live."
           sendButtonLabel="Notify & Schedule"
           skipButtonLabel="Skip Notification & Schedule"
-          onBeforeSend={async (_subj, _msg, scheduledAt) => {
+          onBeforeSend={async (_subj, _msg, { scheduledAt }) => {
             const id = await createAssignment(scheduledAt, true);
             if (!id) return;
             createdIdRef.current = id;
@@ -328,5 +315,13 @@ export default function CreateAssignmentPage() {
         />
       )}
     </>
+  );
+}
+
+export default function CreateAssignmentPage() {
+  return (
+    <StaffOnly>
+      <CreateAssignmentPageContent />
+    </StaffOnly>
   );
 }

@@ -17,6 +17,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  MAX_APPEAL_MESSAGE_LENGTH,
+  MAX_APPEAL_REASON_LENGTH,
+} from "@/hooks/useAssignmentAppeals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/ui/markdown-content";
@@ -87,9 +91,7 @@ export function SubmissionView({
   onEditSubmission,
   deletingSubmission,
 }: SubmissionViewProps) {
-  const isLate =
-    assignment.dueDate &&
-    new Date(submission.submittedAt) > new Date(assignment.dueDate);
+  const isLate = submission.isLate ?? false;
 
   return (
     <Card className="border-emerald-200 dark:border-emerald-800">
@@ -321,8 +323,12 @@ export function SubmissionView({
                                 }
                                 placeholder="Explain why you believe this grade should be reconsidered..."
                                 rows={3}
+                                maxLength={MAX_APPEAL_REASON_LENGTH}
                                 className="text-sm"
                               />
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right">
+                                {(appealReasons[ans.id] || "").length} / {MAX_APPEAL_REASON_LENGTH}
+                              </p>
                               <ImageUpload
                                 images={appealImages[ans.id] || []}
                                 onImagesChange={(imgs) =>
@@ -554,8 +560,12 @@ function AppealThreadInline({
                   : "Add a follow-up message..."
               }
               rows={2}
+              maxLength={MAX_APPEAL_MESSAGE_LENGTH}
               className="text-sm"
             />
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right">
+              {message.length} / {MAX_APPEAL_MESSAGE_LENGTH}
+            </p>
             <ImageUpload
               images={images}
               onImagesChange={onImagesChange}

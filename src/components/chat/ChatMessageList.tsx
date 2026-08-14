@@ -12,6 +12,8 @@ import {
   ImageIcon,
   Check,
   Copy,
+  AlertTriangle,
+  ArrowDown,
 } from "lucide-react";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { MessageDocuments } from "./MessageDocuments";
@@ -32,6 +34,8 @@ interface ChatMessageListProps {
   messagesEndRef: React.RefObject<HTMLDivElement>;
   onSuggestedTopic: (topic: string) => void;
   onCopyMessage: (messageId: string, content: string) => void;
+  showJumpToLatest: boolean;
+  onJumpToLatest: () => void;
 }
 
 export function ChatMessageList({
@@ -41,9 +45,12 @@ export function ChatMessageList({
   messagesEndRef,
   onSuggestedTopic,
   onCopyMessage,
+  showJumpToLatest,
+  onJumpToLatest,
 }: ChatMessageListProps) {
   return (
-    <div ref={scrollContainerRef} id="chat-print-area" className="flex-1 min-h-0 overflow-y-auto">
+    <div className="relative flex-1 min-h-0 flex flex-col">
+      <div ref={scrollContainerRef} id="chat-print-area" className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">
@@ -92,8 +99,15 @@ export function ChatMessageList({
               )}
             >
               {msg.role === "assistant" && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 self-start">
-                  <Bot className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                <div className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full self-start",
+                  msg.error ? "bg-red-100 dark:bg-red-900/40" : "bg-gray-100 dark:bg-gray-800"
+                )}>
+                  {msg.error ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                  ) : (
+                    <Bot className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                  )}
                 </div>
               )}
 
@@ -140,7 +154,12 @@ export function ChatMessageList({
                 </div>
               ) : (
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm leading-relaxed text-gray-900 dark:text-gray-100 py-1">
+                  <div className={cn(
+                    "text-sm leading-relaxed py-1",
+                    msg.error
+                      ? "rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-red-700 dark:text-red-300"
+                      : "text-gray-900 dark:text-gray-100"
+                  )}>
                     {msg.imageUrls && msg.imageUrls.length > 0 && (
                       <div className={cn(
                         "mb-3 gap-2",
@@ -190,7 +209,7 @@ export function ChatMessageList({
                     )}
                   </div>
 
-                  {msg.content && (
+                  {msg.content && !msg.error && (
                     <div className={cn(
                       "flex items-center gap-2 mt-1 transition-opacity",
                       copiedMessageId === msg.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -232,7 +251,20 @@ export function ChatMessageList({
         </div>
 
         <div ref={messagesEndRef} />
+        </div>
       </div>
+
+      {showJumpToLatest && (
+        <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none">
+          <button
+            onClick={() => onJumpToLatest()}
+            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs text-gray-600 dark:text-gray-300 shadow-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Jump to latest
+          </button>
+        </div>
+      )}
     </div>
   );
 }

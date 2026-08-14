@@ -89,6 +89,8 @@ export function useChatStream({
       setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "", thinking: "" }]);
 
       let requestFailedBeforeStream = false;
+      // 403 means banned / restricted / unverified email: retrying can only fail again.
+      let permanentlyRejected = false;
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
@@ -109,6 +111,7 @@ export function useChatStream({
         if (!res.ok) {
           const errData = await res.json().catch(() => ({ error: "Chat request failed" }));
           requestFailedBeforeStream = true;
+          permanentlyRejected = res.status === 403;
           throw new Error(errData.error || "Chat request failed");
         }
 
@@ -200,11 +203,13 @@ export function useChatStream({
               : msg
           )
         );
-        setPendingRetry({
-          text: messageText,
-          imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
-          documents: documents.length ? documents : undefined,
-        });
+        if (!permanentlyRejected) {
+          setPendingRetry({
+            text: messageText,
+            imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
+            documents: documents.length ? documents : undefined,
+          });
+        }
         // Restore the input so the user can retry without retyping
         if (requestFailedBeforeStream) {
           onRestoreInput(messageText);

@@ -7,13 +7,20 @@ const globalForPrisma = globalThis as unknown as {
   pgPool: Pool | undefined;
 };
 
+function poolSize() {
+  const configured = Number(process.env.DATABASE_POOL_MAX);
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 25;
+}
+
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL!;
   const pool = globalForPrisma.pgPool ?? new Pool({
     connectionString,
     min: 2,
-    max: 10,
+    // Keep instances * DATABASE_POOL_MAX below the database's max_connections.
+    max: poolSize(),
     idleTimeoutMillis: 60_000,
+    connectionTimeoutMillis: 10_000,
   });
   if (process.env.NODE_ENV !== "production") globalForPrisma.pgPool = pool;
   const adapter = new PrismaPg(pool);

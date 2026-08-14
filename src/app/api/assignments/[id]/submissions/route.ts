@@ -10,10 +10,14 @@ export async function GET(
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;
 
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: params.id },
+    const assignment = await prisma.assignment.findFirst({
+      where: { id: params.id, isDeleted: false },
       select: { title: true, type: true, totalPoints: true, dueDate: true },
     });
+
+    if (!assignment) {
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
 
     // Fetch all questions for this assignment to include unanswered ones
     const allQuestions = await prisma.assignmentQuestion.findMany({
@@ -94,6 +98,10 @@ export async function GET(
                 score: a.score,
                 feedback: a.feedback,
                 autoGraded: a.autoGraded,
+                referenceAnswer: q.correctAnswer,
+                aiSuggestedScore: a.aiSuggestedScore === null ? null : Number(a.aiSuggestedScore),
+                aiSuggestedFeedback: a.aiSuggestedFeedback,
+                aiSuggestedAt: a.aiSuggestedAt?.toISOString() ?? null,
                 maxPoints: q.points,
                 leftBlank: false,
                 appeals: a.appeals.map((ap) => ({
@@ -123,6 +131,10 @@ export async function GET(
               score: 0,
               feedback: null,
               autoGraded: false,
+              referenceAnswer: q.correctAnswer,
+              aiSuggestedScore: null,
+              aiSuggestedFeedback: null,
+              aiSuggestedAt: null,
               maxPoints: q.points,
               leftBlank: true,
               appeals: [],

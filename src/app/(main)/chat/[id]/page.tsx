@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import ChatPageClient from "../ChatPageClient";
 
 export default async function ChatConversationPage({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   params,
 }: {
   params: { id: string };
@@ -39,6 +38,7 @@ export default async function ChatConversationPage({
       folders={folders}
       userId={user.id}
       conversationLimit={50}
+      initialConversationId={params.id}
     />
   );
 }

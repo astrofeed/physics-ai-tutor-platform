@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEffectiveSession } from "@/lib/effective-session-context";
@@ -29,7 +30,7 @@ import { UserRow } from "@/components/admin/UserRow";
 import { BulkEmailDialog } from "@/components/admin/BulkEmailDialog";
 import type { UserListItem } from "@/types";
 
-export default function AdminUsersPage() {
+function AdminUsersPageContent() {
   const router = useRouter();
   const effectiveSession = useEffectiveSession();
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -485,5 +486,13 @@ export default function AdminUsersPage() {
         onSend={sendBulkEmail}
       />
     </div>
+  );
+}
+
+export default function AdminUsersPage() {
+  return (
+    <StaffOnly>
+      <AdminUsersPageContent />
+    </StaffOnly>
   );
 }

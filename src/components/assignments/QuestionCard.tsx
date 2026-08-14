@@ -22,8 +22,9 @@ import {
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { getDiagramContent } from "@/lib/diagram-utils";
+import { normalizeMcAnswerKey, optionLetter } from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
-import type { QuestionFormData } from "./AssignmentForm";
+import type { QuestionFormData } from "@/types/assignment";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
 
@@ -227,23 +228,77 @@ export function QuestionCard({
 
         <div className="space-y-2">
           <Label>Correct Answer</Label>
-          <Input
-            value={q.correctAnswer}
-            onChange={(e) => onUpdate("correctAnswer", e.target.value)}
-            placeholder={
-              q.questionType === "MC"
-                ? "e.g., A"
-                : q.questionType === "NUMERIC"
-                ? "e.g., 9.8"
-                : "Sample answer (for reference)"
-            }
-          />
-          {q.correctAnswer.includes("$") && (
+          {q.questionType === "MC" ? (
+            <Select
+              value={normalizeMcAnswerKey(q.correctAnswer, q.options) ?? ""}
+              onValueChange={(value) => onUpdate("correctAnswer", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select the correct option" />
+              </SelectTrigger>
+              <SelectContent>
+                {q.options.map((opt, oIndex) => (
+                  <SelectItem key={oIndex} value={optionLetter(oIndex)}>
+                    {optionLetter(oIndex)}
+                    {opt.trim() ? ` — ${opt}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={q.correctAnswer}
+              onChange={(e) => onUpdate("correctAnswer", e.target.value)}
+              placeholder={
+                q.questionType === "NUMERIC"
+                  ? "e.g., 9.8"
+                  : "Sample answer (for reference)"
+              }
+            />
+          )}
+          {q.questionType !== "MC" && q.correctAnswer.includes("$") && (
             <div className="text-sm mt-1 overflow-x-auto">
               <MarkdownContent content={q.correctAnswer} />
             </div>
           )}
         </div>
+
+        {q.questionType === "NUMERIC" && (
+          <div className="space-y-2">
+            <Label>Accepted tolerance (optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={q.tolerance ?? ""}
+                onChange={(e) =>
+                  onUpdate("tolerance", e.target.value === "" ? null : Number(e.target.value))
+                }
+                placeholder="Blank = exact match"
+              />
+              <Select
+                value={q.toleranceUnit}
+                onValueChange={(value) => onUpdate("toleranceUnit", value)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ABSOLUTE">± absolute</SelectItem>
+                  <SelectItem value="PERCENT">± percent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {q.tolerance
+                ? q.toleranceUnit === "PERCENT"
+                  ? `Answers within ${q.tolerance}% of ${q.correctAnswer || "the answer"} are marked correct.`
+                  : `Answers within ±${q.tolerance} of ${q.correctAnswer || "the answer"} are marked correct.`
+                : "Trailing zeros and spaces are always ignored (9.8 = 9.80), but significant figures are not enforced."}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

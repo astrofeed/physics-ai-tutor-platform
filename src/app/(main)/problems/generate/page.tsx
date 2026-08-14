@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -149,7 +150,7 @@ function SortableProblemItem({
   );
 }
 
-export default function ProblemGeneratorPage() {
+function ProblemGeneratorPageContent() {
   useTrackTime("PROBLEM_GEN");
   const router = useRouter();
   const [topic, setTopic] = useState("");
@@ -675,5 +676,13 @@ export default function ProblemGeneratorPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function ProblemGeneratorPage() {
+  return (
+    <StaffOnly>
+      <ProblemGeneratorPageContent />
+    </StaffOnly>
   );
 }

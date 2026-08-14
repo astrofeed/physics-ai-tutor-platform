@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useSearchParams } from "next/navigation";
@@ -16,6 +17,8 @@ import {
   Search,
   ChevronDown,
   Filter,
+  Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +38,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +53,8 @@ import {
 // Extracted subcomponents
 import { SubmissionList } from "@/components/grading/SubmissionList";
 import { GradingPanel } from "@/components/grading/GradingPanel";
+import { GradingShortcutsDialog } from "@/components/grading/GradingShortcutsDialog";
+import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
 import { OverallGradeForm } from "@/components/grading/OverallGradeForm";
 import type {
   AssignmentInfo,
@@ -56,7 +62,13 @@ import type {
   Appeal,
   GradingMode,
   FilterMode,
+  OverallGradeState,
 } from "@/components/grading/types";
+import {
+  overallGradePayload,
+  overrideConfirmAction,
+  sumQuestionScores,
+} from "@/lib/grade-release";
 
 interface AssignmentOption {
   id: string;
@@ -71,12 +83,6 @@ interface AssignmentOption {
 
 // --- Consolidated state types ---
 
-interface OverallGradeState {
-  score: number;
-  feedback: string;
-  confirmed: boolean;
-}
-
 interface AssignmentPickerState {
   filter: "all" | "ungraded" | "pending";
   search: string;
@@ -90,13 +96,15 @@ interface FeedbackFileState {
 
 // --- localStorage schema versioning ---
 
-const GRADING_STATE_VERSION = 1;
+const GRADING_STATE_VERSION = 3;
 
 interface GradingDraftData {
   _version: number;
+  submissionId: string;
+  savedAt: number;
   grades: Record<string, { score: number; feedback: string }>;
   confirmedAnswers: string[];
-  overallGrade: { score: number; feedback: string; confirmed: boolean };
+  overallGrade: { score: number | null; feedback: string; confirmed: boolean };
   feedbackImages: Record<string, string[]>;
   feedbackFileUrl: string | null;
   gradingMode: GradingMode;
@@ -106,17 +114,19 @@ function isValidGradingDraft(data: unknown): data is GradingDraftData {
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
   if (d._version !== GRADING_STATE_VERSION) return false;
+  if (typeof d.submissionId !== "string" || typeof d.savedAt !== "number") return false;
   if (typeof d.grades !== "object" || d.grades === null) return false;
   if (!Array.isArray(d.confirmedAnswers)) return false;
   if (typeof d.overallGrade !== "object" || d.overallGrade === null) return false;
   const og = d.overallGrade as Record<string, unknown>;
-  if (typeof og.score !== "number" || typeof og.feedback !== "string" || typeof og.confirmed !== "boolean") return false;
+  if (og.score !== null && typeof og.score !== "number") return false;
+  if (typeof og.feedback !== "string" || typeof og.confirmed !== "boolean") return false;
   if (typeof d.feedbackImages !== "object" || d.feedbackImages === null) return false;
   if (typeof d.gradingMode !== "string") return false;
   return true;
 }
 
-export default function GradingPage() {
+function GradingPageContent() {
   useTrackTime("GRADING");
   const searchParams = useSearchParams();
   const initialAssignmentId = searchParams.get("assignmentId");
@@ -137,17 +147,20 @@ export default function GradingPage() {
   const [submissions, setSubmissions] = useState<SubmissionForGrading[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [assignmentUnavailable, setAssignmentUnavailable] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionForGrading | null>(null);
   const [grades, setGrades] = useState<Record<string, { score: number; feedback: string }>>({});
   // Consolidated: overall grade state (score, feedback, confirmed)
   const [overallGrade, setOverallGrade] = useState<OverallGradeState>({
-    score: 0,
+    score: null,
     feedback: "",
     confirmed: false,
   });
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
   const [gradingMode, setGradingMode] = useState<GradingMode>("per-question");
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, { score: number; feedback: string }>>({});
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   // Consolidated: feedback file state (file object, url)
   const [feedbackFileState, setFeedbackFileState] = useState<FeedbackFileState>({
@@ -165,12 +178,14 @@ export default function GradingPage() {
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [pendingAppealAction, setPendingAppealAction] = useState<{ appealId: string; status: "RESOLVED" | "REJECTED" | "OPEN" } | null>(null);
   const [showUnfinalizeConfirm, setShowUnfinalizeConfirm] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [expandedAppeals, setExpandedAppeals] = useState<Record<string, boolean>>({});
   const [appealImages, setAppealImages] = useState<Record<string, string[]>>({});
   const { upload: handleUploadImage, uploading: uploadingImage } = useUploadFile();
   const [confirmedAnswers, setConfirmedAnswers] = useState<Set<string>>(new Set());
   const [gradingDraftRestored, setGradingDraftRestored] = useState(false);
   const prevSubmissionIdRef = useRef<string | null>(null);
+  const hydratedSubmissionIdRef = useRef<string | null>(null);
 
   // localStorage helpers for grading drafts with schema versioning
   const getLocalStorageKey = (submissionId: string) => `grading-state-${submissionId}`;
@@ -180,6 +195,8 @@ export default function GradingPage() {
     try {
       const draft: GradingDraftData = {
         _version: GRADING_STATE_VERSION,
+        submissionId: selectedSubmission.id,
+        savedAt: Date.now(),
         grades,
         confirmedAnswers: Array.from(confirmedAnswers),
         overallGrade,
@@ -191,13 +208,20 @@ export default function GradingPage() {
     } catch { /* quota exceeded or similar */ }
   }, [selectedSubmission, grades, confirmedAnswers, overallGrade, feedbackImages, feedbackFileState.url, gradingMode]);
 
-  const loadAllFromLocalStorage = useCallback((submissionId: string): GradingDraftData | null => {
+  /** Persisted grades win over a draft that predates them, so a finalized submission is never shown as zeros. */
+  const loadAllFromLocalStorage = useCallback((sub: SubmissionForGrading): GradingDraftData | null => {
+    const submissionId = sub.id;
     try {
       const raw = localStorage.getItem(getLocalStorageKey(submissionId));
       if (!raw) return null;
       const parsed: unknown = JSON.parse(raw);
       // Validate schema version and shape; discard stale data
-      if (!isValidGradingDraft(parsed)) {
+      if (!isValidGradingDraft(parsed) || parsed.submissionId !== submissionId) {
+        localStorage.removeItem(getLocalStorageKey(submissionId));
+        return null;
+      }
+      const gradedAt = sub.gradedAt ? Date.parse(sub.gradedAt) : null;
+      if (gradedAt !== null && Number.isFinite(gradedAt) && parsed.savedAt <= gradedAt) {
         localStorage.removeItem(getLocalStorageKey(submissionId));
         return null;
       }
@@ -218,6 +242,8 @@ export default function GradingPage() {
   // Save all grading state to localStorage on every change
   useEffect(() => {
     if (!selectedSubmission) return;
+    // State still belongs to the previously selected submission until hydration runs.
+    if (hydratedSubmissionIdRef.current !== selectedSubmission.id) return;
     saveAllToLocalStorage();
   }, [selectedSubmission, saveAllToLocalStorage]);
 
@@ -226,7 +252,7 @@ export default function GradingPage() {
     if (!selectedSubmission) return;
     const gradeEntries = Object.entries(data);
     if (gradeEntries.length === 0) return;
-    await fetch("/api/grading", {
+    const res = await fetch("/api/grading", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -239,13 +265,24 @@ export default function GradingPage() {
         })),
       }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || "Failed to save grading draft");
+    }
   }, [selectedSubmission]);
 
-  const { status: gradingAutoSaveStatus, saveNow: flushGradingSave } = useAutoSave({
+  const {
+    status: gradingAutoSaveStatus,
+    lastSavedAt: gradingAutoSavedAt,
+    saveNow: flushGradingSave,
+    markSaved: markGradesSaved,
+  } = useAutoSave({
     data: grades,
     saveFn: saveGradingDraft,
     delayMs: 5000,
-    enabled: !!selectedSubmission,
+    // A finalized submission is edited through Unfinalize, so drafts must not drift
+    // its per-answer scores away from the released total.
+    enabled: !!selectedSubmission && !selectedSubmission.gradedAt,
   });
 
   // Fetch assignment list with pagination and search
@@ -270,7 +307,10 @@ export default function GradingPage() {
         setAssignmentTotalCount(data.totalCount ?? 0);
         if (!silent) setLoading(false);
       })
-      .catch(() => { if (!silent) setLoading(false); });
+      .catch((err) => {
+        logger.error("Failed to load grading assignment list", { error: String(err) });
+        if (!silent) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -281,14 +321,29 @@ export default function GradingPage() {
     if (!assignmentId) return;
     setLoadingSubmissions(true);
     setSelectedSubmission(null);
+    setAssignmentUnavailable(null);
     fetch(`/api/assignments/${assignmentId}/submissions`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          setAssignmentInfo(null);
+          setSubmissions([]);
+          const message =
+            res.status === 404
+              ? "This assignment was deleted. Its submissions, grades and appeals are kept — restore it from Assignments → Deleted to grade it."
+              : data.error || "Failed to load submissions";
+          setAssignmentUnavailable(message);
+          toast.error(message);
+          return;
+        }
         setAssignmentInfo(data.assignment || null);
         setSubmissions(data.submissions || []);
-        setLoadingSubmissions(false);
       })
-      .catch(() => setLoadingSubmissions(false));
+      .catch((err) => {
+        logger.error("Failed to load submissions for grading", { assignmentId, error: String(err) });
+        toast.error("Failed to load submissions");
+      })
+      .finally(() => setLoadingSubmissions(false));
   }, []);
 
   useEffect(() => {
@@ -303,13 +358,14 @@ export default function GradingPage() {
       flushGradingSave();
     }
     prevSubmissionIdRef.current = sub.id;
+    hydratedSubmissionIdRef.current = sub.id;
 
     setSelectedSubmission(sub);
     setFeedbackFileState({ file: null, url: null });
     setGradingDraftRestored(false);
 
     // Try to restore all state from localStorage (validated)
-    const saved = loadAllFromLocalStorage(sub.id);
+    const saved = loadAllFromLocalStorage(sub);
     let restored = false;
 
     // Grades
@@ -328,12 +384,25 @@ export default function GradingPage() {
       }
     });
     setGrades(initialGrades);
+    // Hydration is not an edit, so it must not trigger the autosave.
+    markGradesSaved(initialGrades);
     if (restored) setGradingDraftRestored(true);
+
+    const storedSuggestions: Record<string, { score: number; feedback: string }> = {};
+    sub.answers.forEach((a) => {
+      if (a.aiSuggestedScore !== null) {
+        storedSuggestions[a.id] = {
+          score: a.aiSuggestedScore,
+          feedback: a.aiSuggestedFeedback ?? "",
+        };
+      }
+    });
+    setSuggestions(storedSuggestions);
 
     // Confirmed answers & overall grade (consolidated)
     setConfirmedAnswers(new Set(saved?.confirmedAnswers || []));
     setOverallGrade({
-      score: saved?.overallGrade?.score ?? sub.totalScore ?? 0,
+      score: saved?.overallGrade?.score ?? sub.totalScore ?? null,
       feedback: saved?.overallGrade?.feedback ?? sub.overallFeedback ?? "",
       confirmed: saved?.overallGrade?.confirmed ?? false,
     });
@@ -375,19 +444,31 @@ export default function GradingPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setGrades((prev) => ({
+        setSuggestions((prev) => ({
           ...prev,
-          [answerId]: {
-            score: data.suggestedScore,
-            feedback: data.suggestedFeedback,
-          },
+          [answerId]: { score: data.suggestedScore, feedback: data.suggestedFeedback },
         }));
+        toast.success("AI suggestion ready — review it, then apply to use it as the score");
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "AI suggestion failed. Your score and feedback are unchanged.");
       }
     } catch (err) {
-      console.error(err);
+      logger.error("AI grading suggestion request failed", { answerId, error: String(err) });
+      toast.error("AI suggestion failed. Your score and feedback are unchanged.");
     } finally {
       setAiLoading(null);
     }
+  };
+
+  /** Copies a stored AI recommendation into the editable grade; saving is still the grader's call. */
+  const handleApplySuggestion = (answerId: string) => {
+    const suggestion = suggestions[answerId];
+    if (!suggestion) return;
+    setGrades((prev) => ({
+      ...prev,
+      [answerId]: { score: suggestion.score, feedback: suggestion.feedback },
+    }));
   };
 
   const handleUploadFeedbackFile = async (file: File) => {
@@ -415,8 +496,59 @@ export default function GradingPage() {
     });
   };
 
-  const handleSaveGrades = async () => {
+  const perQuestionTotal = sumQuestionScores(Object.values(grades));
+
+  const handleToggleOverallConfirm = () => {
+    switch (overrideConfirmAction(overallGrade, perQuestionTotal, gradingMode)) {
+      case "clear":
+        setOverallGrade((prev) => ({ ...prev, confirmed: false }));
+        return;
+      case "reject-blank":
+        toast.error(
+          "Enter an overall score first, or leave it blank to release the per-question total."
+        );
+        return;
+      case "warn-differs":
+        setShowOverrideConfirm(true);
+        return;
+      case "confirm":
+        setOverallGrade((prev) => ({ ...prev, confirmed: true }));
+    }
+  };
+
+  const filteredSubmissions = submissions.filter((s) => {
+    if (filterMode === "ungraded") return s.totalScore === null;
+    if (filterMode === "graded") return s.totalScore !== null;
+    if (filterMode === "appeals") return s.openAppealCount > 0;
+    return true;
+  });
+
+  /**
+   * Moves through the visible queue. Pending grade edits are flushed by
+   * `selectSubmission`, so nothing typed on the current submission is lost.
+   */
+  const selectAdjacentSubmission = (direction: 1 | -1) => {
     if (!selectedSubmission) return;
+    const index = filteredSubmissions.findIndex((s) => s.id === selectedSubmission.id);
+    const next = index === -1 ? undefined : filteredSubmissions[index + direction];
+    if (!next) {
+      toast.info(direction === 1 ? "Last submission in this list." : "First submission in this list.");
+      return;
+    }
+    selectSubmission(next);
+  };
+
+  /** Set by "Save & next" so the queue only advances after the save succeeds. */
+  const advanceAfterSaveRef = useRef(false);
+
+  const handleSaveGrades = async (advanceAfterSave = false) => {
+    if (!selectedSubmission) return;
+    advanceAfterSaveRef.current = advanceAfterSave;
+
+    if (gradingMode === "overall" && !overallGradePayload(overallGrade)) {
+      toast.error("Enter an overall score and confirm it before finalizing.");
+      return;
+    }
 
     // In per-question mode, warn if not all answers are confirmed
     if (gradingMode === "per-question") {
@@ -442,11 +574,8 @@ export default function GradingPage() {
         body.feedbackFileUrl = feedbackFileState.url;
       }
 
-      // Include overall score and feedback when confirmed
-      if (overallGrade.confirmed) {
-        body.overallScore = overallGrade.score;
-        body.overallFeedback = overallGrade.feedback;
-      }
+      // Only an explicitly confirmed override replaces the per-question total.
+      Object.assign(body, overallGradePayload(overallGrade) ?? {});
 
       if (gradingMode === "per-question") {
         body.grades = Object.entries(grades).map(([answerId, g]) => ({
@@ -470,27 +599,30 @@ export default function GradingPage() {
       if (res.ok) {
         const data = await res.json();
         // Clear localStorage on successful final save
-        clearLocalStorage(selectedSubmission.id);
+        const savedId = selectedSubmission.id;
+        const graded = { totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" };
+        clearLocalStorage(savedId);
         setGradingDraftRestored(false);
-        setSubmissions((prev) =>
-          prev.map((s) => {
-            if (s.id !== selectedSubmission.id) return s;
-            return {
-              ...s,
-              totalScore: data.totalScore,
-              gradedAt: new Date().toISOString(),
-              gradedByName: "You",
-            };
-          })
-        );
-        setSelectedSubmission((prev) =>
-          prev ? { ...prev, totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" } : prev
-        );
+        setSubmissions((prev) => prev.map((s) => (s.id === savedId ? { ...s, ...graded } : s)));
+        // Only patch the panel while it still shows the submission that was saved.
+        setSelectedSubmission((prev) => (prev && prev.id === savedId ? { ...prev, ...graded } : prev));
+        // Advancing last keeps the next submission's hydrated state from being overwritten.
+        if (advanceAfterSaveRef.current) {
+          selectAdjacentSubmission(1);
+        }
         fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to save grades");
       }
     } catch (err) {
-      console.error(err);
+      logger.error("Save grades request failed", {
+        submissionId: selectedSubmission.id,
+        error: String(err),
+      });
+      toast.error("Failed to save grades");
     } finally {
+      advanceAfterSaveRef.current = false;
       setSaving(false);
     }
   };
@@ -513,8 +645,12 @@ export default function GradingPage() {
         updateAppealInSubmissions(appealId, data.appeal);
         setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
         setAppealImages((prev) => ({ ...prev, [appealId]: [] }));
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to send message");
       }
-    } catch {
+    } catch (err) {
+      logger.error("Appeal message request failed", { appealId, error: String(err) });
       toast.error("Failed to send message");
     }
   };
@@ -554,8 +690,12 @@ export default function GradingPage() {
           fetchSubmissions(selectedAssignmentId);
         }
         fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.error(body?.error || "Failed to update appeal");
       }
-    } catch {
+    } catch (err) {
+      logger.error("Appeal decision request failed", { appealId, status, error: String(err) });
       toast.error("Failed to update appeal");
     } finally {
       setResolvingAppeal(null);
@@ -588,17 +728,27 @@ export default function GradingPage() {
     });
   };
 
-  const filteredSubmissions = submissions.filter((s) => {
-    if (filterMode === "ungraded") return s.totalScore === null;
-    if (filterMode === "graded") return s.totalScore !== null;
-    if (filterMode === "appeals") return s.openAppealCount > 0;
-    return true;
+  useGradingShortcuts({
+    enabled: !!selectedSubmission && !saving,
+    onSaveAndNext: () => {
+      if (selectedSubmission?.gradedAt) return;
+      handleSaveGrades(true);
+    },
+    onNextSubmission: () => selectAdjacentSubmission(1),
+    onPrevSubmission: () => selectAdjacentSubmission(-1),
+    onToggleHelp: () => setShowShortcuts((prev) => !prev),
   });
 
   const gradedCount = submissions.filter((s) => s.totalScore !== null).length;
   const ungradedCount = submissions.length - gradedCount;
   const appealsCount = submissions.filter((s) => s.openAppealCount > 0).length;
   const allAutoGraded = (selectedSubmission?.answers.length ?? 0) > 0 && (selectedSubmission?.answers.every((a) => a.autoGraded) ?? false);
+  const finalizeDisabled =
+    saving ||
+    allAutoGraded ||
+    (!!selectedSubmission &&
+      selectedSubmission.answers.filter((a) => !a.autoGraded).length === 0 &&
+      !overallGrade.confirmed);
 
   if (loading) {
     return <LoadingSpinner message="Loading..." />;
@@ -770,6 +920,12 @@ export default function GradingPage() {
         />
       ) : loadingSubmissions ? (
         <LoadingSpinner />
+      ) : assignmentUnavailable ? (
+        <EmptyState
+          icon={Trash2}
+          title="This assignment is not available for grading"
+          description={assignmentUnavailable}
+        />
       ) : (
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:h-[calc(100vh-16rem)]">
           {/* Submission List */}
@@ -813,7 +969,7 @@ export default function GradingPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className="flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
                     {/* Grading progress */}
                     {selectedSubmission.answers.length > 0 && !allAutoGraded && (
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400 hidden sm:inline">
@@ -832,7 +988,8 @@ export default function GradingPage() {
                         </SelectContent>
                       </Select>
                     )}
-                    <SaveStatusIndicator status={gradingAutoSaveStatus} />
+                    <SaveStatusIndicator status={gradingAutoSaveStatus} lastSavedAt={gradingAutoSavedAt} />
+                    <GradingShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
                     {selectedSubmission.gradedAt ? (
                       <Button
                         onClick={() => setShowUnfinalizeConfirm(true)}
@@ -846,15 +1003,29 @@ export default function GradingPage() {
                         <span className="sm:hidden">Undo</span>
                       </Button>
                     ) : (
-                      <Button
-                        onClick={handleSaveGrades}
-                        disabled={saving || allAutoGraded || (selectedSubmission.answers.filter(a => !a.autoGraded).length === 0 && !overallGrade.confirmed)}
-                        size="sm"
-                        className="gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg"
-                      >
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                        Finalize
-                      </Button>
+                      <>
+                        <Button
+                          onClick={() => handleSaveGrades()}
+                          disabled={finalizeDisabled}
+                          size="sm"
+                          className="gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg"
+                        >
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          Finalize
+                        </Button>
+                        <Button
+                          onClick={() => handleSaveGrades(true)}
+                          disabled={finalizeDisabled}
+                          variant="outline"
+                          size="sm"
+                          title="Finalize this submission and open the next one (Ctrl/⌘ + Enter)"
+                          className="gap-1.5 rounded-lg"
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                          <span className="hidden sm:inline">Save &amp; next</span>
+                          <span className="sm:hidden">Next</span>
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -931,6 +1102,8 @@ export default function GradingPage() {
                       onToggleConfirm={handleToggleConfirm}
                       aiLoading={aiLoading}
                       onAIGrade={handleAIGrade}
+                      suggestions={suggestions}
+                      onApplySuggestion={handleApplySuggestion}
                       feedbackImages={feedbackImages}
                       onFeedbackImagesChange={(answerId, imgs) => setFeedbackImages((prev) => ({ ...prev, [answerId]: imgs }))}
                       onUploadImage={handleUploadImage}
@@ -954,11 +1127,18 @@ export default function GradingPage() {
                     <OverallGradeForm
                       totalPoints={assignmentInfo?.totalPoints || 100}
                       overallScore={overallGrade.score}
-                      onOverallScoreChange={(score) => setOverallGrade((prev) => ({ ...prev, score }))}
+                      onOverallScoreChange={(score) =>
+                        setOverallGrade((prev) => ({
+                          ...prev,
+                          score,
+                          confirmed: score === null ? false : prev.confirmed,
+                        }))
+                      }
+                      perQuestionTotal={perQuestionTotal}
                       overallFeedback={overallGrade.feedback}
                       onOverallFeedbackChange={(feedback) => setOverallGrade((prev) => ({ ...prev, feedback }))}
                       overallGradeConfirmed={overallGrade.confirmed}
-                      onToggleOverallConfirm={() => setOverallGrade((prev) => ({ ...prev, confirmed: !prev.confirmed }))}
+                      onToggleOverallConfirm={handleToggleOverallConfirm}
                       feedbackFileUrl={feedbackFileState.url}
                       feedbackFileName={feedbackFileState.file?.name || null}
                       uploadingFeedback={uploadingFeedback}
@@ -1004,6 +1184,28 @@ export default function GradingPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={showOverrideConfirm} onOpenChange={setShowOverrideConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Override the Per-Question Total?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The per-question scores add up to {perQuestionTotal}/{assignmentInfo?.totalPoints ?? 0}.
+              Confirming this override releases {overallGrade.score}/{assignmentInfo?.totalPoints ?? 0}
+              {" "}to the student instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowOverrideConfirm(false);
+              setOverallGrade((prev) => ({ ...prev, confirmed: true }));
+            }}>
+              Use override
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!pendingAppealAction} onOpenChange={(open) => { if (!open) setPendingAppealAction(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1028,7 +1230,8 @@ export default function GradingPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unfinalize Submission</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark this submission as ungraded. Continue?
+              This clears the released score and gradedAt, so the student stops seeing a
+              grade for this submission until you finalize it again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1047,7 +1250,16 @@ export default function GradingPage() {
                   setSubmissions((prev) => prev.map((s) => s.id !== selectedSubmission.id ? s : { ...s, totalScore: null, gradedAt: null, gradedByName: null }));
                   setSelectedSubmission((prev) => prev ? { ...prev, totalScore: null, gradedAt: null, gradedByName: null } : prev);
                   fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
+                } else {
+                  const body = await res.json().catch(() => null);
+                  toast.error(body?.error || "Failed to unfinalize this submission");
                 }
+              } catch (err) {
+                logger.error("Ungrade request failed", {
+                  submissionId: selectedSubmission.id,
+                  error: String(err),
+                });
+                toast.error("Failed to unfinalize this submission");
               } finally { setSaving(false); }
             }} className="bg-amber-600 hover:bg-amber-700 text-white">
               Unfinalize
@@ -1056,5 +1268,13 @@ export default function GradingPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function GradingPage() {
+  return (
+    <StaffOnly>
+      <GradingPageContent />
+    </StaffOnly>
   );
 }

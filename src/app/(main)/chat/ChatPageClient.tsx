@@ -30,6 +30,8 @@ import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversa
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
 import { useConversationFolders } from "@/hooks/use-conversation-folders";
+import { useExamMode } from "@/hooks/use-exam-mode";
+import { useStickyScroll } from "@/hooks/use-sticky-scroll";
 import type { Conversation, ConversationFolder } from "@/components/chat/types";
 
 interface ChatPageClientProps {
@@ -37,12 +39,15 @@ interface ChatPageClientProps {
   folders: ConversationFolder[];
   userId: string;
   conversationLimit: number;
+  /** Conversation to open on mount, from `/chat/[id]`. */
+  initialConversationId?: string;
 }
 
 export default function ChatPageClient({
   conversations: initialConversations,
   folders: initialFolders,
   conversationLimit,
+  initialConversationId,
 }: ChatPageClientProps) {
   useTrackTime("AI_CHAT");
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
@@ -52,13 +57,14 @@ export default function ChatPageClient({
   const [sidebarOpen, setSidebarOpenRaw] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [chatMode, setChatMode] = useState<"normal" | "socratic">("normal");
-  const [examModeActive, setExamModeActive] = useState(false);
   const [examBannerDismissed, setExamBannerDismissed] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const initialConversationLoaded = useRef(false);
+  const examModeActive = useExamMode();
 
   const { folders, createFolder, renameFolder, deleteFolder, moveConversation } =
     useConversationFolders({ initialFolders, setConversations });
@@ -111,23 +117,13 @@ export default function ChatPageClient({
     });
   }, []);
 
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-    if (isNearBottom) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [messages]);
+  const { isPinned, scrollToBottom } = useStickyScroll(scrollContainerRef, messages);
 
   useEffect(() => {
-    fetch("/api/exam-mode")
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => { if (data) setExamModeActive(data.isActive); })
-      .catch((err) => console.error("[exam-mode] Failed to check exam mode:", err));
-  }, []);
+    scrollToBottom("auto");
+  }, [activeConversationId, scrollToBottom]);
 
-  const loadConversation = async (convId: string) => {
+  const loadConversation = useCallback(async (convId: string) => {
     setActiveConversationId(convId);
     setMessages([]);
     if (isMobile) setSidebarOpen(false);
@@ -159,7 +155,13 @@ export default function ChatPageClient({
     } catch (err) {
       console.error("Failed to load conversation:", err);
     }
-  };
+  }, [isMobile, setSidebarOpen, setMessages, getInFlightMessages]);
+
+  useEffect(() => {
+    if (!initialConversationId || initialConversationLoaded.current) return;
+    initialConversationLoaded.current = true;
+    loadConversation(initialConversationId);
+  }, [initialConversationId, loadConversation]);
 
   const createNewChat = () => {
     setActiveConversationId(null);
@@ -176,8 +178,9 @@ export default function ChatPageClient({
 
     setInput("");
     clearAttachments();
+    scrollToBottom();
     await sendMessage(messageText, uploaded.imageUrls, uploaded.documents);
-  }, [attachments.length, uploadAll, clearAttachments, sendMessage]);
+  }, [attachments.length, uploadAll, clearAttachments, sendMessage, scrollToBottom]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -385,6 +388,8 @@ export default function ChatPageClient({
           copiedMessageId={copiedMessageId}
           scrollContainerRef={scrollContainerRef}
           messagesEndRef={messagesEndRef}
+          showJumpToLatest={!isPinned && messages.length > 0}
+          onJumpToLatest={scrollToBottom}
           onSuggestedTopic={handleSuggestedTopic}
           onCopyMessage={copyMessage}
         />

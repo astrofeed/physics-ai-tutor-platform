@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { convertToLatex, escapeLatex } from "@/lib/latex-utils";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { readBytesForUrl } from "@/lib/services/file-storage";
 import JSZip from "jszip";
-import fs from "fs";
 import path from "path";
 
 interface QuestionRecord {
@@ -101,15 +101,11 @@ export async function GET(
 
       // Handle image
       if (q.imageUrl) {
-        const imgFilename = `q${qNum}-image${path.extname(q.imageUrl) || ".png"}`;
         try {
-          const publicDir = path.resolve(process.cwd(), "public");
-          const resolved = path.resolve(publicDir, q.imageUrl.replace(/^\//, ""));
-          if (!resolved.startsWith(publicDir + path.sep) && resolved !== publicDir) {
-            throw new Error("Invalid path");
-          }
-          const imgData = fs.readFileSync(resolved);
-          imagesFolder.file(imgFilename, imgData);
+          const image = await readBytesForUrl(q.imageUrl);
+          if (!image) throw new Error("Image not available");
+          const imgFilename = `q${qNum}-image${path.extname(image.filename) || ".png"}`;
+          imagesFolder.file(imgFilename, image.bytes);
           lines.push("");
           lines.push(
             `\\begin{center}\n\\includegraphics[width=0.6\\textwidth]{${imgFilename}}\n\\end{center}`
@@ -169,6 +165,12 @@ export async function GET(
       questionBlocks.push(lines.join("\n"));
     }
 
+    // A FILE_UPLOAD assignment has no questions, so its description carries the
+    // submission instructions; without it the exported body would be empty.
+    const descriptionBlock = assignment.description
+      ? `${convertToLatex(assignment.description)}\n\n\\bigskip\n\n`
+      : "";
+
     // Assemble full LaTeX document
     const packages = [
       "\\usepackage[utf8]{inputenc}",
@@ -195,7 +197,7 @@ ${packages.join("\n")}
 \\begin{document}
 \\maketitle
 
-${questionBlocks.join("\n\n")}
+${descriptionBlock}${questionBlocks.join("\n\n")}
 
 \\end{document}
 `;

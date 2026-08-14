@@ -33,6 +33,12 @@ export interface SubmissionAnswer {
   score: number | null;
   feedback: string | null;
   autoGraded: boolean;
+  /** The question's stored answer key, shown to graders only. */
+  referenceAnswer: string | null;
+  /** AI pre-grade recommendation; never an official score until a grader applies it. */
+  aiSuggestedScore: number | null;
+  aiSuggestedFeedback: string | null;
+  aiSuggestedAt: string | null;
   maxPoints: number;
   leftBlank?: boolean;
   appeals: Appeal[];
@@ -51,6 +57,13 @@ export interface SubmissionForGrading {
   openAppealCount: number;
   totalAppealCount: number;
   answers: SubmissionAnswer[];
+}
+
+export interface OverallGradeState {
+  /** `null` means "no override" — the per-question total is released instead. */
+  score: number | null;
+  feedback: string;
+  confirmed: boolean;
 }
 
 export type GradingMode = "per-question" | "overall";

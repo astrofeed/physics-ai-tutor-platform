@@ -102,6 +102,8 @@ prisma/
   - Rate limit: 20 executions per hour per user
   - API: `/api/run-code` → Piston API
 - **Message Copy**: Each message has a copy button (user: left of bubble, assistant: action bar below)
+- **Docked side panel**: `SideChatLayout` + `SideChatPanel` (`src/components/chat/`) put the tutor in a resizable column beside page content (used by the assignment detail page). It reuses `useChatStream`/`useChatAttachments` and `/api/chat`, so bans, restrictions, rate limits and exam mode behave exactly as on `/chat`.
+- **Deep link**: `/chat/[id]` opens that conversation on mount via `initialConversationId`
 
 #### Assignment Types
 - **QUIZ**: MC, numeric, free-response questions with auto-grading

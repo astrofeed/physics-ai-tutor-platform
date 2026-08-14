@@ -5,6 +5,23 @@
  * NOT raw Prisma model types (which use Decimal, Date, etc.).
  */
 
+/** How a numeric answer's distance from the answer key is measured. */
+export type ToleranceUnit = "ABSOLUTE" | "PERCENT";
+
+/** Question payload sent to the assignment create/update APIs. */
+export interface QuestionPayload {
+  id?: string;
+  questionText: string;
+  questionType: string;
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  diagram?: unknown;
+  imageUrl?: string;
+  tolerance: number | null;
+  toleranceUnit: ToleranceUnit;
+}
+
 /** A single question on an assignment, as returned by the API. */
 export interface AssignmentQuestion {
   id: string;
@@ -14,9 +31,43 @@ export interface AssignmentQuestion {
   correctAnswer: string | null;
   points: number;
   order: number;
+  tolerance?: number | null;
+  toleranceUnit?: ToleranceUnit;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   diagram?: { type: "svg" | "mermaid"; content: string } | any;
   imageUrl?: string | null;
+}
+
+/** A question being authored in the assignment form, before it is saved. */
+export interface QuestionFormData {
+  /** Set for questions already saved in the database; absent for newly added ones. */
+  id?: string;
+  questionText: string;
+  questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  diagram?: { type: "svg" | "mermaid"; content: string } | any;
+  imageUrl?: string | null;
+  /** Staged locally and uploaded when the assignment is saved. */
+  imageFile?: File | null;
+  imagePreview?: string | null;
+  /** NUMERIC only: how far off an answer may be and still count as correct. */
+  tolerance?: number | null;
+  toleranceUnit: ToleranceUnit;
+}
+
+/** The whole assignment form state. */
+export interface AssignmentFormData {
+  title: string;
+  description: string;
+  dueDate: string;
+  type: "QUIZ" | "FILE_UPLOAD";
+  totalPoints: number;
+  lockAfterSubmit: boolean;
+  pdfUrl: string | null;
+  questions: QuestionFormData[];
 }
 
 /** Assignment as shown in the list view (assignments page). */
@@ -42,6 +93,8 @@ export interface AssignmentListItem {
   /** Staff-specific fields */
   ungradedCount?: number;
   openAppealCount?: number;
+  /** Set only for soft-deleted assignments listed in the recycle bin. */
+  deletedAt?: string | null;
 }
 
 /** Full assignment detail as returned by GET /api/assignments/[id]. */

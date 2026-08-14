@@ -39,15 +39,6 @@ export async function POST(req: Request) {
     if (isErrorResponse(auth)) return auth;
     const userId = auth.user.id;
 
-    // Check if user is banned
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { isBanned: true },
-    });
-    if (currentUser?.isBanned) {
-      return NextResponse.json({ error: "Account suspended" }, { status: 403 });
-    }
-
     const body: unknown = await req.json();
 
     // Duration update (used by sendBeacon, which can only POST)

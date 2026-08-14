@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { IMPERSONATE_COOKIE } from "@/lib/impersonate";
+import { getAccountStatus } from "@/lib/services/account-status";
+import { BANNED_MESSAGE, DELETED_MESSAGE } from "@/lib/api-auth";
 
 // Start impersonating a user
 export async function POST(req: Request) {
@@ -12,7 +14,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userRole = (session.user as { role?: string }).role;
+    // The real signed-in account, not the impersonated one: its state and role
+    // come from the database so a revoked admin cannot keep impersonating.
+    const actorId = (session.user as { id: string }).id;
+    const actor = await getAccountStatus(actorId);
+    if (!actor || actor.isDeleted) {
+      return NextResponse.json({ error: DELETED_MESSAGE }, { status: 401 });
+    }
+    if (actor.isBanned) {
+      return NextResponse.json({ error: BANNED_MESSAGE }, { status: 403 });
+    }
+
+    const userRole = actor.role;
     if (userRole !== "ADMIN" && userRole !== "PROFESSOR") {
       return NextResponse.json({ error: "Only admins can impersonate" }, { status: 403 });
     }
@@ -20,17 +33,17 @@ export async function POST(req: Request) {
     const { userId } = await req.json();
 
     // Cannot impersonate yourself
-    if (userId === (session.user as { id: string }).id) {
+    if (userId === actorId) {
       return NextResponse.json({ error: "Cannot impersonate yourself" }, { status: 400 });
     }
 
     // Verify target user exists
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, isDeleted: true },
     });
 
-    if (!targetUser) {
+    if (!targetUser || targetUser.isDeleted) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -51,7 +64,7 @@ export async function POST(req: Request) {
     // Audit log the impersonation
     await prisma.auditLog.create({
       data: {
-        userId: (session.user as { id: string }).id,
+        userId: actorId,
         action: "impersonate_start",
         details: {
           targetUserId: userId,

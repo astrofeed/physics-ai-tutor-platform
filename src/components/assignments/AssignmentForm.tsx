@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  Plus,
-  Loader2,
-  ArrowLeft,
-  X,
-  FileText,
-} from "lucide-react";
+import { Loader2, ArrowLeft, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,31 +16,14 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { toast } from "sonner";
-import { QuestionCard } from "./QuestionCard";
-
-export interface QuestionFormData {
-  questionText: string;
-  questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
-  options: string[];
-  correctAnswer: string;
-  points: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  diagram?: { type: "svg" | "mermaid"; content: string } | any;
-  imageUrl?: string | null;
-  imageFile?: File | null;
-  imagePreview?: string | null;
-}
-
-export interface AssignmentFormData {
-  title: string;
-  description: string;
-  dueDate: string;
-  type: "QUIZ" | "FILE_UPLOAD";
-  totalPoints: number;
-  lockAfterSubmit: boolean;
-  pdfUrl: string | null;
-  questions: QuestionFormData[];
-}
+import type {
+  AssignmentFormData,
+  QuestionFormData,
+  QuestionPayload,
+} from "@/types/assignment";
+import { useQuestionList } from "@/hooks/use-question-list";
+import { QuestionsSection } from "./QuestionsSection";
+import type { LatexImportMetadata } from "./LatexImportDialog";
 
 interface AssignmentFormProps {
   /** "create" or "edit" */
@@ -68,15 +45,7 @@ interface AssignmentFormProps {
   /** Render action buttons. Receives form data + helpers. */
   renderActions: (props: {
     formData: AssignmentFormData;
-    getQuestionsWithUrls: () => Promise<Array<{
-      questionText: string;
-      questionType: string;
-      options: string[];
-      correctAnswer: string;
-      points: number;
-      diagram?: unknown;
-      imageUrl?: string;
-    }>>;
+    getQuestionsWithUrls: () => Promise<QuestionPayload[]>;
     titleValid: boolean;
   }) => React.ReactNode;
 }
@@ -96,7 +65,19 @@ export function AssignmentForm({
   const [dueDate, setDueDate] = useState(initialData?.dueDate ?? "");
   const [type, setType] = useState<"QUIZ" | "FILE_UPLOAD">(initialData?.type ?? "QUIZ");
   const [totalPoints, setTotalPoints] = useState(initialData?.totalPoints ?? 100);
-  const [questions, setQuestions] = useState<QuestionFormData[]>(initialData?.questions ?? []);
+  const {
+    questions,
+    setQuestions,
+    addQuestion,
+    moveQuestion,
+    updateQuestion,
+    updateOption,
+    removeQuestion,
+    setImage,
+    removeImage,
+    importQuestions,
+    getQuestionsWithUrls,
+  } = useQuestionList(initialData?.questions ?? []);
   const [lockAfterSubmit, setLockAfterSubmit] = useState(initialData?.lockAfterSubmit ?? false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(initialData?.pdfUrl ?? null);
@@ -118,68 +99,20 @@ export function AssignmentForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData]);
 
-  const addQuestion = () => {
-    setQuestions((prev) => [
-      ...prev,
-      {
-        questionText: "",
-        questionType: "MC",
-        options: ["", "", "", ""],
-        correctAnswer: "",
-        points: 10,
-      },
-    ]);
-  };
-
-  const moveQuestion = (index: number, direction: "up" | "down") => {
-    setQuestions((prev) => {
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
-  const updateQuestion = (index: number, field: keyof QuestionFormData, value: unknown) => {
-    setQuestions((prev) =>
-      prev.map((q, i) => (i === index ? { ...q, [field]: value } : q))
+  const handleImport = (
+    imported: QuestionFormData[],
+    metadata: LatexImportMetadata,
+    mode: "replace" | "append"
+  ) => {
+    importQuestions(imported, mode);
+    if (metadata.title && !title.trim()) setTitle(metadata.title);
+    if (metadata.description && !description.trim()) setDescription(metadata.description);
+    setTotalPoints(
+      (mode === "append" ? questions : []).reduce((sum, q) => sum + q.points, 0) +
+        imported.reduce((sum, q) => sum + q.points, 0)
     );
-  };
-
-  const updateOption = (qIndex: number, oIndex: number, value: string) => {
-    setQuestions((prev) =>
-      prev.map((q, i) => {
-        if (i !== qIndex) return q;
-        const newOptions = [...q.options];
-        newOptions[oIndex] = value;
-        return { ...q, options: newOptions };
-      })
-    );
-  };
-
-  const removeQuestion = (index: number) => {
-    setQuestions((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleImageUpload = (qIndex: number, file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image exceeds the 5 MB limit. Please use a smaller image.");
-      return;
-    }
-    const preview = URL.createObjectURL(file);
-    setQuestions((prev) =>
-      prev.map((q, i) =>
-        i === qIndex ? { ...q, imageFile: file, imagePreview: preview } : q
-      )
-    );
-  };
-
-  const removeImage = (qIndex: number) => {
-    setQuestions((prev) =>
-      prev.map((q, i) =>
-        i === qIndex ? { ...q, imageFile: null, imagePreview: null, imageUrl: null } : q
-      )
+    toast.success(
+      `Imported ${imported.length} question${imported.length === 1 ? "" : "s"}. Review them, then save the assignment.`
     );
   };
 
@@ -208,36 +141,6 @@ export function AssignmentForm({
   const removePdf = () => {
     setPdfFile(null);
     setPdfUrl(null);
-  };
-
-  // Helper: upload question images and return questions with URLs (used by parent submit handlers)
-  const getQuestionsWithUrls = async () => {
-    return Promise.all(
-      questions.map(async (q) => {
-        let imageUrl = q.imageUrl || undefined;
-        if (q.imageFile) {
-          const formData = new FormData();
-          formData.append("file", q.imageFile);
-          const uploadRes = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-          });
-          if (uploadRes.ok) {
-            const data = await uploadRes.json();
-            imageUrl = data.url;
-          }
-        }
-        return {
-          questionText: q.questionText,
-          questionType: q.questionType,
-          options: q.options,
-          correctAnswer: q.correctAnswer,
-          points: q.points,
-          ...(q.diagram && { diagram: q.diagram }),
-          ...(imageUrl && { imageUrl }),
-        };
-      })
-    );
   };
 
   const formData: AssignmentFormData = {
@@ -386,41 +289,18 @@ export function AssignmentForm({
         </Card>
 
       {type === "QUIZ" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Questions</h2>
-            <Button onClick={addQuestion} variant="outline" size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Question
-            </Button>
-          </div>
-
-          {questions.map((q, qIndex) => (
-            <QuestionCard
-              key={qIndex}
-              question={q}
-              index={qIndex}
-              totalQuestions={questions.length}
-              showDiagrams={showDiagrams}
-              onUpdate={(field, value) => updateQuestion(qIndex, field, value)}
-              onUpdateOption={(oIndex, value) => updateOption(qIndex, oIndex, value)}
-              onMove={(dir) => moveQuestion(qIndex, dir)}
-              onRemove={() => removeQuestion(qIndex)}
-              onImageUpload={(file) => handleImageUpload(qIndex, file)}
-              onRemoveImage={() => removeImage(qIndex)}
-            />
-          ))}
-
-          {questions.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-sm text-neutral-400">
-                  No questions yet. Click &ldquo;Add Question&rdquo; to start building your quiz.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        <QuestionsSection
+          questions={questions}
+          showDiagrams={showDiagrams}
+          onAdd={addQuestion}
+          onUpdate={updateQuestion}
+          onUpdateOption={updateOption}
+          onMove={moveQuestion}
+          onRemove={removeQuestion}
+          onImageUpload={setImage}
+          onRemoveImage={removeImage}
+          onImport={handleImport}
+        />
       )}
 
       {extraContent}

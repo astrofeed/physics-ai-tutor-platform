@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { logger } from "@/lib/logger";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -18,6 +19,7 @@ export function useAutoSave<T>({
   enabled = true,
 }: UseAutoSaveOptions<T>) {
   const [status, setStatus] = useState<SaveStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const lastSavedRef = useRef<string>("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,11 +34,13 @@ export function useAutoSave<T>({
     try {
       await saveFnRef.current(dataToSave);
       lastSavedRef.current = serialized;
+      setLastSavedAt(new Date());
       setStatus("saved");
       // Reset to idle after 3 seconds
       if (savedResetRef.current) clearTimeout(savedResetRef.current);
       savedResetRef.current = setTimeout(() => setStatus("idle"), 3000);
-    } catch {
+    } catch (err) {
+      logger.error("Auto-save failed", { error: String(err) });
       setStatus("error");
     }
   }, []);
@@ -75,5 +79,5 @@ export function useAutoSave<T>({
     lastSavedRef.current = JSON.stringify(savedData);
   }, []);
 
-  return { status, saveNow, markSaved };
+  return { status, lastSavedAt, saveNow, markSaved };
 }

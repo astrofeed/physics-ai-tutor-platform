@@ -4,6 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
+import { recordGradeAudit } from "@/lib/services/grading-service";
+import { logger } from "@/lib/logger";
+import { APPEAL_ON_LIVE_ASSIGNMENT } from "@/lib/services/assignment-service";
+import {
+  notifyAppealPatch,
+  notifyGradersOfAppeal,
+} from "@/lib/services/appeal-notification-service";
 
 const appealPostSchema = z.object({
   submissionAnswerId: z.string().min(1, "submissionAnswerId is required"),
@@ -15,8 +22,10 @@ const appealPatchSchema = z.object({
   appealId: z.string().min(1, "appealId is required"),
   status: z.enum(["OPEN", "RESOLVED", "REJECTED"]).optional(),
   message: z.string().max(5000).optional(),
-  newScore: z.number().min(0).optional(),
+  newScore: z.number().min(0).finite().optional(),
   imageUrls: z.array(z.string()).max(3).optional(),
+  /** Staff rationale recorded with a resolve/reject decision. */
+  resolutionNote: z.string().max(5000).optional(),
 });
 
 // GET: Fetch appeals for a submission (student sees own, TA/ADMIN sees all)
@@ -34,7 +43,7 @@ export async function GET(req: Request) {
     if (!submissionId && !assignmentId) {
       if (isStaffRole(userRole)) {
         const appeals = await prisma.gradeAppeal.findMany({
-          where: { status: "OPEN" },
+          where: { status: "OPEN", ...APPEAL_ON_LIVE_ASSIGNMENT },
           include: {
             student: { select: { id: true, name: true } },
             submissionAnswer: {
@@ -171,10 +180,21 @@ export async function POST(req: Request) {
     // Verify the answer belongs to this student's submission
     const answer = await prisma.submissionAnswer.findUnique({
       where: { id: submissionAnswerId },
-      include: { submission: { select: { userId: true } } },
+      include: {
+        submission: {
+          select: {
+            id: true,
+            userId: true,
+            gradedAt: true,
+            assignmentId: true,
+            assignment: { select: { title: true, isDeleted: true } },
+          },
+        },
+        question: { select: { order: true, points: true } },
+      },
     });
 
-    if (!answer) {
+    if (!answer || answer.submission.assignment.isDeleted) {
       return NextResponse.json({ error: "Answer not found" }, { status: 404 });
     }
 
@@ -182,7 +202,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (answer.score === null) {
+    if (answer.score === null || answer.submission.gradedAt === null) {
       return NextResponse.json({ error: "This question has not been graded yet" }, { status: 400 });
     }
 
@@ -222,6 +242,17 @@ export async function POST(req: Request) {
       },
     });
 
+    notifyGradersOfAppeal({
+      submissionId: answer.submission.id,
+      assignmentId: answer.submission.assignmentId,
+      assignmentTitle: answer.submission.assignment.title,
+      questionOrder: answer.question.order,
+      studentName: appeal.student.name || "A student",
+      score: answer.score,
+      maxPoints: answer.question.points,
+      reason,
+    }).catch((err) => console.error("[appeals] Failed to notify graders:", err));
+
     return NextResponse.json({ appeal });
   } catch (error) {
     console.error("Appeals POST error:", error);
@@ -249,10 +280,11 @@ export async function PATCH(req: Request) {
     const appeal = await prisma.gradeAppeal.findUnique({
       where: { id: appealId },
       include: {
+        student: { select: { name: true } },
         submissionAnswer: {
           include: {
-            submission: true,
-            question: { select: { points: true } },
+            submission: { include: { assignment: { select: { title: true } } } },
+            question: { select: { order: true, points: true } },
           },
         },
       },
@@ -287,22 +319,32 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // Only staff can change status or score
+    if (!isStaff && status) {
+      return NextResponse.json(
+        { error: "Only course staff can change an appeal's status" },
+        { status: 403 }
+      );
+    }
+
+    // Score is validated before the status changes, so an out-of-range score
+    // cannot leave the appeal marked resolved with the grade untouched.
     if (isStaff && status) {
+      const applyScore = status === "RESOLVED" && newScore !== undefined;
+      const maxPoints = appeal.submissionAnswer.question.points;
+
+      if (applyScore && (!Number.isFinite(newScore) || newScore < 0 || newScore > maxPoints)) {
+        return NextResponse.json(
+          { error: `New score must be between 0 and ${maxPoints} for this question` },
+          { status: 400 }
+        );
+      }
+
       await prisma.gradeAppeal.update({
         where: { id: appealId },
         data: { status },
       });
 
-      // If resolving with a new score, validate bounds and update the submission answer
-      if (status === "RESOLVED" && newScore !== undefined) {
-        const maxPoints = appeal.submissionAnswer.question.points;
-        if (newScore > maxPoints) {
-          return NextResponse.json(
-            { error: `New score ${newScore} exceeds maximum points (${maxPoints}) for this question` },
-            { status: 400 }
-          );
-        }
+      if (applyScore) {
         await prisma.submissionAnswer.update({
           where: { id: appeal.submissionAnswerId },
           data: { score: newScore },
@@ -322,6 +364,45 @@ export async function PATCH(req: Request) {
           data: { totalScore },
         });
       }
+
+      if (status !== "OPEN") {
+        await recordGradeAudit(
+          userId,
+          status === "RESOLVED" ? "appeal_resolved" : "appeal_rejected",
+          {
+            appealId,
+            submissionId: appeal.submissionAnswer.submissionId,
+            studentId: appeal.studentId,
+            previousScore: appeal.submissionAnswer.score,
+            newScore: applyScore ? newScore : appeal.submissionAnswer.score,
+            resolutionNote: parseResult.data.resolutionNote ?? null,
+          }
+        );
+      }
+
+      if (parseResult.data.resolutionNote) {
+        await prisma.appealMessage.create({
+          data: { appealId, userId, content: parseResult.data.resolutionNote },
+        });
+      }
+    }
+
+    if (message || (isStaff && status)) {
+      const answer = appeal.submissionAnswer;
+      notifyAppealPatch({
+        isStaffActor: isStaff,
+        actorName: auth.user.name ?? null,
+        studentId: appeal.studentId,
+        studentName: appeal.student.name,
+        submissionId: answer.submissionId,
+        assignmentId: answer.submission.assignmentId,
+        assignmentTitle: answer.submission.assignment.title,
+        questionOrder: answer.question.order,
+        score: status === "RESOLVED" && newScore !== undefined ? newScore : answer.score,
+        maxPoints: answer.question.points,
+        message,
+        status: isStaff ? status : undefined,
+      }).catch((err) => console.error("[appeals] Failed to send appeal email:", err));
     }
 
     // Return updated appeal
@@ -349,7 +430,10 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ appeal: updated });
   } catch (error) {
-    console.error("Appeals PATCH error:", error);
+    logger.error("Appeals PATCH error", {
+      route: "/api/appeals",
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
