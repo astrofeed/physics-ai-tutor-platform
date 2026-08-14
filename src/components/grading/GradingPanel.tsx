@@ -96,7 +96,8 @@ function SuggestionCard({
     <div className="rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30 p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">
-          AI suggestion: {suggestion.score}/{maxPoints} — not counted until you apply and save it
+          AI suggestion: {suggestion.score}/{maxPoints} — applying it only fills the score box; the
+          student sees nothing until you finalize
         </p>
         <Button size="sm" variant="outline" onClick={onApply} className="rounded-lg">
           Apply
