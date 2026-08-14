@@ -136,12 +136,12 @@ export function PublishDialogs({
         onSkip={async () => {
           await publishAssignment();
         }}
-        onBeforeSend={async (subj, msg) => {
+        onBeforeSend={async (subj, msg, { audienceRoles }) => {
           await publishAssignment();
           await fetch("/api/notifications", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: subj, message: msg }),
+            body: JSON.stringify({ title: subj, message: msg, audienceRoles }),
           });
         }}
         onSent={() => {
@@ -161,7 +161,7 @@ export function PublishDialogs({
         dialogDescription="Set a publish time and select who to notify when it goes live."
         sendButtonLabel="Notify & Schedule"
         skipButtonLabel="Skip Notification & Schedule"
-        onBeforeSend={async (_subj, _msg, scheduledAt) => {
+        onBeforeSend={async (_subj, _msg, { scheduledAt }) => {
           if (!scheduledAt) return;
           const res = await fetch(`/api/assignments/${assignment.id}`, {
             method: "PATCH",

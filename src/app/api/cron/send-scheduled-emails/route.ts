@@ -36,6 +36,7 @@ export async function GET(req: Request) {
         // Send emails if there are recipients
         let sentCount = 0;
         let failedCount = 0;
+        let skippedCount = 0;
         let recipientCount = 0;
         if (recipientIds.length > 0) {
           const result = await sendBulkEmails({
@@ -46,20 +47,27 @@ export async function GET(req: Request) {
           });
           sentCount = result.sentCount;
           failedCount = result.failedCount;
+          skippedCount = result.skippedCount;
           recipientCount = result.recipients.length;
         }
 
-        // Create in-app notification if flagged
+        // Create in-app notification if flagged, visible only to the chosen roles
         if (scheduled.createNotification) {
           await prisma.notification.create({
             data: {
               title: scheduled.subject,
               message: scheduled.message,
               createdById: scheduled.createdById,
-              isGlobal: true,
+              audienceRoles: scheduled.audienceRoles,
             },
           });
         }
+
+        const statusNotes = [
+          failedCount > 0 ? `${failedCount} of ${recipientCount} emails failed` : null,
+          skippedCount > 0 ? `${skippedCount} recipients skipped (banned or deleted)` : null,
+          recipientIds.length === 0 ? "No email recipients — in-app notification only" : null,
+        ].filter((note): note is string => note !== null);
 
         // Mark as sent
         await prisma.scheduledEmail.update({
@@ -67,9 +75,7 @@ export async function GET(req: Request) {
           data: {
             status: "SENT",
             sentAt: new Date(),
-            error: failedCount > 0
-              ? `${failedCount} of ${recipientCount} emails failed`
-              : null,
+            error: statusNotes.length > 0 ? statusNotes.join("; ") : null,
           },
         });
 
@@ -84,7 +90,9 @@ export async function GET(req: Request) {
               recipientCount,
               sentCount,
               failedCount,
+              skippedCount,
               createNotification: scheduled.createNotification,
+              audienceRoles: scheduled.audienceRoles,
             },
           },
         });
