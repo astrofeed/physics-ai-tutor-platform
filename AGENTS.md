@@ -1524,6 +1524,15 @@ Email-based forgot/reset password for credentials accounts:
 - **Registration**: `src/lib/services/registration-service.ts` — normalizes email, returns one generic failure for both duplicate email and duplicate `studentId` (no account enumeration), never activates an account when email delivery fails.
 - **Gates**: `/api/chat` and `/api/upload/client` reject users with `emailVerified == null`. Google sign-in marks the account verified in the NextAuth `events.signIn` hook. Accounts created before this feature were grandfathered in by the migration's backfill `UPDATE`.
 
+### Google Sign-In
+
+- **Config**: `src/lib/google-auth.ts` owns every Google decision — `isGoogleAuthConfigured` (both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` present), `isAllowedGoogleEmail` (domain allow-list from `GOOGLE_ALLOWED_EMAIL_DOMAINS`, default `gapp.nthu.edu.tw`), and `signInErrorMessage` for NextAuth `?error=` codes.
+- **Provider**: added to `src/lib/auth.ts` only when configured, so an unconfigured deployment shows no Google button instead of a broken one. `allowDangerousEmailAccountLinking` is intentional: the domain is fixed and Google proves the address, so a student who registered with a password can also sign in with Google.
+- **Gates**: the `signIn` callback rejects emails outside the allow-list, unverified Google emails, and banned/soft-deleted users.
+- **UI**: `/login` and `/register` are server components that pass `googleEnabled` and the decoded error message into their client halves; the button lives in `src/components/auth/GoogleSignInButton.tsx`.
+- **Console setup** (project `physics-tutor-platform`, client "Platform Login"): redirect URIs must be `<origin>/api/auth/callback/google` for both localhost and the deployed origin, scopes stay `openid email profile` (non-sensitive, so the 100-user cap does not apply), publishing status "In production".
+- **Types**: `src/types/next-auth.d.ts` declares `session.user.role` and the JWT fields, which replaced the `any` casts in the callbacks.
+
 ### Unauthenticated Rate Limits (`AuthAttempt`)
 
 `src/lib/services/auth-attempt-limit.ts` counts attempts per SHA-256-hashed IP in the `AuthAttempt` table (5/hour per `kind`: `register`, `verify_resend`, `forgot_password`). DB-backed because in-memory counters are per-instance on Vercel and therefore ineffective. The chat message limit in `src/lib/rate-limit.ts` counts the user's own `Message` rows in the window for the same reason (`checkRateLimit` is now async).
