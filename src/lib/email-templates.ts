@@ -320,3 +320,91 @@ export function assignmentPublishedEmail(params: AssignmentPublishedEmailParams)
           </div>
           <p style="margin: 0; color: #6b7280; font-size: 14px;">&mdash; ${esc(params.senderName)}, PhysTutor Staff</p>`);
 }
+
+// ---------------------------------------------------------------------------
+// Template: Grade appeal notification
+// ---------------------------------------------------------------------------
+
+export interface GradeAppealEmailParams {
+  recipientName: string;
+  studentName: string;
+  assignmentTitle: string;
+  questionLabel: string;
+  score: number | null;
+  maxPoints: number;
+  reason: string;
+  gradingUrl: string;
+  /** No human graded the submission, so every TA received this email. */
+  isUnassigned: boolean;
+  /** A follow-up message on an existing appeal rather than a new appeal. */
+  isFollowUp: boolean;
+}
+
+/**
+ * Sent to the grader of a submission (or to all TAs when the grade was produced
+ * without a human grader) when a student appeals or replies on an appeal.
+ */
+export function gradeAppealEmail(params: GradeAppealEmailParams): string {
+  const scoreText =
+    params.score === null ? "not scored" : `${params.score} / ${params.maxPoints}`;
+  const headline = params.isFollowUp
+    ? `${esc(params.studentName)} replied on a grade appeal.`
+    : `${esc(params.studentName)} appealed a grade you are responsible for.`;
+  const unassignedNote = params.isUnassigned
+    ? `<p style="margin: 0 0 16px; color: #6b7280; font-size: 13px;">This grade was produced without a human grader, so every TA was notified.</p>`
+    : "";
+
+  return brandedLayout(`
+              <p style="margin: 0 0 16px; color: #111827; font-size: 16px;">Dear ${esc(params.recipientName)},</p>
+              <p style="margin: 0 0 8px; color: #111827; font-size: 15px;">${headline}</p>
+              ${unassignedNote}
+              <p style="margin: 0 0 4px; color: #374151; font-size: 14px;"><strong>Assignment:</strong> ${esc(params.assignmentTitle)}</p>
+              <p style="margin: 0 0 4px; color: #374151; font-size: 14px;"><strong>${esc(params.questionLabel)}:</strong> ${esc(scoreText)}</p>
+              <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0; color: #1e1b4b; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(params.reason)}</p>
+              </div>
+              <p style="margin: 0; color: #374151; font-size: 14px;"><a href="${params.gradingUrl}" style="color: #4f46e5;">Open the appeal in grading</a></p>`);
+}
+
+// ---------------------------------------------------------------------------
+// Template: Appeal reply / decision (to the student)
+// ---------------------------------------------------------------------------
+
+export interface AppealReplyEmailParams {
+  studentName: string;
+  staffName: string;
+  assignmentTitle: string;
+  questionLabel: string;
+  message?: string;
+  status?: "OPEN" | "RESOLVED" | "REJECTED";
+  score: number | null;
+  maxPoints: number;
+  assignmentUrl: string;
+}
+
+/**
+ * Sent to the student who filed an appeal when staff reply or decide it.
+ */
+export function appealReplyEmail(params: AppealReplyEmailParams): string {
+  const statusLine =
+    params.status === "RESOLVED"
+      ? "Your appeal was resolved."
+      : params.status === "REJECTED"
+        ? "Your appeal was rejected."
+        : `${esc(params.staffName)} replied to your appeal.`;
+  const scoreText =
+    params.score === null ? "not scored" : `${params.score} / ${params.maxPoints}`;
+  const messageBlock = params.message
+    ? `<div style="background-color: #eef2ff; border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0; color: #1e1b4b; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(params.message)}</p>
+              </div>`
+    : "";
+
+  return brandedLayout(`
+              <p style="margin: 0 0 16px; color: #111827; font-size: 16px;">Dear ${esc(params.studentName)},</p>
+              <p style="margin: 0 0 8px; color: #111827; font-size: 15px;">${statusLine}</p>
+              <p style="margin: 0 0 4px; color: #374151; font-size: 14px;"><strong>Assignment:</strong> ${esc(params.assignmentTitle)}</p>
+              <p style="margin: 0 0 4px; color: #374151; font-size: 14px;"><strong>${esc(params.questionLabel)}:</strong> ${esc(scoreText)}</p>
+              ${messageBlock}
+              <p style="margin: 0; color: #374151; font-size: 14px;"><a href="${params.assignmentUrl}" style="color: #4f46e5;">View your graded assignment</a></p>`);
+}

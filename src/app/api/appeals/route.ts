@@ -7,6 +7,10 @@ import { isStaff as isStaffRole } from "@/lib/constants";
 import { recordGradeAudit } from "@/lib/services/grading-service";
 import { logger } from "@/lib/logger";
 import { APPEAL_ON_LIVE_ASSIGNMENT } from "@/lib/services/assignment-service";
+import {
+  notifyAppealPatch,
+  notifyGradersOfAppeal,
+} from "@/lib/services/appeal-notification-service";
 
 const appealPostSchema = z.object({
   submissionAnswerId: z.string().min(1, "submissionAnswerId is required"),
@@ -179,11 +183,14 @@ export async function POST(req: Request) {
       include: {
         submission: {
           select: {
+            id: true,
             userId: true,
             gradedAt: true,
-            assignment: { select: { isDeleted: true } },
+            assignmentId: true,
+            assignment: { select: { title: true, isDeleted: true } },
           },
         },
+        question: { select: { order: true, points: true } },
       },
     });
 
@@ -235,6 +242,17 @@ export async function POST(req: Request) {
       },
     });
 
+    notifyGradersOfAppeal({
+      submissionId: answer.submission.id,
+      assignmentId: answer.submission.assignmentId,
+      assignmentTitle: answer.submission.assignment.title,
+      questionOrder: answer.question.order,
+      studentName: appeal.student.name || "A student",
+      score: answer.score,
+      maxPoints: answer.question.points,
+      reason,
+    }).catch((err) => console.error("[appeals] Failed to notify graders:", err));
+
     return NextResponse.json({ appeal });
   } catch (error) {
     console.error("Appeals POST error:", error);
@@ -262,10 +280,11 @@ export async function PATCH(req: Request) {
     const appeal = await prisma.gradeAppeal.findUnique({
       where: { id: appealId },
       include: {
+        student: { select: { name: true } },
         submissionAnswer: {
           include: {
-            submission: true,
-            question: { select: { points: true } },
+            submission: { include: { assignment: { select: { title: true } } } },
+            question: { select: { order: true, points: true } },
           },
         },
       },
@@ -366,6 +385,24 @@ export async function PATCH(req: Request) {
           data: { appealId, userId, content: parseResult.data.resolutionNote },
         });
       }
+    }
+
+    if (message || (isStaff && status)) {
+      const answer = appeal.submissionAnswer;
+      notifyAppealPatch({
+        isStaffActor: isStaff,
+        actorName: auth.user.name ?? null,
+        studentId: appeal.studentId,
+        studentName: appeal.student.name,
+        submissionId: answer.submissionId,
+        assignmentId: answer.submission.assignmentId,
+        assignmentTitle: answer.submission.assignment.title,
+        questionOrder: answer.question.order,
+        score: status === "RESOLVED" && newScore !== undefined ? newScore : answer.score,
+        maxPoints: answer.question.points,
+        message,
+        status: isStaff ? status : undefined,
+      }).catch((err) => console.error("[appeals] Failed to send appeal email:", err));
     }
 
     // Return updated appeal
