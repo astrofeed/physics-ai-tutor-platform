@@ -10,10 +10,14 @@ export async function GET(
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;
 
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: params.id },
+    const assignment = await prisma.assignment.findFirst({
+      where: { id: params.id, isDeleted: false },
       select: { title: true, type: true, totalPoints: true, dueDate: true },
     });
+
+    if (!assignment) {
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
 
     // Fetch all questions for this assignment to include unanswered ones
     const allQuestions = await prisma.assignmentQuestion.findMany({

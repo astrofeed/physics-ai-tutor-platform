@@ -282,13 +282,23 @@ export default function GradingPage() {
     setLoadingSubmissions(true);
     setSelectedSubmission(null);
     fetch(`/api/assignments/${assignmentId}/submissions`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          setAssignmentInfo(null);
+          setSubmissions([]);
+          toast.error(
+            res.status === 404
+              ? "This assignment was deleted. Restore it from Assignments → Deleted to grade it."
+              : data.error || "Failed to load submissions"
+          );
+          return;
+        }
         setAssignmentInfo(data.assignment || null);
         setSubmissions(data.submissions || []);
-        setLoadingSubmissions(false);
       })
-      .catch(() => setLoadingSubmissions(false));
+      .catch(() => toast.error("Failed to load submissions"))
+      .finally(() => setLoadingSubmissions(false));
   }, []);
 
   useEffect(() => {

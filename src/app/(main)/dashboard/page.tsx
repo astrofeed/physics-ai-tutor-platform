@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { formatDate, stripMarkdown } from "@/lib/utils";
 import { isStaff } from "@/lib/constants";
+import { APPEAL_ON_LIVE_ASSIGNMENT } from "@/lib/services/assignment-service";
 import DashboardClient from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,8 @@ export default async function DashboardPage() {
 
   const [conversationCount, assignmentCount, submissionCount] = await Promise.all([
     prisma.conversation.count({ where: { userId, isDeleted: false } }),
-    prisma.assignment.count({ where: { published: true } }),
-    prisma.submission.count({ where: { userId } }),
+    prisma.assignment.count({ where: { published: true, isDeleted: false } }),
+    prisma.submission.count({ where: { userId, assignment: { isDeleted: false } } }),
   ]);
 
   const recentConversations = await prisma.conversation.findMany({
@@ -36,6 +37,7 @@ export default async function DashboardPage() {
   const upcomingAssignments = await prisma.assignment.findMany({
     where: {
       published: true,
+      isDeleted: false,
       dueDate: { gte: new Date() },
     },
     orderBy: { dueDate: "asc" },
@@ -57,16 +59,16 @@ export default async function DashboardPage() {
   if (isStaff(role)) {
     const [pendingGrading, createdAssignments, openAppealCount, recentAppeals] = await Promise.all([
       prisma.submission.count({
-        where: { gradedAt: null, isDraft: false },
+        where: { gradedAt: null, isDraft: false, assignment: { isDeleted: false } },
       }),
       prisma.assignment.count({
-        where: { createdById: userId },
+        where: { createdById: userId, isDeleted: false },
       }),
       prisma.gradeAppeal.count({
-        where: { status: "OPEN" },
+        where: { status: "OPEN", ...APPEAL_ON_LIVE_ASSIGNMENT },
       }),
       prisma.gradeAppeal.findMany({
-        where: { status: "OPEN" },
+        where: { status: "OPEN", ...APPEAL_ON_LIVE_ASSIGNMENT },
         include: {
           student: { select: { name: true } },
           submissionAnswer: {

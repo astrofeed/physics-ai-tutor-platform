@@ -424,6 +424,19 @@ model Submission {
 
 All queries must filter: `where: { isDeleted: false }` (add a Prisma middleware or wrapper if needed).
 
+Soft-deleting an `Assignment` must not hide its history irrecoverably. Deleted assignments live in a staff-only recycle bin:
+
+- `assignmentListWhere(role, filter)` in `src/lib/services/assignment-service.ts` is the single source of truth for list visibility; `filter=deleted` is the only branch that returns `isDeleted: true`, and students are always forced to `{ published: true, isDeleted: false }`.
+- Any query that reaches submissions, answers, grades, appeals, or exports must also filter the parent assignment: `assignment: { isDeleted: false }` (`Submission.isDeleted` alone is not enough). Use `APPEAL_ON_LIVE_ASSIGNMENT` for appeal queues.
+- Grading reads/mutations for a deleted assignment return 404 so the UI can tell staff to restore it first.
+- `restoreAssignment()` clears only `isDeleted`/`deletedAt` and writes an `assignment_restored` audit log. Never re-create rows on restore.
+
+#### 3.7 Re-read Account State on Every API Call
+
+Sessions are JWTs, so `isDeleted` and `role` claims are a snapshot from sign-in. `requireApiAuth()` calls `getAccountStatus()` (`src/lib/services/account-status.ts`) on every request: a deleted account gets 401 immediately and the role used for authorization comes from the database, not the token. Do not read `session.user.role` directly in new API routes — use the `user` returned by `requireApiAuth()`/`requireApiRole()`.
+
+Ban handling stays route-specific (e.g. chat's "Your account has been suspended" message); do not centralize it into `requireApiAuth()` without reviewing every route's response contract.
+
 ---
 
 ### 4. API Layer

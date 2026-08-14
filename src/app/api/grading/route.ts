@@ -42,6 +42,19 @@ export async function POST(req: Request) {
     }
     const { submissionId, grades, overallScore, overallFeedback, feedbackFileUrl, feedbackImages, isDraft, ungrade } = parseResult.data;
 
+    const gradable = await prisma.submission.findFirst({
+      where: {
+        id: submissionId,
+        isDeleted: false,
+        assignment: { isDeleted: false },
+      },
+      select: { id: true },
+    });
+
+    if (!gradable) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
     // Ungrade: clear gradedAt and gradedById
     if (ungrade && submissionId) {
       await prisma.submission.update({

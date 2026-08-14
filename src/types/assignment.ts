@@ -42,6 +42,8 @@ export interface AssignmentListItem {
   /** Staff-specific fields */
   ungradedCount?: number;
   openAppealCount?: number;
+  /** Set only for soft-deleted assignments listed in the recycle bin. */
+  deletedAt?: string | null;
 }
 
 /** Full assignment detail as returned by GET /api/assignments/[id]. */

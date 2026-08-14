@@ -33,8 +33,8 @@ export async function POST(req: Request) {
     const userId = auth.user.id;
     const { assignmentId, answers, fileUrl, isDraft } = await req.json();
 
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
+    const assignment = await prisma.assignment.findFirst({
+      where: { id: assignmentId, isDeleted: false },
       include: { questions: true },
     });
 

@@ -10,7 +10,7 @@ export async function GET() {
     const userId = user.id;
 
     const submissions = await prisma.submission.findMany({
-      where: { userId, isDeleted: false },
+      where: { userId, isDeleted: false, assignment: { isDeleted: false } },
       include: {
         assignment: {
           select: { title: true, type: true, totalPoints: true },
