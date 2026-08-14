@@ -121,14 +121,23 @@ async function applyGrades(
         });
       }
     } else {
-      // A grader touching a score makes it theirs, so it stops being reported
-      // as machine-graded.
+      const existing = await prisma.submissionAnswer.findUnique({
+        where: { id: grade.answerId },
+        select: { score: true, feedback: true },
+      });
+      // A grader changing a score makes it theirs, so it stops being reported as
+      // machine-graded. Re-saving the same value (an autosave of an untouched
+      // submission) must keep the auto-graded flag.
+      const changed =
+        Number(existing?.score ?? NaN) !== grade.score ||
+        (existing?.feedback ?? "") !== (grade.feedback ?? "");
+
       await prisma.submissionAnswer.update({
         where: { id: grade.answerId },
         data: {
           score: grade.score,
           feedback: grade.feedback,
-          autoGraded: false,
+          ...(changed && { autoGraded: false }),
           ...(images?.length && { feedbackImageUrls: images }),
         },
       });

@@ -14,8 +14,11 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface OverallGradeFormProps {
   totalPoints: number;
-  overallScore: number;
-  onOverallScoreChange: (score: number) => void;
+  /** `null` when no override is set. */
+  overallScore: number | null;
+  onOverallScoreChange: (score: number | null) => void;
+  /** Total of the per-question scores currently entered. */
+  perQuestionTotal: number;
   overallFeedback: string;
   onOverallFeedbackChange: (feedback: string) => void;
   overallGradeConfirmed: boolean;
@@ -32,6 +35,7 @@ export function OverallGradeForm({
   totalPoints,
   overallScore,
   onOverallScoreChange,
+  perQuestionTotal,
   overallFeedback,
   onOverallFeedbackChange,
   overallGradeConfirmed,
@@ -51,9 +55,20 @@ export function OverallGradeForm({
             Overall Grade
           </h4>
           <span className="text-[10px] text-gray-400 dark:text-gray-500">
-            When confirmed, overrides per-question total
+            Leave blank to release the per-question total
           </span>
         </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Per-question total:{" "}
+          <span className="font-semibold text-gray-800 dark:text-gray-200">
+            {perQuestionTotal}/{totalPoints}
+          </span>
+          {overallScore !== null && overallScore !== perQuestionTotal && (
+            <span className="ml-2 text-amber-600 dark:text-amber-400">
+              Override will release {overallScore}/{totalPoints} instead.
+            </span>
+          )}
+        </p>
         <div className="flex items-end gap-4">
           <div className="space-y-1.5 w-48">
             <label className="text-xs font-semibold text-gray-600 dark:text-gray-400">
@@ -64,8 +79,12 @@ export function OverallGradeForm({
                 type="number"
                 min={0}
                 max={totalPoints}
-                value={overallScore}
-                onChange={(e) => onOverallScoreChange(Number(e.target.value))}
+                value={overallScore ?? ""}
+                placeholder="—"
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  onOverallScoreChange(raw === "" ? null : Number(raw));
+                }}
                 className="font-semibold text-center"
               />
               <button
@@ -77,7 +96,9 @@ export function OverallGradeForm({
                     : "border-gray-300 dark:border-gray-600 hover:border-emerald-400"
                 }`}
                 title={
-                  overallGradeConfirmed ? "Unconfirm grade" : "Confirm grade"
+                  overallGradeConfirmed
+                    ? "Remove the override"
+                    : "Use this score instead of the per-question total"
                 }
               >
                 {overallGradeConfirmed && <CheckCircle2 className="h-4 w-4" />}
