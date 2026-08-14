@@ -12,6 +12,7 @@ import {
   ImageIcon,
   Check,
   Copy,
+  ArrowDown,
 } from "lucide-react";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { MessageDocuments } from "./MessageDocuments";
@@ -32,6 +33,8 @@ interface ChatMessageListProps {
   messagesEndRef: React.RefObject<HTMLDivElement>;
   onSuggestedTopic: (topic: string) => void;
   onCopyMessage: (messageId: string, content: string) => void;
+  showJumpToLatest: boolean;
+  onJumpToLatest: () => void;
 }
 
 export function ChatMessageList({
@@ -41,9 +44,12 @@ export function ChatMessageList({
   messagesEndRef,
   onSuggestedTopic,
   onCopyMessage,
+  showJumpToLatest,
+  onJumpToLatest,
 }: ChatMessageListProps) {
   return (
-    <div ref={scrollContainerRef} id="chat-print-area" className="flex-1 min-h-0 overflow-y-auto">
+    <div className="relative flex-1 min-h-0 flex flex-col">
+      <div ref={scrollContainerRef} id="chat-print-area" className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">
@@ -232,7 +238,20 @@ export function ChatMessageList({
         </div>
 
         <div ref={messagesEndRef} />
+        </div>
       </div>
+
+      {showJumpToLatest && (
+        <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none">
+          <button
+            onClick={() => onJumpToLatest()}
+            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs text-gray-600 dark:text-gray-300 shadow-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Jump to latest
+          </button>
+        </div>
+      )}
     </div>
   );
 }
