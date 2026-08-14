@@ -95,10 +95,12 @@ interface FeedbackFileState {
 
 // --- localStorage schema versioning ---
 
-const GRADING_STATE_VERSION = 2;
+const GRADING_STATE_VERSION = 3;
 
 interface GradingDraftData {
   _version: number;
+  submissionId: string;
+  savedAt: number;
   grades: Record<string, { score: number; feedback: string }>;
   confirmedAnswers: string[];
   overallGrade: { score: number | null; feedback: string; confirmed: boolean };
@@ -111,6 +113,7 @@ function isValidGradingDraft(data: unknown): data is GradingDraftData {
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
   if (d._version !== GRADING_STATE_VERSION) return false;
+  if (typeof d.submissionId !== "string" || typeof d.savedAt !== "number") return false;
   if (typeof d.grades !== "object" || d.grades === null) return false;
   if (!Array.isArray(d.confirmedAnswers)) return false;
   if (typeof d.overallGrade !== "object" || d.overallGrade === null) return false;
@@ -180,6 +183,7 @@ function GradingPageContent() {
   const [confirmedAnswers, setConfirmedAnswers] = useState<Set<string>>(new Set());
   const [gradingDraftRestored, setGradingDraftRestored] = useState(false);
   const prevSubmissionIdRef = useRef<string | null>(null);
+  const hydratedSubmissionIdRef = useRef<string | null>(null);
 
   // localStorage helpers for grading drafts with schema versioning
   const getLocalStorageKey = (submissionId: string) => `grading-state-${submissionId}`;
@@ -189,6 +193,8 @@ function GradingPageContent() {
     try {
       const draft: GradingDraftData = {
         _version: GRADING_STATE_VERSION,
+        submissionId: selectedSubmission.id,
+        savedAt: Date.now(),
         grades,
         confirmedAnswers: Array.from(confirmedAnswers),
         overallGrade,
@@ -200,13 +206,20 @@ function GradingPageContent() {
     } catch { /* quota exceeded or similar */ }
   }, [selectedSubmission, grades, confirmedAnswers, overallGrade, feedbackImages, feedbackFileState.url, gradingMode]);
 
-  const loadAllFromLocalStorage = useCallback((submissionId: string): GradingDraftData | null => {
+  /** Persisted grades win over a draft that predates them, so a finalized submission is never shown as zeros. */
+  const loadAllFromLocalStorage = useCallback((sub: SubmissionForGrading): GradingDraftData | null => {
+    const submissionId = sub.id;
     try {
       const raw = localStorage.getItem(getLocalStorageKey(submissionId));
       if (!raw) return null;
       const parsed: unknown = JSON.parse(raw);
       // Validate schema version and shape; discard stale data
-      if (!isValidGradingDraft(parsed)) {
+      if (!isValidGradingDraft(parsed) || parsed.submissionId !== submissionId) {
+        localStorage.removeItem(getLocalStorageKey(submissionId));
+        return null;
+      }
+      const gradedAt = sub.gradedAt ? Date.parse(sub.gradedAt) : null;
+      if (gradedAt !== null && Number.isFinite(gradedAt) && parsed.savedAt <= gradedAt) {
         localStorage.removeItem(getLocalStorageKey(submissionId));
         return null;
       }
@@ -227,6 +240,8 @@ function GradingPageContent() {
   // Save all grading state to localStorage on every change
   useEffect(() => {
     if (!selectedSubmission) return;
+    // State still belongs to the previously selected submission until hydration runs.
+    if (hydratedSubmissionIdRef.current !== selectedSubmission.id) return;
     saveAllToLocalStorage();
   }, [selectedSubmission, saveAllToLocalStorage]);
 
@@ -327,13 +342,14 @@ function GradingPageContent() {
       flushGradingSave();
     }
     prevSubmissionIdRef.current = sub.id;
+    hydratedSubmissionIdRef.current = sub.id;
 
     setSelectedSubmission(sub);
     setFeedbackFileState({ file: null, url: null });
     setGradingDraftRestored(false);
 
     // Try to restore all state from localStorage (validated)
-    const saved = loadAllFromLocalStorage(sub.id);
+    const saved = loadAllFromLocalStorage(sub);
     let restored = false;
 
     // Grades
@@ -567,25 +583,17 @@ function GradingPageContent() {
       if (res.ok) {
         const data = await res.json();
         // Clear localStorage on successful final save
-        clearLocalStorage(selectedSubmission.id);
+        const savedId = selectedSubmission.id;
+        const graded = { totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" };
+        clearLocalStorage(savedId);
         setGradingDraftRestored(false);
+        setSubmissions((prev) => prev.map((s) => (s.id === savedId ? { ...s, ...graded } : s)));
+        // Only patch the panel while it still shows the submission that was saved.
+        setSelectedSubmission((prev) => (prev && prev.id === savedId ? { ...prev, ...graded } : prev));
+        // Advancing last keeps the next submission's hydrated state from being overwritten.
         if (advanceAfterSaveRef.current) {
           selectAdjacentSubmission(1);
         }
-        setSubmissions((prev) =>
-          prev.map((s) => {
-            if (s.id !== selectedSubmission.id) return s;
-            return {
-              ...s,
-              totalScore: data.totalScore,
-              gradedAt: new Date().toISOString(),
-              gradedByName: "You",
-            };
-          })
-        );
-        setSelectedSubmission((prev) =>
-          prev ? { ...prev, totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" } : prev
-        );
         fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
       } else {
         const body = await res.json().catch(() => null);
@@ -939,7 +947,7 @@ function GradingPageContent() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className="flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
                     {/* Grading progress */}
                     {selectedSubmission.answers.length > 0 && !allAutoGraded && (
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400 hidden sm:inline">
