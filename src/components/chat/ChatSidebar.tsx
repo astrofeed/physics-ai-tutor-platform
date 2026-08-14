@@ -1,35 +1,24 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Plus,
   MessageSquare,
-  Trash2,
   Search,
+  FolderPlus,
   Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { Conversation } from "./types";
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
+import { ConversationItem } from "./ConversationItem";
+import { FolderSection } from "./FolderSection";
+import type { Conversation, ConversationFolder } from "./types";
 
 interface ChatSidebarProps {
   conversations: Conversation[];
+  folders: ConversationFolder[];
   activeConversationId: string | null;
   conversationLimit: number;
   searchQuery: string;
@@ -37,6 +26,10 @@ interface ChatSidebarProps {
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
   onDeleteConversation: (id: string, e: React.MouseEvent) => void;
+  onMoveConversation: (conversationId: string, folderId: string | null) => void;
+  onCreateFolder: (name: string) => Promise<boolean>;
+  onRenameFolder: (folderId: string, name: string) => Promise<boolean>;
+  onDeleteFolder: (folderId: string) => void;
   confirmDeleteId: string | null;
   sidebarOpen: boolean;
   isMobile: boolean;
@@ -45,6 +38,7 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({
   conversations,
+  folders,
   activeConversationId,
   conversationLimit,
   searchQuery,
@@ -52,14 +46,40 @@ export function ChatSidebar({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  onMoveConversation,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
   confirmDeleteId,
   sidebarOpen,
   isMobile,
   onClose,
 }: ChatSidebarProps) {
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const unfiledConversations = filteredConversations.filter((c) => !c.folderId);
+  const isSearching = searchQuery.trim().length > 0;
+  const visibleFolders = isSearching
+    ? folders.filter((f) => filteredConversations.some((c) => c.folderId === f.id))
+    : folders;
+
+  const submitNewFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) {
+      setCreatingFolder(false);
+      setNewFolderName("");
+      return;
+    }
+    const ok = await onCreateFolder(name);
+    if (ok) {
+      setCreatingFolder(false);
+      setNewFolderName("");
+    }
+  };
 
   return (
     <>
@@ -88,16 +108,26 @@ export function ChatSidebar({
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Conversations</h2>
-            <Button
-              onClick={onNewChat}
-              size="sm"
-              disabled={conversations.length >= conversationLimit}
-              title={conversations.length >= conversationLimit ? `Limit of ${conversationLimit} conversations reached. Delete old ones first.` : "New conversation"}
-              className="h-7 gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="h-3 w-3" />
-              New
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCreatingFolder(true)}
+                title="New folder"
+                aria-label="New folder"
+                className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </button>
+              <Button
+                onClick={onNewChat}
+                size="sm"
+                disabled={conversations.length >= conversationLimit}
+                title={conversations.length >= conversationLimit ? `Limit of ${conversationLimit} conversations reached. Delete old ones first.` : "New conversation"}
+                className="h-7 gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-3 w-3" />
+                New
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
@@ -109,6 +139,37 @@ export function ChatSidebar({
               className="pl-9 h-8 bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-800 rounded-lg text-sm focus-visible:ring-gray-300"
             />
           </div>
+          {creatingFolder && (
+            <div className="flex items-center gap-1">
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) submitNewFolder();
+                  if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+                }}
+                placeholder="Folder name"
+                maxLength={200}
+                autoFocus
+                aria-label="New folder name"
+                className="h-8 text-sm flex-1 min-w-0"
+              />
+              <button
+                onClick={submitNewFolder}
+                className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Create folder"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
+                className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Cancel"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {conversations.length >= conversationLimit && (
@@ -119,57 +180,34 @@ export function ChatSidebar({
 
         <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversations">
           <div className="px-4 pb-2 space-y-0.5">
-            {filteredConversations.map((conv) => (
-              <div
-                key={conv.id}
-                onClick={() => onSelectConversation(conv.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelectConversation(conv.id); }}
-                aria-label={`Conversation: ${conv.title}`}
-                aria-current={activeConversationId === conv.id ? "true" : undefined}
-                className={cn(
-                  "w-full text-left rounded-lg px-2 py-2 transition-all group cursor-pointer overflow-hidden",
-                  activeConversationId === conv.id
-                    ? "bg-gray-50 dark:bg-gray-800 font-semibold"
-                    : "hover:bg-gray-50/50 dark:hover:bg-gray-800/50"
-                )}
-              >
-                <div className="flex items-center gap-1">
-                  <p
-                    title={conv.title}
-                    className={cn(
-                      "text-sm truncate leading-tight min-w-0 flex-1",
-                      activeConversationId === conv.id
-                        ? "font-semibold text-gray-900 dark:text-gray-100"
-                        : "font-normal text-gray-600 dark:text-gray-400"
-                    )}
-                  >
-                    {conv.title}
-                  </p>
-                  <button
-                    onClick={(e) => onDeleteConversation(conv.id, e)}
-                    className={cn(
-                      "shrink-0 p-1 rounded-md transition-all",
-                      confirmDeleteId === conv.id
-                        ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                        : "text-gray-400 dark:text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
-                    )}
-                    title={confirmDeleteId === conv.id ? "Click again to confirm" : "Delete conversation"}
-                  >
-                    {confirmDeleteId === conv.id ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {formatRelativeDate(conv.updatedAt)}
-                </p>
-              </div>
+            {visibleFolders.map((folder) => (
+              <FolderSection
+                key={folder.id}
+                folder={folder}
+                conversations={filteredConversations.filter((c) => c.folderId === folder.id)}
+                folders={folders}
+                activeConversationId={activeConversationId}
+                confirmDeleteId={confirmDeleteId}
+                onSelectConversation={onSelectConversation}
+                onDeleteConversation={onDeleteConversation}
+                onMoveConversation={onMoveConversation}
+                onRenameFolder={onRenameFolder}
+                onDeleteFolder={onDeleteFolder}
+              />
             ))}
-            {filteredConversations.length === 0 && (
+            {unfiledConversations.map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                conversation={conv}
+                isActive={activeConversationId === conv.id}
+                folders={folders}
+                confirmDeleteId={confirmDeleteId}
+                onSelect={onSelectConversation}
+                onDelete={onDeleteConversation}
+                onMove={onMoveConversation}
+              />
+            ))}
+            {filteredConversations.length === 0 && visibleFolders.length === 0 && (
               <div className="text-center py-8 px-4">
                 <MessageSquare className="h-6 w-6 text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-400 dark:text-gray-500">

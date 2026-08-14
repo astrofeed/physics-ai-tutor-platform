@@ -11,7 +11,10 @@ import {
   Download,
   FileText,
   Printer,
+  FoldVertical,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,16 +29,19 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversation";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
-import type { Conversation } from "@/components/chat/types";
+import { useConversationFolders } from "@/hooks/use-conversation-folders";
+import type { Conversation, ConversationFolder } from "@/components/chat/types";
 
 interface ChatPageClientProps {
   conversations: Conversation[];
+  folders: ConversationFolder[];
   userId: string;
   conversationLimit: number;
 }
 
 export default function ChatPageClient({
   conversations: initialConversations,
+  folders: initialFolders,
   conversationLimit,
 }: ChatPageClientProps) {
   useTrackTime("AI_CHAT");
@@ -50,8 +56,12 @@ export default function ChatPageClient({
   const [examBannerDismissed, setExamBannerDismissed] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const { folders, createFolder, renameFolder, deleteFolder, moveConversation } =
+    useConversationFolders({ initialFolders, setConversations });
 
   const {
     attachments,
@@ -71,6 +81,7 @@ export default function ChatPageClient({
     stopGeneration,
     retryLast,
     canRetry,
+    getInFlightMessages,
   } = useChatStream({
     activeConversationId,
     setActiveConversationId,
@@ -124,7 +135,26 @@ export default function ChatPageClient({
       const res = await fetch(`/api/conversations/${convId}/messages`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages);
+        const inFlight = getInFlightMessages(convId);
+        if (inFlight.length) {
+          const [userMsg, assistantMsg] = inFlight;
+          const last = data.messages[data.messages.length - 1];
+          const prev = data.messages[data.messages.length - 2];
+          const replyAlreadySaved =
+            last?.role === "assistant" && prev?.role === "user" && prev.content === userMsg.content;
+          if (replyAlreadySaved) {
+            setMessages(data.messages);
+            return;
+          }
+          const userAlreadySaved = last?.role === "user" && last.content === userMsg.content;
+          setMessages(
+            userAlreadySaved
+              ? [...data.messages, assistantMsg]
+              : [...data.messages, userMsg, assistantMsg]
+          );
+        } else {
+          setMessages(data.messages);
+        }
       }
     } catch (err) {
       console.error("Failed to load conversation:", err);
@@ -187,6 +217,29 @@ export default function ChatPageClient({
     }
   };
 
+  const compressAndContinue = async () => {
+    if (!activeConversationId || compressing) return;
+    setCompressing(true);
+    try {
+      const res = await fetch(`/api/conversations/${activeConversationId}/compress`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to compress conversation");
+        return;
+      }
+      setConversations((prev) => [data.conversation, ...prev]);
+      setActiveConversationId(data.conversation.id);
+      setMessages([data.summaryMessage]);
+      toast.success("Conversation compressed into a new chat");
+    } catch {
+      toast.error("Failed to compress conversation. Please try again.");
+    } finally {
+      setCompressing(false);
+    }
+  };
+
   const copyMessage = async (messageId: string, content: string) => {
     await navigator.clipboard.writeText(content);
     setCopiedMessageId(messageId);
@@ -199,6 +252,7 @@ export default function ChatPageClient({
     <div className="flex h-[calc(100vh-5rem)] sm:h-[calc(100vh-6.5rem)] overflow-hidden -m-3 sm:-m-6">
       <ChatSidebar
         conversations={conversations}
+        folders={folders}
         activeConversationId={activeConversationId}
         conversationLimit={conversationLimit}
         searchQuery={searchQuery}
@@ -206,6 +260,10 @@ export default function ChatPageClient({
         onSelectConversation={loadConversation}
         onNewChat={createNewChat}
         onDeleteConversation={deleteConversation}
+        onMoveConversation={moveConversation}
+        onCreateFolder={createFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={deleteFolder}
         confirmDeleteId={confirmDeleteId}
         sidebarOpen={sidebarOpen}
         isMobile={isMobile}
@@ -264,6 +322,22 @@ export default function ChatPageClient({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {activeConversationId && messages.length > 0 && (
+              <button
+                type="button"
+                onClick={compressAndContinue}
+                disabled={compressing || loading}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Summarize this conversation and continue in a new chat"
+              >
+                {compressing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FoldVertical className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden sm:inline">{compressing ? "Compressing…" : "Compress"}</span>
+              </button>
             )}
             {!examModeActive && (
               <Button

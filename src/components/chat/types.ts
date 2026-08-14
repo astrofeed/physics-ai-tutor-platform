@@ -20,4 +20,10 @@ export interface Conversation {
   id: string;
   title: string;
   updatedAt: string;
+  folderId: string | null;
+}
+
+export interface ConversationFolder {
+  id: string;
+  name: string;
 }
