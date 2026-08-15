@@ -59,7 +59,7 @@ interface SubmissionViewProps {
   resolvingAppeal: string | null;
   onResolveAppeal: (
     appealId: string,
-    status: "RESOLVED" | "REJECTED" | "OPEN"
+    status: "RESOLVED" | "REJECTED" | "OPEN",
   ) => void;
   onSendAppealMessage: (appealId: string) => void;
   /** Edit/resubmit */
@@ -124,27 +124,29 @@ export function SubmissionView({
             </Badge>
           )}
         </div>
-        {submission.fileUrl && (
-          <a
-            href={submission.fileUrl}
-            download
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            <Download className="h-4 w-4" />
-            Download your submission
-          </a>
-        )}
-        {submission.feedbackFileUrl && (
-          <a
-            href={submission.feedbackFileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            <Download className="h-4 w-4" />
-            Download the grader&apos;s feedback file
-          </a>
-        )}
+        <div className="flex flex-col items-start gap-1">
+          {submission.fileUrl && (
+            <a
+              href={submission.fileUrl}
+              download
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <Download className="h-4 w-4" />
+              Download your submission
+            </a>
+          )}
+          {submission.feedbackFileUrl && (
+            <a
+              href={submission.feedbackFileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <Download className="h-4 w-4" />
+              Download the grader&apos;s feedback file
+            </a>
+          )}
+        </div>
         {assignment.lockAfterSubmit ||
         submission.totalScore !== null ||
         submission.answers?.some((a) => a.score !== null) ? (
@@ -198,7 +200,7 @@ export function SubmissionView({
               </p>
               {submission.answers.map((ans, idx) => {
                 const question = assignment.questions.find(
-                  (q) => q.id === ans.questionId
+                  (q) => q.id === ans.questionId,
                 );
                 const appeal = getAppealForAnswer(ans.id);
                 return (
@@ -314,10 +316,7 @@ export function SubmissionView({
                               <Textarea
                                 value={appealReasons[ans.id] || ""}
                                 onChange={(e) =>
-                                  onAppealReasonChange(
-                                    ans.id,
-                                    e.target.value
-                                  )
+                                  onAppealReasonChange(ans.id, e.target.value)
                                 }
                                 placeholder="Explain why you believe this grade should be reconsidered..."
                                 rows={3}
@@ -325,7 +324,8 @@ export function SubmissionView({
                                 className="text-sm"
                               />
                               <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right">
-                                {(appealReasons[ans.id] || "").length} / {MAX_APPEAL_REASON_LENGTH}
+                                {(appealReasons[ans.id] || "").length} /{" "}
+                                {MAX_APPEAL_REASON_LENGTH}
                               </p>
                               <ImageUpload
                                 images={appealImages[ans.id] || []}
@@ -463,26 +463,25 @@ function AppealThreadInline({
               content={appeal.reason}
               className="text-sm text-amber-800 dark:text-amber-300"
             />
-            {appeal.imageUrls &&
-              (appeal.imageUrls as string[]).length > 0 && (
-                <div className="flex gap-2 mt-2 flex-wrap">
-                  {(appeal.imageUrls as string[]).map((url, i) => (
-                    <a
-                      key={i}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`Attachment ${i + 1}`}
-                        className="h-20 w-20 object-cover rounded-lg border border-amber-200 dark:border-amber-700 hover:opacity-80 transition-opacity"
-                      />
-                    </a>
-                  ))}
-                </div>
-              )}
+            {appeal.imageUrls && (appeal.imageUrls as string[]).length > 0 && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {(appeal.imageUrls as string[]).map((url, i) => (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Attachment ${i + 1}`}
+                      className="h-20 w-20 object-cover rounded-lg border border-amber-200 dark:border-amber-700 hover:opacity-80 transition-opacity"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Messages thread */}
@@ -523,26 +522,25 @@ function AppealThreadInline({
                   content={msg.content}
                   className="text-sm text-gray-800 dark:text-gray-200"
                 />
-                {msg.imageUrls &&
-                  (msg.imageUrls as string[]).length > 0 && (
-                    <div className="flex gap-2 mt-2 flex-wrap">
-                      {(msg.imageUrls as string[]).map((url, i) => (
-                        <a
-                          key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt={`Attachment ${i + 1}`}
-                            className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                {msg.imageUrls && (msg.imageUrls as string[]).length > 0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {(msg.imageUrls as string[]).map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`Attachment ${i + 1}`}
+                          className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -673,4 +671,3 @@ function AppealThreadInline({
     </div>
   );
 }
-

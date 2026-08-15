@@ -25,6 +25,7 @@ import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
 import { useSubmissionGrading } from "@/hooks/useSubmissionGrading";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useTrackTime } from "@/lib/use-track-time";
+import { fileNameFromUrl } from "@/lib/upload-constraints";
 
 function GradingPageContent() {
   useTrackTime("GRADING");
@@ -255,7 +256,10 @@ function GradingPageContent() {
                       overallGradeConfirmed={grading.overallGrade.confirmed}
                       onToggleOverallConfirm={grading.toggleOverallConfirm}
                       feedbackFileUrl={grading.feedbackFile.url}
-                      feedbackFileName={grading.feedbackFile.file?.name || null}
+                      feedbackFileName={
+                        grading.feedbackFile.file?.name ??
+                        fileNameFromUrl(grading.feedbackFile.url)
+                      }
                       uploadingFeedback={grading.uploadingFeedback}
                       onUploadFeedbackFile={grading.attachFeedbackFile}
                       onClearFeedbackFile={grading.clearFeedbackFile}
