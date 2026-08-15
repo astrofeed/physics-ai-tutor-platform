@@ -52,6 +52,8 @@ export function useAssignmentDetail(assignmentId: string) {
   // --- Draft state ---
   const [draftRestored, setDraftRestored] = useState(false);
   const draftRestoredRef = useRef(false);
+  /** Whether a draft exists on the server, so an emptied quiz still has to be saved. */
+  const savedDraftRef = useRef(false);
 
   // --- Dialog state ---
   const [unpublishDialogOpen, setUnpublishDialogOpen] = useState(false);
@@ -92,7 +94,9 @@ export function useAssignmentDetail(assignmentId: string) {
       ...Object.keys(data.answers).filter((qId) => data.answers[qId].trim() !== ""),
       ...Object.keys(data.images).filter((qId) => (data.images[qId]?.length ?? 0) > 0),
     ]);
-    if (questionIds.size === 0) return;
+    // Sending an empty quiz is only worth it once a draft exists — clearing the
+    // last answer otherwise leaves the stale server copy to come back on reload.
+    if (questionIds.size === 0 && !savedDraftRef.current) return;
     const answers = Array.from(questionIds, (questionId) => ({
       questionId,
       answer: data.answers[questionId] ?? "",
@@ -112,6 +116,7 @@ export function useAssignmentDetail(assignmentId: string) {
       const body = await res.json().catch(() => null);
       throw new Error(body?.error || "Failed to save draft");
     }
+    savedDraftRef.current = true;
   }, [assignment]);
 
   const { status: autoSaveStatus, lastSavedAt, saveNow: flushAutoSave, markSaved } = useAutoSave({
@@ -138,6 +143,7 @@ export function useAssignmentDetail(assignmentId: string) {
 
         if (data.submission) {
           setExistingSubmission(data.submission);
+          if (data.submission.isDraft) savedDraftRef.current = true;
           if (data.submission.isDraft && data.submission.answers?.length > 0 && !draftRestoredRef.current) {
             const restored: Record<string, string> = {};
             const restoredImages: Record<string, string[]> = {};
