@@ -30,6 +30,11 @@ export interface ExistingSubmission {
   isLate?: boolean;
   isDraft?: boolean;
   overallFeedback?: string | null;
+  /**
+   * A grader has released or hand-scored this submission, so it can no longer
+   * be edited. Sent separately because an unreleased hand score is masked.
+   */
+  beingGraded?: boolean;
   answers: SubmissionAnswer[];
 }
 

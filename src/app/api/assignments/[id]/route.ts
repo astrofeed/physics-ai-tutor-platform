@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
 import { AssignmentError, syncQuestions } from "@/lib/services/assignment-service";
+import { humanGradingStarted } from "@/lib/services/submission-service";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
@@ -161,9 +162,13 @@ export async function GET(
       })),
     };
 
+    // A hand-saved score is hidden until release, so the student's Edit &
+    // Resubmit button needs this flag to know the submission is locked —
+    // otherwise it stays enabled and every click 403s.
     const submissionData = submission
       ? {
           ...submission,
+          beingGraded: humanGradingStarted(submission),
           totalScore: released ? submission.totalScore : null,
           overallFeedback: released ? submission.overallFeedback : null,
           feedbackFileUrl: released ? submission.feedbackFileUrl : null,
