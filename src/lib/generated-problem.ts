@@ -76,9 +76,30 @@ export function mcKeyFromValue(value: string, options: string[]): string | null 
   return null;
 }
 
+const NUMBER = /-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g;
+
 function numbersIn(text: string): number[] {
-  const matches = text.match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g) ?? [];
+  const matches = text.match(NUMBER) ?? [];
   return matches.map(Number).filter(Number.isFinite);
+}
+
+/**
+ * The numbers a solution asserts, dropping the ones it rules out. Solutions
+ * routinely name the distractor they reject ("the current is 1.636 A, so the
+ * correct option is 1.80 A, not 1.20 A"), and counting that mention as support
+ * silences the warning on exactly the wrong key.
+ */
+function assertedNumbersIn(solution: string): number[] {
+  const asserted: number[] = [];
+  for (const match of Array.from(solution.matchAll(NUMBER))) {
+    const value = Number(match[0]);
+    const before = solution.slice(Math.max(0, match.index - 24), match.index);
+    const rejected = /(?:\bnot\b|\bneither\b|\brather than\b|\binstead of\b|≠)[^.;:\n]*$/i.test(
+      before
+    );
+    if (Number.isFinite(value) && !rejected) asserted.push(value);
+  }
+  return asserted;
 }
 
 function keyValueText(problem: GeneratedProblemLike): string | null {
@@ -108,6 +129,9 @@ export interface GeneratedProblemLike {
  * The match has to be tight (0.5%), because the distractors are deliberately
  * close: 10.9 V sits within 1% of the 11.0 V the solution derived. It is loose
  * enough for the rounding between a solution's 2.6667 and an option's 2.67.
+ *
+ * It still misses a wrong key whose value happens to be one of the question's
+ * given quantities, which is why the author is warned regardless.
  */
 export function keyContradictsSolution(problem: GeneratedProblemLike): boolean {
   const keyText = keyValueText(problem);
@@ -117,7 +141,7 @@ export function keyContradictsSolution(problem: GeneratedProblemLike): boolean {
   if (keyValue === undefined) return false;
 
   const scale = Math.max(Math.abs(keyValue), 1e-12);
-  return !numbersIn(problem.solution).some(
+  return !assertedNumbersIn(problem.solution).some(
     (value) => Math.abs(value - keyValue) / scale <= 0.005
   );
 }

@@ -55,6 +55,28 @@ test.describe("keys that contradict their own solution", () => {
     ).toBe(true);
   });
 
+  test("a value the solution explicitly rejects does not count as support", () => {
+    expect(
+      keyContradictsSolution({
+        questionType: "MC",
+        options: ["0.900 A", "1.20 A", "1.80 A", "3.00 A"],
+        correctAnswer: "B",
+        solution:
+          "The total current is $1.636\\ \\mathrm{A}$, so the correct option is 1.80 A, not 1.20 A.",
+      })
+    ).toBe(true);
+  });
+
+  test("a rejected value in an earlier sentence does not silence a later derivation", () => {
+    expect(
+      keyContradictsSolution({
+        questionType: "NUMERIC",
+        correctAnswer: "1.80",
+        solution: "This is not a series circuit. The current is therefore 1.80 A.",
+      })
+    ).toBe(false);
+  });
+
   test("nothing to compare means no flag", () => {
     expect(
       keyContradictsSolution({
