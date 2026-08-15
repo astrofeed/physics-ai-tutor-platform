@@ -72,6 +72,8 @@ export function AssignmentForm({
     moveQuestion,
     updateQuestion,
     updateOption,
+    addOption,
+    removeOption,
     removeQuestion,
     setImage,
     removeImage,
@@ -295,6 +297,8 @@ export function AssignmentForm({
           onAdd={addQuestion}
           onUpdate={updateQuestion}
           onUpdateOption={updateOption}
+          onAddOption={addOption}
+          onRemoveOption={removeOption}
           onMove={moveQuestion}
           onRemove={removeQuestion}
           onImageUpload={setImage}

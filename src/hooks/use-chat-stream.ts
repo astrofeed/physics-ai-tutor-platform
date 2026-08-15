@@ -8,6 +8,8 @@ interface UseChatStreamOptions {
   setActiveConversationId: (id: string | null) => void;
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
   chatMode: "normal" | "socratic";
+  /** Set when the chat is docked beside an assignment; the server then guides instead of answering. */
+  assignmentId?: string;
   onRestoreInput: (text: string) => void;
 }
 
@@ -30,6 +32,7 @@ export function useChatStream({
   setActiveConversationId,
   setConversations,
   chatMode,
+  assignmentId,
   onRestoreInput,
 }: UseChatStreamOptions) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -104,6 +107,7 @@ export function useChatStream({
             imageUrls: uploadedUrls.length ? uploadedUrls : undefined,
             documents: documents.length ? documents : undefined,
             mode: chatMode,
+            assignmentId,
           }),
           signal: abortController.signal,
         });
@@ -220,7 +224,14 @@ export function useChatStream({
         setLoading(false);
       }
     },
-    [activeConversationId, chatMode, setActiveConversationId, setConversations, onRestoreInput]
+    [
+      activeConversationId,
+      chatMode,
+      assignmentId,
+      setActiveConversationId,
+      setConversations,
+      onRestoreInput,
+    ]
   );
 
   const retryLast = useCallback(() => {

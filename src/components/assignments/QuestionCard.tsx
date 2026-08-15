@@ -4,6 +4,7 @@ import React from "react";
 import {
   Trash2,
   ImagePlus,
+  Plus,
   X,
   ChevronUp,
   ChevronDown,
@@ -22,7 +23,12 @@ import {
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { getDiagramContent } from "@/lib/diagram-utils";
-import { normalizeMcAnswerKey, optionLetter } from "@/lib/mc-answer-key";
+import {
+  MAX_MC_OPTIONS,
+  MIN_MC_OPTIONS,
+  normalizeMcAnswerKey,
+  optionLetter,
+} from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
 import type { QuestionFormData } from "@/types/assignment";
 
@@ -35,6 +41,8 @@ interface QuestionCardProps {
   showDiagrams: boolean;
   onUpdate: (field: keyof QuestionFormData, value: unknown) => void;
   onUpdateOption: (optionIndex: number, value: string) => void;
+  onAddOption: () => void;
+  onRemoveOption: (optionIndex: number) => void;
   onMove: (direction: "up" | "down") => void;
   onRemove: () => void;
   onImageUpload: (file: File) => void;
@@ -48,11 +56,29 @@ export function QuestionCard({
   showDiagrams,
   onUpdate,
   onUpdateOption,
+  onAddOption,
+  onRemoveOption,
   onMove,
   onRemove,
   onImageUpload,
   onRemoveImage,
 }: QuestionCardProps) {
+  /**
+   * MC answers are authored as a set of accepted letters; the first one is kept
+   * as `correctAnswer` so exports and "the answer" displays stay unchanged.
+   */
+  const acceptedLetters = [q.correctAnswer, ...(q.alsoAcceptedAnswers ?? [])]
+    .map((key) => normalizeMcAnswerKey(key, q.options))
+    .filter((letter): letter is string => letter !== null);
+
+  const toggleAccepted = (letter: string) => {
+    const next = acceptedLetters.includes(letter)
+      ? acceptedLetters.filter((l) => l !== letter)
+      : [...acceptedLetters, letter].sort();
+    onUpdate("correctAnswer", next[0] ?? "");
+    onUpdate("alsoAcceptedAnswers", next.slice(1));
+  };
+
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
@@ -207,14 +233,27 @@ export function QuestionCard({
             {q.options.map((opt, oIndex) => (
               <div key={oIndex}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium w-6">
-                    {String.fromCharCode(65 + oIndex)}.
-                  </span>
+                  <span className="text-sm font-medium w-6">{optionLetter(oIndex)}.</span>
                   <Input
                     value={opt}
                     onChange={(e) => onUpdateOption(oIndex, e.target.value)}
-                    placeholder={`Option ${String.fromCharCode(65 + oIndex)}`}
+                    placeholder={`Option ${optionLetter(oIndex)}`}
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveOption(oIndex)}
+                    disabled={q.options.length <= MIN_MC_OPTIONS}
+                    title={
+                      q.options.length <= MIN_MC_OPTIONS
+                        ? `A question needs at least ${MIN_MC_OPTIONS} options`
+                        : `Remove option ${optionLetter(oIndex)}`
+                    }
+                    className="shrink-0 text-gray-400 hover:text-red-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
                 {opt.includes("$") && (
                   <div className="ml-8 mt-1 text-sm overflow-x-auto">
@@ -223,28 +262,50 @@ export function QuestionCard({
                 )}
               </div>
             ))}
+            {q.options.length < MAX_MC_OPTIONS && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onAddOption}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add option
+              </Button>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Options left blank are dropped when the assignment is saved.
+            </p>
           </div>
         )}
 
         <div className="space-y-2">
-          <Label>Correct Answer</Label>
+          <Label>{q.questionType === "MC" ? "Correct Answer(s)" : "Correct Answer"}</Label>
           {q.questionType === "MC" ? (
-            <Select
-              value={normalizeMcAnswerKey(q.correctAnswer, q.options) ?? ""}
-              onValueChange={(value) => onUpdate("correctAnswer", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select the correct option" />
-              </SelectTrigger>
-              <SelectContent>
-                {q.options.map((opt, oIndex) => (
-                  <SelectItem key={oIndex} value={optionLetter(oIndex)}>
-                    {optionLetter(oIndex)}
-                    {opt.trim() ? ` — ${opt}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              {q.options.map((opt, oIndex) =>
+                opt.trim() ? (
+                  <label
+                    key={oIndex}
+                    className="flex items-start gap-2 text-sm cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={acceptedLetters.includes(optionLetter(oIndex))}
+                      onChange={() => toggleAccepted(optionLetter(oIndex))}
+                    />
+                    <span>
+                      <span className="font-medium">{optionLetter(oIndex)}</span> — {opt}
+                    </span>
+                  </label>
+                ) : null
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Tick every option that scores full marks. Students still pick one.
+              </p>
+            </div>
           ) : (
             <Input
               value={q.correctAnswer}

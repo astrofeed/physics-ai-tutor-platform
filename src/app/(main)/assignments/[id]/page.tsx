@@ -71,7 +71,7 @@ export default function AssignmentDetailPage({
   const isStudentDraft = (!s.existingSubmission || s.existingSubmission.isDraft) && s.userRole === "STUDENT";
 
   return (
-    <SideChatLayout contextLabel={assignment.title}>
+    <SideChatLayout contextLabel={assignment.title} assignmentId={assignment.id}>
       <div className="max-w-4xl mx-auto space-y-6">
         <AssignmentHeader
           assignment={assignment}

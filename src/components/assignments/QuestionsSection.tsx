@@ -14,6 +14,8 @@ interface QuestionsSectionProps {
   onAdd: () => void;
   onUpdate: (index: number, field: keyof QuestionFormData, value: unknown) => void;
   onUpdateOption: (qIndex: number, oIndex: number, value: string) => void;
+  onAddOption: (qIndex: number) => void;
+  onRemoveOption: (qIndex: number, oIndex: number) => void;
   onMove: (index: number, direction: "up" | "down") => void;
   onRemove: (index: number) => void;
   onImageUpload: (index: number, file: File) => void;
@@ -31,6 +33,8 @@ export function QuestionsSection({
   onAdd,
   onUpdate,
   onUpdateOption,
+  onAddOption,
+  onRemoveOption,
   onMove,
   onRemove,
   onImageUpload,
@@ -69,6 +73,8 @@ export function QuestionsSection({
           showDiagrams={showDiagrams}
           onUpdate={(field, value) => onUpdate(index, field, value)}
           onUpdateOption={(oIndex, value) => onUpdateOption(index, oIndex, value)}
+          onAddOption={() => onAddOption(index)}
+          onRemoveOption={(oIndex) => onRemoveOption(index, oIndex)}
           onMove={(direction) => onMove(index, direction)}
           onRemove={() => onRemove(index)}
           onImageUpload={(file) => onImageUpload(index, file)}

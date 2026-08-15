@@ -35,6 +35,8 @@ export interface SubmissionAnswer {
   autoGraded: boolean;
   /** The question's stored answer key, shown to graders only. */
   referenceAnswer: string | null;
+  /** Extra answers that also score full marks, shown to graders only. */
+  alsoAcceptedAnswers?: string[];
   /** AI pre-grade recommendation; never an official score until a grader applies it. */
   aiSuggestedScore: number | null;
   aiSuggestedFeedback: string | null;

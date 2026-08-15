@@ -5,8 +5,46 @@
  * and normalized to the letter.
  */
 
+export const MIN_MC_OPTIONS = 2;
+export const MAX_MC_OPTIONS = 8;
+
 export function optionLetter(index: number): string {
   return String.fromCharCode(65 + index);
+}
+
+/**
+ * Drops blank options an author left behind and moves every answer key to the
+ * letter it lands on, so a gap in the middle of the list cannot silently
+ * re-point a key at another option. A key that pointed at a dropped option
+ * comes back empty rather than at its neighbour, so the caller rejects it
+ * instead of scoring the class against an option nobody chose.
+ */
+export function compactMcOptions(
+  options: string[],
+  correctAnswer: string,
+  alsoAcceptedAnswers: string[] = []
+): { options: string[]; correctAnswer: string; alsoAcceptedAnswers: string[] } {
+  const kept = options
+    .map((option, index) => ({ option, index }))
+    .filter(({ option }) => option.trim().length > 0);
+
+  const remap = (key: string): string | null => {
+    const letter = normalizeMcAnswerKey(key, options);
+    if (!letter) return null;
+    const newIndex = kept.findIndex(({ index }) => index === letter.charCodeAt(0) - 65);
+    return newIndex === -1 ? null : optionLetter(newIndex);
+  };
+
+  const primary = remap(correctAnswer);
+  const extras = alsoAcceptedAnswers
+    .map(remap)
+    .filter((letter): letter is string => letter !== null && letter !== primary);
+
+  return {
+    options: kept.map(({ option }) => option),
+    correctAnswer: primary ?? "",
+    alsoAcceptedAnswers: Array.from(new Set(extras)),
+  };
 }
 
 /** Returns the option letter for `correctAnswer`, or null when it matches no option. */

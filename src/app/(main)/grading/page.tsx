@@ -54,6 +54,7 @@ import {
 import { SubmissionList } from "@/components/grading/SubmissionList";
 import { GradingPanel } from "@/components/grading/GradingPanel";
 import { GradingShortcutsDialog } from "@/components/grading/GradingShortcutsDialog";
+import { RegradeButton } from "@/components/grading/RegradeButton";
 import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
 import { OverallGradeForm } from "@/components/grading/OverallGradeForm";
 import type {
@@ -891,6 +892,14 @@ function GradingPageContent() {
               <span className="hidden sm:inline">Export CSV</span>
               <span className="sm:hidden">Export</span>
             </Button>
+
+            {assignmentInfo?.type === "QUIZ" && (
+              <RegradeButton
+                assignmentId={selectedAssignmentId}
+                submissionCount={submissions.length}
+                onRegraded={() => fetchSubmissions(selectedAssignmentId)}
+              />
+            )}
 
             <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
               <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">

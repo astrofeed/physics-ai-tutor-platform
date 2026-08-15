@@ -79,6 +79,7 @@ function validateAnswers(
 type QuestionRow = {
   questionType: string;
   correctAnswer: string | null;
+  alsoAcceptedAnswers: string[];
   points: number;
   tolerance: Prisma.Decimal | null;
   toleranceUnit: string;
@@ -87,6 +88,7 @@ type QuestionRow = {
 const gradable = (question: QuestionRow): GradableQuestion => ({
   questionType: question.questionType,
   correctAnswer: question.correctAnswer,
+  alsoAcceptedAnswers: question.alsoAcceptedAnswers,
   points: question.points,
   tolerance: question.tolerance === null ? null : Number(question.tolerance),
   toleranceUnit: question.toleranceUnit as ToleranceUnit,
