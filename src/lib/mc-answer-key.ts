@@ -5,8 +5,34 @@
  * and normalized to the letter.
  */
 
+export const MIN_MC_OPTIONS = 2;
+export const MAX_MC_OPTIONS = 8;
+
 export function optionLetter(index: number): string {
   return String.fromCharCode(65 + index);
+}
+
+/**
+ * Drops blank options an author left behind and moves the answer key to the
+ * letter it lands on, so a gap in the middle of the list cannot silently
+ * re-point the key at another option.
+ */
+export function compactMcOptions(
+  options: string[],
+  correctAnswer: string
+): { options: string[]; correctAnswer: string } {
+  const key = normalizeMcAnswerKey(correctAnswer, options);
+  const kept = options
+    .map((option, index) => ({ option, index }))
+    .filter(({ option }) => option.trim().length > 0);
+
+  const keyIndex = key ? key.charCodeAt(0) - 65 : -1;
+  const newKeyIndex = kept.findIndex(({ index }) => index === keyIndex);
+
+  return {
+    options: kept.map(({ option }) => option),
+    correctAnswer: newKeyIndex === -1 ? correctAnswer : optionLetter(newKeyIndex),
+  };
 }
 
 /** Returns the option letter for `correctAnswer`, or null when it matches no option. */

@@ -1,7 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteFileByUrl } from "@/lib/services/file-storage";
-import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+import {
+  MAX_MC_OPTIONS,
+  MIN_MC_OPTIONS,
+  compactMcOptions,
+  normalizeMcAnswerKey,
+} from "@/lib/mc-answer-key";
 import { validateTolerance, type ToleranceUnit } from "@/lib/auto-grade";
 import type { UserRole } from "@/types/user";
 
@@ -29,15 +34,27 @@ export class AssignmentError extends Error {
 }
 
 /**
- * Rewrites MC answer keys to the option letter students actually submit, so a key
- * entered as option text (or as "2") cannot silently score everyone zero.
+ * Drops blank MC options and rewrites answer keys to the option letter students
+ * actually submit, so a key entered as option text (or as "2") cannot silently
+ * score everyone zero.
  */
 export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[] {
   return questions.map((question, index) => {
     if (question.questionType !== "MC") return question;
 
-    const options = question.options ?? [];
-    const letter = normalizeMcAnswerKey(question.correctAnswer ?? "", options);
+    const { options, correctAnswer } = compactMcOptions(
+      question.options ?? [],
+      question.correctAnswer ?? ""
+    );
+
+    if (options.length < MIN_MC_OPTIONS || options.length > MAX_MC_OPTIONS) {
+      throw new AssignmentError(
+        `Question ${index + 1}: a multiple choice question needs between ${MIN_MC_OPTIONS} and ${MAX_MC_OPTIONS} options with text.`,
+        400
+      );
+    }
+
+    const letter = normalizeMcAnswerKey(correctAnswer, options);
     if (!letter) {
       throw new AssignmentError(
         `Question ${index + 1}: the correct answer must be one of its options (a letter such as "A", or the option's text).`,
@@ -45,7 +62,7 @@ export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[]
       );
     }
 
-    return { ...question, correctAnswer: letter };
+    return { ...question, options, correctAnswer: letter };
   });
 }
 

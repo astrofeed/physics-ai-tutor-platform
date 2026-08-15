@@ -3,13 +3,15 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { QuestionFormData, QuestionPayload } from "@/types/assignment";
+import { MAX_MC_OPTIONS, MIN_MC_OPTIONS, compactMcOptions } from "@/lib/mc-answer-key";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const DEFAULT_OPTIONS = ["", "", "", ""];
 
 const EMPTY_QUESTION: QuestionFormData = {
   questionText: "",
   questionType: "MC",
-  options: ["", "", "", ""],
+  options: DEFAULT_OPTIONS,
   correctAnswer: "",
   points: 10,
   tolerance: null,
@@ -32,7 +34,7 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
   const [questions, setQuestions] = useState<QuestionFormData[]>(initial);
 
   const addQuestion = useCallback(() => {
-    setQuestions((prev) => [...prev, { ...EMPTY_QUESTION, options: ["", "", "", ""] }]);
+    setQuestions((prev) => [...prev, { ...EMPTY_QUESTION, options: [...DEFAULT_OPTIONS] }]);
   }, []);
 
   const moveQuestion = useCallback((index: number, direction: "up" | "down") => {
@@ -61,6 +63,28 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
         const options = [...q.options];
         options[oIndex] = value;
         return { ...q, options };
+      })
+    );
+  }, []);
+
+  const addOption = useCallback((qIndex: number) => {
+    setQuestions((prev) =>
+      prev.map((q, i) =>
+        i === qIndex && q.options.length < MAX_MC_OPTIONS
+          ? { ...q, options: [...q.options, ""] }
+          : q
+      )
+    );
+  }, []);
+
+  /** Removing an option shifts the letters after it, so the answer key moves with them. */
+  const removeOption = useCallback((qIndex: number, oIndex: number) => {
+    setQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== qIndex || q.options.length <= MIN_MC_OPTIONS) return q;
+        const options = q.options.filter((_, index) => index !== oIndex);
+        const dropped = q.options.map((option, index) => (index === oIndex ? "" : option));
+        return { ...q, options, correctAnswer: compactMcOptions(dropped, q.correctAnswer).correctAnswer };
       })
     );
   }, []);
@@ -125,6 +149,8 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
     moveQuestion,
     updateQuestion,
     updateOption,
+    addOption,
+    removeOption,
     removeQuestion,
     setImage,
     removeImage,

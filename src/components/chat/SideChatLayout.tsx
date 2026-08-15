@@ -9,11 +9,13 @@ import { useSideChatPanel } from "@/hooks/use-side-chat-panel";
 interface SideChatLayoutProps {
   /** Shown in the panel header, e.g. the assignment title. */
   contextLabel?: string;
+  /** Assignment the panel is docked beside; makes the tutor guide instead of answer. */
+  assignmentId?: string;
   children: React.ReactNode;
 }
 
 /** Page content with the AI tutor docked beside it in a resizable column. */
-export function SideChatLayout({ contextLabel, children }: SideChatLayoutProps) {
+export function SideChatLayout({ contextLabel, assignmentId, children }: SideChatLayoutProps) {
   const { open, toggle, close, width, isMobile, resizing, startResize } = useSideChatPanel();
 
   return (
@@ -23,6 +25,7 @@ export function SideChatLayout({ contextLabel, children }: SideChatLayoutProps) 
       {open ? (
         <SideChatPanel
           contextLabel={contextLabel}
+          assignmentId={assignmentId}
           width={width}
           isMobile={isMobile}
           onClose={close}
