@@ -22,15 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import { McAnswerKey } from "@/components/assignments/McAnswerKey";
+import { NumericAnswerFields } from "@/components/assignments/NumericAnswerFields";
 import { getDiagramContent } from "@/lib/diagram-utils";
-import {
-  MAX_MC_OPTIONS,
-  MIN_MC_OPTIONS,
-  normalizeMcAnswerKey,
-  optionLetter,
-} from "@/lib/mc-answer-key";
+import { MAX_MC_OPTIONS, MIN_MC_OPTIONS, optionLetter } from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
-import type { QuestionFormData } from "@/types/assignment";
+import type { QuestionFormData, ToleranceUnit } from "@/types/assignment";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
 
@@ -63,22 +60,6 @@ export function QuestionCard({
   onImageUpload,
   onRemoveImage,
 }: QuestionCardProps) {
-  /**
-   * MC answers are authored as a set of accepted letters; the first one is kept
-   * as `correctAnswer` so exports and "the answer" displays stay unchanged.
-   */
-  const acceptedLetters = [q.correctAnswer, ...(q.alsoAcceptedAnswers ?? [])]
-    .map((key) => normalizeMcAnswerKey(key, q.options))
-    .filter((letter): letter is string => letter !== null);
-
-  const toggleAccepted = (letter: string) => {
-    const next = acceptedLetters.includes(letter)
-      ? acceptedLetters.filter((l) => l !== letter)
-      : [...acceptedLetters, letter].sort();
-    onUpdate("correctAnswer", next[0] ?? "");
-    onUpdate("alsoAcceptedAnswers", next.slice(1));
-  };
-
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
@@ -280,33 +261,19 @@ export function QuestionCard({
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>{q.questionType === "MC" ? "Correct Answer(s)" : "Correct Answer"}</Label>
-          {q.questionType === "MC" ? (
-            <div className="space-y-1.5">
-              {q.options.map((opt, oIndex) =>
-                opt.trim() ? (
-                  <label
-                    key={oIndex}
-                    className="flex items-start gap-2 text-sm cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={acceptedLetters.includes(optionLetter(oIndex))}
-                      onChange={() => toggleAccepted(optionLetter(oIndex))}
-                    />
-                    <span>
-                      <span className="font-medium">{optionLetter(oIndex)}</span> — {opt}
-                    </span>
-                  </label>
-                ) : null
-              )}
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Tick every option that scores full marks. Students still pick one.
-              </p>
-            </div>
-          ) : (
+        {q.questionType === "MC" ? (
+          <McAnswerKey
+            options={q.options}
+            correctAnswer={q.correctAnswer}
+            alsoAcceptedAnswers={q.alsoAcceptedAnswers ?? []}
+            onChange={(correctAnswer, alsoAcceptedAnswers) => {
+              onUpdate("correctAnswer", correctAnswer);
+              onUpdate("alsoAcceptedAnswers", alsoAcceptedAnswers);
+            }}
+          />
+        ) : (
+          <div className="space-y-2">
+            <Label>Correct Answer</Label>
             <Input
               value={q.correctAnswer}
               onChange={(e) => onUpdate("correctAnswer", e.target.value)}
@@ -316,49 +283,26 @@ export function QuestionCard({
                   : "Sample answer (for reference)"
               }
             />
-          )}
-          {q.questionType !== "MC" && q.correctAnswer.includes("$") && (
-            <div className="text-sm mt-1 overflow-x-auto">
-              <MarkdownContent content={q.correctAnswer} />
-            </div>
-          )}
-        </div>
+            {q.correctAnswer.includes("$") && (
+              <div className="text-sm mt-1 overflow-x-auto">
+                <MarkdownContent content={q.correctAnswer} />
+              </div>
+            )}
+          </div>
+        )}
 
         {q.questionType === "NUMERIC" && (
-          <div className="space-y-2">
-            <Label>Accepted tolerance (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                value={q.tolerance ?? ""}
-                onChange={(e) =>
-                  onUpdate("tolerance", e.target.value === "" ? null : Number(e.target.value))
-                }
-                placeholder="Blank = exact match"
-              />
-              <Select
-                value={q.toleranceUnit}
-                onValueChange={(value) => onUpdate("toleranceUnit", value)}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ABSOLUTE">± absolute</SelectItem>
-                  <SelectItem value="PERCENT">± percent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {q.tolerance
-                ? q.toleranceUnit === "PERCENT"
-                  ? `Answers within ${q.tolerance}% of ${q.correctAnswer || "the answer"} are marked correct.`
-                  : `Answers within ±${q.tolerance} of ${q.correctAnswer || "the answer"} are marked correct.`
-                : "Trailing zeros and spaces are always ignored (9.8 = 9.80), but significant figures are not enforced."}
-            </p>
-          </div>
+          <NumericAnswerFields
+            correctAnswer={q.correctAnswer}
+            alsoAcceptedAnswers={q.alsoAcceptedAnswers ?? []}
+            tolerance={q.tolerance}
+            toleranceUnit={q.toleranceUnit}
+            onChangeAlsoAccepted={(values) => onUpdate("alsoAcceptedAnswers", values)}
+            onChangeTolerance={(tolerance) => onUpdate("tolerance", tolerance)}
+            onChangeToleranceUnit={(unit: ToleranceUnit) =>
+              onUpdate("toleranceUnit", unit)
+            }
+          />
         )}
       </CardContent>
     </Card>

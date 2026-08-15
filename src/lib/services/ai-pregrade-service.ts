@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { aiAssistedGrading, type AIProvider } from "@/lib/ai";
 import { toDataUri } from "@/lib/services/file-storage";
 import { GradingError } from "@/lib/services/grading-service";
+import { isPdfUrl } from "@/lib/upload-constraints";
 
 export interface PregradeSuggestion {
   answerId: string;
@@ -61,9 +62,10 @@ export async function suggestAnswerGrade(answerId: string): Promise<PregradeSugg
     .map((r) => `${r.description} (${r.points} pts)`)
     .join("\n");
 
-  const storedImageUrls = Array.isArray(answer.answerImageUrls)
-    ? (answer.answerImageUrls as string[])
-    : [];
+  // Attachments may include a scanned PDF, which the vision models reject.
+  const storedImageUrls = (
+    Array.isArray(answer.answerImageUrls) ? (answer.answerImageUrls as string[]) : []
+  ).filter((url) => !isPdfUrl(url));
   // Answer images live behind an authenticated route, so the model cannot fetch
   // them by URL — inline them as data URIs instead.
   const imageUrls = (await Promise.all(storedImageUrls.map(toDataUri))).filter(

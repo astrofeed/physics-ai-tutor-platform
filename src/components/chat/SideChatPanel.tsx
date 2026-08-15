@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Lightbulb, Plus, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";

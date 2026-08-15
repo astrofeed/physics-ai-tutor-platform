@@ -23,6 +23,7 @@ import {
 } from "@/hooks/useAssignmentAppeals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AttachmentThumbnails } from "@/components/ui/attachment-thumbnails";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { formatShortDate } from "@/lib/utils";
@@ -246,25 +247,11 @@ export function SubmissionView({
                         Your answer: {ans.answer}
                       </p>
                     )}
-                    {ans.answerImageUrls &&
-                      ans.answerImageUrls.length > 0 && (
-                        <div className="flex gap-2 mt-1 flex-wrap">
-                          {ans.answerImageUrls.map((url, i) => (
-                            <a
-                              key={i}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <img
-                                src={url}
-                                alt={`Your image ${i + 1}`}
-                                className="h-16 w-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
-                              />
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                    <AttachmentThumbnails
+                      urls={ans.answerImageUrls ?? []}
+                      label="Your attachment"
+                      size="sm"
+                    />
                     {ans.feedback && (
                       <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 overflow-hidden">
                         <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">

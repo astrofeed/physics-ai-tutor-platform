@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { AttachmentThumbnails } from "@/components/ui/attachment-thumbnails";
 import { AppealThread } from "./AppealThread";
 import type { SubmissionAnswer, Appeal } from "./types";
 
@@ -233,27 +234,12 @@ export function GradingPanel({
                   {answer.answer || "No typed answer provided"}
                 </p>
               )}
-              {answer.answerImageUrls &&
-                (answer.answerImageUrls as string[]).length > 0 && (
-                  <div className="flex gap-2 mt-2 flex-wrap">
-                    {(answer.answerImageUrls as string[]).map(
-                      (url: string, i: number) => (
-                        <a
-                          key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img
-                            src={url}
-                            alt={`Answer image ${i + 1}`}
-                            className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
-                          />
-                        </a>
-                      )
-                    )}
-                  </div>
-                )}
+              <div className="mt-2">
+                <AttachmentThumbnails
+                  urls={answer.answerImageUrls ?? []}
+                  label="Answer attachment"
+                />
+              </div>
             </div>
 
             {/* Score + Confirm + AI Assist */}

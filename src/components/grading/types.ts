@@ -16,6 +16,18 @@ export interface Appeal {
   messages: AppealMessage[];
 }
 
+/** An assignment as listed in the grading page's picker. */
+export interface AssignmentOption {
+  id: string;
+  title: string;
+  type: string;
+  totalPoints: number;
+  submissionCount: number;
+  ungradedCount: number;
+  gradedCount: number;
+  openAppealCount: number;
+}
+
 export interface AssignmentInfo {
   title: string;
   type: string;

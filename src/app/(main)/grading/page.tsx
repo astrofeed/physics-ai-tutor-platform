@@ -1,1158 +1,264 @@
 "use client";
 
-import { StaffOnly } from "@/components/auth/StaffOnly";
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useUploadFile } from "@/hooks/useUploadFile";
+import React, { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useTrackTime } from "@/lib/use-track-time";
-import {
-  Loader2,
-  ClipboardList,
-  CheckCircle2,
-  Clock,
-  User,
-  Download,
-  ShieldAlert,
-  XCircle,
-  Search,
-  ChevronDown,
-  Filter,
-  Trash2,
-  ArrowRight,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { formatShortDate } from "@/lib/utils";
-import { useAutoSave } from "@/hooks/useAutoSave";
-import { SaveStatusIndicator } from "@/components/ui/save-status";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ClipboardList, Trash2 } from "lucide-react";
+import { StaffOnly } from "@/components/auth/StaffOnly";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Pagination } from "@/components/ui/pagination";
-import { toast } from "sonner";
-import { logger } from "@/lib/logger";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
-// Extracted subcomponents
-import { SubmissionList } from "@/components/grading/SubmissionList";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AssignmentPicker } from "@/components/grading/AssignmentPicker";
+import { GradingDialogs } from "@/components/grading/GradingDialogs";
 import { GradingPanel } from "@/components/grading/GradingPanel";
-import { GradingShortcutsDialog } from "@/components/grading/GradingShortcutsDialog";
-import { RegradeButton } from "@/components/grading/RegradeButton";
-import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
+import { GradingPanelHeader } from "@/components/grading/GradingPanelHeader";
+import { GradingPanelStatus } from "@/components/grading/GradingPanelStatus";
 import { OverallGradeForm } from "@/components/grading/OverallGradeForm";
+import { SubmissionList } from "@/components/grading/SubmissionList";
+import { SubmissionToolbar } from "@/components/grading/SubmissionToolbar";
 import type {
-  AssignmentInfo,
-  SubmissionForGrading,
   Appeal,
-  GradingMode,
   FilterMode,
-  OverallGradeState,
+  SubmissionForGrading,
 } from "@/components/grading/types";
-import {
-  overallGradePayload,
-  overrideConfirmAction,
-  sumQuestionScores,
-} from "@/lib/grade-release";
-
-interface AssignmentOption {
-  id: string;
-  title: string;
-  type: string;
-  totalPoints: number;
-  submissionCount: number;
-  ungradedCount: number;
-  gradedCount: number;
-  openAppealCount: number;
-}
-
-// --- Consolidated state types ---
-
-interface AssignmentPickerState {
-  filter: "all" | "ungraded" | "pending";
-  search: string;
-  open: boolean;
-}
-
-interface FeedbackFileState {
-  file: File | null;
-  url: string | null;
-}
-
-// --- localStorage schema versioning ---
-
-const GRADING_STATE_VERSION = 3;
-
-interface GradingDraftData {
-  _version: number;
-  submissionId: string;
-  savedAt: number;
-  grades: Record<string, { score: number; feedback: string }>;
-  confirmedAnswers: string[];
-  overallGrade: { score: number | null; feedback: string; confirmed: boolean };
-  feedbackImages: Record<string, string[]>;
-  feedbackFileUrl: string | null;
-  gradingMode: GradingMode;
-}
-
-function isValidGradingDraft(data: unknown): data is GradingDraftData {
-  if (typeof data !== "object" || data === null) return false;
-  const d = data as Record<string, unknown>;
-  if (d._version !== GRADING_STATE_VERSION) return false;
-  if (typeof d.submissionId !== "string" || typeof d.savedAt !== "number") return false;
-  if (typeof d.grades !== "object" || d.grades === null) return false;
-  if (!Array.isArray(d.confirmedAnswers)) return false;
-  if (typeof d.overallGrade !== "object" || d.overallGrade === null) return false;
-  const og = d.overallGrade as Record<string, unknown>;
-  if (og.score !== null && typeof og.score !== "number") return false;
-  if (typeof og.feedback !== "string" || typeof og.confirmed !== "boolean") return false;
-  if (typeof d.feedbackImages !== "object" || d.feedbackImages === null) return false;
-  if (typeof d.gradingMode !== "string") return false;
-  return true;
-}
+import { useGradingAppeals } from "@/hooks/useGradingAppeals";
+import { useGradingQueue } from "@/hooks/useGradingQueue";
+import { useGradingShortcuts } from "@/hooks/useGradingShortcuts";
+import { useSubmissionGrading } from "@/hooks/useSubmissionGrading";
+import { useUploadFile } from "@/hooks/useUploadFile";
+import { useTrackTime } from "@/lib/use-track-time";
 
 function GradingPageContent() {
   useTrackTime("GRADING");
   const searchParams = useSearchParams();
-  const initialAssignmentId = searchParams.get("assignmentId");
-
-  const [assignments, setAssignments] = useState<AssignmentOption[]>([]);
-  const [assignmentPage, setAssignmentPage] = useState(1);
-  const [assignmentPageSize] = useState(10);
-  const [assignmentTotalCount, setAssignmentTotalCount] = useState(0);
-  const assignmentTotalPages = Math.max(1, Math.ceil(assignmentTotalCount / assignmentPageSize));
-  // Consolidated: assignment picker state (filter, search, open)
-  const [assignmentPicker, setAssignmentPicker] = useState<AssignmentPickerState>({
-    filter: "all",
-    search: "",
-    open: false,
-  });
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>(initialAssignmentId || "");
-  const [assignmentInfo, setAssignmentInfo] = useState<AssignmentInfo | null>(null);
-  const [submissions, setSubmissions] = useState<SubmissionForGrading[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
-  const [assignmentUnavailable, setAssignmentUnavailable] = useState<string | null>(null);
-  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionForGrading | null>(null);
-  const [grades, setGrades] = useState<Record<string, { score: number; feedback: string }>>({});
-  // Consolidated: overall grade state (score, feedback, confirmed)
-  const [overallGrade, setOverallGrade] = useState<OverallGradeState>({
-    score: null,
-    feedback: "",
-    confirmed: false,
-  });
-  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
-  const [gradingMode, setGradingMode] = useState<GradingMode>("per-question");
-  const [saving, setSaving] = useState(false);
-  const [aiLoading, setAiLoading] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<Record<string, { score: number; feedback: string }>>({});
+  const queue = useGradingQueue(searchParams.get("assignmentId"));
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  // Consolidated: feedback file state (file object, url)
-  const [feedbackFileState, setFeedbackFileState] = useState<FeedbackFileState>({
-    file: null,
-    url: null,
-  });
-  const { upload: uploadFeedbackFile, uploading: uploadingFeedback } = useUploadFile({
-    maxSizeBytes: 20 * 1024 * 1024,
-    onSizeError: () => toast.error("File exceeds the 20 MB limit. Please use a smaller file."),
-  });
-  const [feedbackImages, setFeedbackImages] = useState<Record<string, string[]>>({});
-  const [appealMessages, setAppealMessages] = useState<Record<string, string>>({});
-  const [appealNewScores, setAppealNewScores] = useState<Record<string, string>>({});
-  const [resolvingAppeal, setResolvingAppeal] = useState<string | null>(null);
-  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
-  const [pendingAppealAction, setPendingAppealAction] = useState<{ appealId: string; status: "RESOLVED" | "REJECTED" | "OPEN" } | null>(null);
-  const [showUnfinalizeConfirm, setShowUnfinalizeConfirm] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [expandedAppeals, setExpandedAppeals] = useState<Record<string, boolean>>({});
-  const [appealImages, setAppealImages] = useState<Record<string, string[]>>({});
-  const { upload: handleUploadImage, uploading: uploadingImage } = useUploadFile();
-  const [confirmedAnswers, setConfirmedAnswers] = useState<Set<string>>(new Set());
-  const [gradingDraftRestored, setGradingDraftRestored] = useState(false);
-  const prevSubmissionIdRef = useRef<string | null>(null);
-  const hydratedSubmissionIdRef = useRef<string | null>(null);
+  const { upload: uploadAnswerImage, uploading: uploadingImage } = useUploadFile();
 
-  // localStorage helpers for grading drafts with schema versioning
-  const getLocalStorageKey = (submissionId: string) => `grading-state-${submissionId}`;
-
-  const saveAllToLocalStorage = useCallback(() => {
-    if (!selectedSubmission) return;
-    try {
-      const draft: GradingDraftData = {
-        _version: GRADING_STATE_VERSION,
-        submissionId: selectedSubmission.id,
-        savedAt: Date.now(),
-        grades,
-        confirmedAnswers: Array.from(confirmedAnswers),
-        overallGrade,
-        feedbackImages,
-        feedbackFileUrl: feedbackFileState.url,
-        gradingMode,
-      };
-      localStorage.setItem(getLocalStorageKey(selectedSubmission.id), JSON.stringify(draft));
-    } catch { /* quota exceeded or similar */ }
-  }, [selectedSubmission, grades, confirmedAnswers, overallGrade, feedbackImages, feedbackFileState.url, gradingMode]);
-
-  /** Persisted grades win over a draft that predates them, so a finalized submission is never shown as zeros. */
-  const loadAllFromLocalStorage = useCallback((sub: SubmissionForGrading): GradingDraftData | null => {
-    const submissionId = sub.id;
-    try {
-      const raw = localStorage.getItem(getLocalStorageKey(submissionId));
-      if (!raw) return null;
-      const parsed: unknown = JSON.parse(raw);
-      // Validate schema version and shape; discard stale data
-      if (!isValidGradingDraft(parsed) || parsed.submissionId !== submissionId) {
-        localStorage.removeItem(getLocalStorageKey(submissionId));
-        return null;
-      }
-      const gradedAt = sub.gradedAt ? Date.parse(sub.gradedAt) : null;
-      if (gradedAt !== null && Number.isFinite(gradedAt) && parsed.savedAt <= gradedAt) {
-        localStorage.removeItem(getLocalStorageKey(submissionId));
-        return null;
-      }
-      return parsed;
-    } catch {
-      // Parse error — remove corrupt data
-      try { localStorage.removeItem(getLocalStorageKey(submissionId)); } catch { /* ignore */ }
-      return null;
-    }
-  }, []);
-
-  const clearLocalStorage = useCallback((submissionId: string) => {
-    try {
-      localStorage.removeItem(getLocalStorageKey(submissionId));
-    } catch { /* ignore */ }
-  }, []);
-
-  // Save all grading state to localStorage on every change
-  useEffect(() => {
-    if (!selectedSubmission) return;
-    // State still belongs to the previously selected submission until hydration runs.
-    if (hydratedSubmissionIdRef.current !== selectedSubmission.id) return;
-    saveAllToLocalStorage();
-  }, [selectedSubmission, saveAllToLocalStorage]);
-
-  // Server auto-save for grading drafts (5-second debounce)
-  const saveGradingDraft = useCallback(async (data: Record<string, { score: number; feedback: string }>) => {
-    if (!selectedSubmission) return;
-    const gradeEntries = Object.entries(data);
-    if (gradeEntries.length === 0) return;
-    const res = await fetch("/api/grading", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        submissionId: selectedSubmission.id,
-        isDraft: true,
-        grades: gradeEntries.map(([answerId, g]) => ({
-          answerId,
-          score: g.score,
-          feedback: g.feedback,
-        })),
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.error || "Failed to save grading draft");
-    }
-  }, [selectedSubmission]);
-
-  const {
-    status: gradingAutoSaveStatus,
-    lastSavedAt: gradingAutoSavedAt,
-    saveNow: flushGradingSave,
-    markSaved: markGradesSaved,
-  } = useAutoSave({
-    data: grades,
-    saveFn: saveGradingDraft,
-    delayMs: 5000,
-    // A finalized submission is edited through Unfinalize, so drafts must not drift
-    // its per-answer scores away from the released total.
-    enabled: !!selectedSubmission && !selectedSubmission.gradedAt,
-  });
-
-  // Fetch assignment list with pagination and search
-  const fetchAssignmentList = useCallback((p?: number, ps?: number, q?: string, silent?: boolean) => {
-    if (!silent) setLoading(true);
-    const params = new URLSearchParams({ filter: "published", page: String(p ?? 1), pageSize: String(ps ?? 10) });
-    if (q) params.set("search", q);
-    fetch(`/api/assignments?${params}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.assignments || []).map((a: { id: string; title: string; type: string; totalPoints: number; ungradedCount?: number; gradedCount?: number; openAppealCount?: number; _count?: { submissions: number } }) => ({
-          id: a.id,
-          title: a.title,
-          type: a.type,
-          totalPoints: a.totalPoints,
-          submissionCount: a._count?.submissions || 0,
-          ungradedCount: a.ungradedCount || 0,
-          gradedCount: a.gradedCount || 0,
-          openAppealCount: a.openAppealCount || 0,
-        }));
-        setAssignments(list);
-        setAssignmentTotalCount(data.totalCount ?? 0);
-        if (!silent) setLoading(false);
-      })
-      .catch((err) => {
-        logger.error("Failed to load grading assignment list", { error: String(err) });
-        if (!silent) setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    fetchAssignmentList(assignmentPage, assignmentPageSize);
-  }, [fetchAssignmentList, assignmentPage, assignmentPageSize]);
-
-  const fetchSubmissions = useCallback((assignmentId: string) => {
-    if (!assignmentId) return;
-    setLoadingSubmissions(true);
-    setSelectedSubmission(null);
-    setAssignmentUnavailable(null);
-    fetch(`/api/assignments/${assignmentId}/submissions`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) {
-          setAssignmentInfo(null);
-          setSubmissions([]);
-          const message =
-            res.status === 404
-              ? "This assignment was deleted. Its submissions, grades and appeals are kept — restore it from Assignments → Deleted to grade it."
-              : data.error || "Failed to load submissions";
-          setAssignmentUnavailable(message);
-          toast.error(message);
-          return;
-        }
-        setAssignmentInfo(data.assignment || null);
-        setSubmissions(data.submissions || []);
-      })
-      .catch((err) => {
-        logger.error("Failed to load submissions for grading", { assignmentId, error: String(err) });
-        toast.error("Failed to load submissions");
-      })
-      .finally(() => setLoadingSubmissions(false));
-  }, []);
-
-  useEffect(() => {
-    if (selectedAssignmentId) {
-      fetchSubmissions(selectedAssignmentId);
-    }
-  }, [selectedAssignmentId, fetchSubmissions]);
-
-  const selectSubmission = (sub: SubmissionForGrading) => {
-    // Flush pending auto-save for the previous submission
-    if (selectedSubmission && selectedSubmission.id !== sub.id) {
-      flushGradingSave();
-    }
-    prevSubmissionIdRef.current = sub.id;
-    hydratedSubmissionIdRef.current = sub.id;
-
-    setSelectedSubmission(sub);
-    setFeedbackFileState({ file: null, url: null });
-    setGradingDraftRestored(false);
-
-    // Try to restore all state from localStorage (validated)
-    const saved = loadAllFromLocalStorage(sub);
-    let restored = false;
-
-    // Grades
-    const initialGrades: Record<string, { score: number; feedback: string }> = {};
-    sub.answers.forEach((a) => {
-      if (saved?.grades?.[a.id]) {
-        initialGrades[a.id] = saved.grades[a.id];
-        if (saved.grades[a.id].score !== (a.score || 0) || saved.grades[a.id].feedback !== (a.feedback || "")) {
-          restored = true;
-        }
-      } else {
-        initialGrades[a.id] = {
-          score: a.score || 0,
-          feedback: a.feedback || "",
-        };
-      }
-    });
-    setGrades(initialGrades);
-    // Hydration is not an edit, so it must not trigger the autosave.
-    markGradesSaved(initialGrades);
-    if (restored) setGradingDraftRestored(true);
-
-    const storedSuggestions: Record<string, { score: number; feedback: string }> = {};
-    sub.answers.forEach((a) => {
-      if (a.aiSuggestedScore !== null) {
-        storedSuggestions[a.id] = {
-          score: a.aiSuggestedScore,
-          feedback: a.aiSuggestedFeedback ?? "",
-        };
-      }
-    });
-    setSuggestions(storedSuggestions);
-
-    // Confirmed answers & overall grade (consolidated)
-    setConfirmedAnswers(new Set(saved?.confirmedAnswers || []));
-    setOverallGrade({
-      score: saved?.overallGrade?.score ?? sub.totalScore ?? null,
-      feedback: saved?.overallGrade?.feedback ?? sub.overallFeedback ?? "",
-      confirmed: saved?.overallGrade?.confirmed ?? false,
-    });
-
-    // Feedback images: prefer localStorage, fall back to server data
-    if (saved?.feedbackImages && Object.keys(saved.feedbackImages).length > 0) {
-      setFeedbackImages(saved.feedbackImages);
-    } else {
-      const loadedFeedbackImages: Record<string, string[]> = {};
-      sub.answers.forEach((a) => {
-        if (a.feedbackImageUrls && a.feedbackImageUrls.length > 0) {
-          loadedFeedbackImages[a.id] = a.feedbackImageUrls;
-        }
-      });
-      setFeedbackImages(loadedFeedbackImages);
-    }
-
-    // Feedback file URL
-    setFeedbackFileState((prev) => ({ ...prev, url: saved?.feedbackFileUrl ?? null }));
-
-    // Grading mode: prefer saved, fall back to auto-detect
-    if (saved?.gradingMode) {
-      setGradingMode(saved.gradingMode);
-    } else if (sub.answers.length === 0 || assignmentInfo?.type === "FILE_UPLOAD") {
-      setGradingMode("overall");
-    } else {
-      const allAutoGraded = sub.answers.every((a) => a.autoGraded);
-      setGradingMode(allAutoGraded ? "overall" : "per-question");
-    }
-  };
-
-  const handleAIGrade = async (answerId: string) => {
-    setAiLoading(answerId);
-    try {
-      const res = await fetch("/api/grading", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answerId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSuggestions((prev) => ({
-          ...prev,
-          [answerId]: { score: data.suggestedScore, feedback: data.suggestedFeedback },
-        }));
-        toast.success("AI suggestion ready — review it, then apply to use it as the score");
-      } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "AI suggestion failed. Your score and feedback are unchanged.");
-      }
-    } catch (err) {
-      logger.error("AI grading suggestion request failed", { answerId, error: String(err) });
-      toast.error("AI suggestion failed. Your score and feedback are unchanged.");
-    } finally {
-      setAiLoading(null);
-    }
-  };
-
-  /** Copies a stored AI recommendation into the editable grade; saving is still the grader's call. */
-  const handleApplySuggestion = (answerId: string) => {
-    const suggestion = suggestions[answerId];
-    if (!suggestion) return;
-    setGrades((prev) => ({
-      ...prev,
-      [answerId]: { score: suggestion.score, feedback: suggestion.feedback },
-    }));
-  };
-
-  const handleUploadFeedbackFile = async (file: File) => {
-    setFeedbackFileState((prev) => ({ ...prev, file }));
-    const url = await uploadFeedbackFile(file);
-    if (url) setFeedbackFileState((prev) => ({ ...prev, url }));
-  };
-
-  const handleGradeChange = (answerId: string, field: "score" | "feedback", value: number | string) => {
-    setGrades((prev) => ({
-      ...prev,
-      [answerId]: {
-        ...prev[answerId],
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleToggleConfirm = (answerId: string) => {
-    setConfirmedAnswers((prev) => {
-      const next = new Set(prev);
-      if (next.has(answerId)) next.delete(answerId);
-      else next.add(answerId);
-      return next;
-    });
-  };
-
-  const perQuestionTotal = sumQuestionScores(Object.values(grades));
-
-  const handleToggleOverallConfirm = () => {
-    switch (overrideConfirmAction(overallGrade, perQuestionTotal, gradingMode)) {
-      case "clear":
-        setOverallGrade((prev) => ({ ...prev, confirmed: false }));
-        return;
-      case "reject-blank":
-        toast.error(
-          "Enter an overall score first, or leave it blank to release the per-question total."
-        );
-        return;
-      case "warn-differs":
-        setShowOverrideConfirm(true);
-        return;
-      case "confirm":
-        setOverallGrade((prev) => ({ ...prev, confirmed: true }));
-    }
-  };
-
-  const filteredSubmissions = submissions.filter((s) => {
+  const visibleSubmissions = queue.submissions.filter((s) => {
     if (filterMode === "ungraded") return s.totalScore === null;
     if (filterMode === "graded") return s.totalScore !== null;
     if (filterMode === "appeals") return s.openAppealCount > 0;
     return true;
   });
 
-  /**
-   * Moves through the visible queue. Pending grade edits are flushed by
-   * `selectSubmission`, so nothing typed on the current submission is lost.
-   */
-  const selectAdjacentSubmission = (direction: 1 | -1) => {
-    if (!selectedSubmission) return;
-    const index = filteredSubmissions.findIndex((s) => s.id === selectedSubmission.id);
-    const next = index === -1 ? undefined : filteredSubmissions[index + direction];
-    if (!next) {
-      toast.info(direction === 1 ? "Last submission in this list." : "First submission in this list.");
-      return;
-    }
-    selectSubmission(next);
-  };
+  const patchSubmission = useCallback(
+    (submissionId: string, patch: Partial<SubmissionForGrading>) =>
+      queue.setSubmissions((prev) =>
+        prev.map((s) => (s.id === submissionId ? { ...s, ...patch } : s))
+      ),
+    [queue]
+  );
 
-  /** Set by "Save & next" so the queue only advances after the save succeeds. */
-  const advanceAfterSaveRef = useRef(false);
+  const grading = useSubmissionGrading({
+    assignmentInfo: queue.assignmentInfo,
+    visibleSubmissions,
+    patchSubmission,
+    onQueueChanged: queue.refreshCounters,
+  });
+  const { submission, clearSelection, patchOpenSubmission } = grading;
 
-  const handleSaveGrades = async (advanceAfterSave = false) => {
-    if (!selectedSubmission) return;
-    advanceAfterSaveRef.current = advanceAfterSave;
-
-    if (gradingMode === "overall" && !overallGradePayload(overallGrade)) {
-      toast.error("Enter an overall score and confirm it before finalizing.");
-      return;
-    }
-
-    // In per-question mode, warn if not all answers are confirmed
-    if (gradingMode === "per-question") {
-      const manualAnswers = selectedSubmission.answers.filter(a => !a.autoGraded);
-      if (confirmedAnswers.size < manualAnswers.length) {
-        setShowFinalizeConfirm(true);
-        return;
-      }
-    }
-    await executeSaveGrades();
-  };
-
-  const executeSaveGrades = async () => {
-    if (!selectedSubmission) return;
-
-    setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        submissionId: selectedSubmission.id,
-      };
-
-      if (feedbackFileState.url) {
-        body.feedbackFileUrl = feedbackFileState.url;
-      }
-
-      // Only an explicitly confirmed override replaces the per-question total.
-      Object.assign(body, overallGradePayload(overallGrade) ?? {});
-
-      if (gradingMode === "per-question") {
-        body.grades = Object.entries(grades).map(([answerId, g]) => ({
-          answerId,
-          score: g.score,
-          feedback: g.feedback,
-        }));
-        // Include feedback images keyed by answerId
-        const hasAnyImages = Object.values(feedbackImages).some((imgs) => imgs.length > 0);
-        if (hasAnyImages) {
-          body.feedbackImages = feedbackImages;
-        }
-      }
-
-      const res = await fetch("/api/grading", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Clear localStorage on successful final save
-        const savedId = selectedSubmission.id;
-        const graded = { totalScore: data.totalScore, gradedAt: new Date().toISOString(), gradedByName: "You" };
-        clearLocalStorage(savedId);
-        setGradingDraftRestored(false);
-        setSubmissions((prev) => prev.map((s) => (s.id === savedId ? { ...s, ...graded } : s)));
-        // Only patch the panel while it still shows the submission that was saved.
-        setSelectedSubmission((prev) => (prev && prev.id === savedId ? { ...prev, ...graded } : prev));
-        // Advancing last keeps the next submission's hydrated state from being overwritten.
-        if (advanceAfterSaveRef.current) {
-          selectAdjacentSubmission(1);
-        }
-        fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
-      } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Failed to save grades");
-      }
-    } catch (err) {
-      logger.error("Save grades request failed", {
-        submissionId: selectedSubmission.id,
-        error: String(err),
-      });
-      toast.error("Failed to save grades");
-    } finally {
-      advanceAfterSaveRef.current = false;
-      setSaving(false);
-    }
-  };
-
-  const handleAppealMessage = async (appealId: string) => {
-    const message = appealMessages[appealId]?.trim();
-    if (!message) return;
-    try {
-      const res = await fetch("/api/appeals", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appealId,
-          message,
-          imageUrls: appealImages[appealId]?.length ? appealImages[appealId] : undefined,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        updateAppealInSubmissions(appealId, data.appeal);
-        setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
-        setAppealImages((prev) => ({ ...prev, [appealId]: [] }));
-      } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Failed to send message");
-      }
-    } catch (err) {
-      logger.error("Appeal message request failed", { appealId, error: String(err) });
-      toast.error("Failed to send message");
-    }
-  };
-
-  const handleResolveAppeal = (appealId: string, status: "RESOLVED" | "REJECTED" | "OPEN") => {
-    setPendingAppealAction({ appealId, status });
-  };
-
-  const executeResolveAppeal = async () => {
-    if (!pendingAppealAction) return;
-    const { appealId, status } = pendingAppealAction;
-    setPendingAppealAction(null);
-    const newScoreStr = appealNewScores[appealId];
-    const newScore = status === "RESOLVED" && newScoreStr ? parseFloat(newScoreStr) : undefined;
-    const message = appealMessages[appealId];
-    setResolvingAppeal(appealId);
-    try {
-      const res = await fetch("/api/appeals", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appealId,
-          status,
-          newScore,
-          message: message?.trim() || undefined,
-          imageUrls: appealImages[appealId]?.length ? appealImages[appealId] : undefined,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        updateAppealInSubmissions(appealId, data.appeal);
-        setAppealMessages((prev) => ({ ...prev, [appealId]: "" }));
-        setAppealImages((prev) => ({ ...prev, [appealId]: [] }));
-        setAppealNewScores((prev) => ({ ...prev, [appealId]: "" }));
-        // Refresh submissions to get updated scores
-        if (status === "RESOLVED" && newScore !== undefined) {
-          fetchSubmissions(selectedAssignmentId);
-        }
-        fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
-      } else {
-        const body = await res.json().catch(() => null);
-        toast.error(body?.error || "Failed to update appeal");
-      }
-    } catch (err) {
-      logger.error("Appeal decision request failed", { appealId, status, error: String(err) });
-      toast.error("Failed to update appeal");
-    } finally {
-      setResolvingAppeal(null);
-    }
-  };
-
-  const updateAppealInSubmissions = (appealId: string, updatedAppeal: Appeal) => {
-    setSubmissions((prev) =>
-      prev.map((sub) => ({
+  const applyAppealUpdate = useCallback(
+    (appealId: string, updated: Appeal) => {
+      const withAppeal = (sub: SubmissionForGrading) => ({
         ...sub,
-        openAppealCount: sub.answers.reduce(
-          (count, a) => count + a.appeals.filter((ap) => ap.id === appealId ? updatedAppeal.status === "OPEN" : ap.status === "OPEN").length,
-          0
-        ),
         answers: sub.answers.map((a) => ({
           ...a,
-          appeals: a.appeals.map((ap) => ap.id === appealId ? updatedAppeal : ap),
+          appeals: a.appeals.map((ap) => (ap.id === appealId ? updated : ap)),
         })),
-      }))
-    );
-    setSelectedSubmission((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        answers: prev.answers.map((a) => ({
-          ...a,
-          appeals: a.appeals.map((ap) => ap.id === appealId ? updatedAppeal : ap),
-        })),
-      };
-    });
-  };
+      });
+      queue.setSubmissions((prev) =>
+        prev.map((sub) => {
+          const next = withAppeal(sub);
+          return {
+            ...next,
+            openAppealCount: next.answers.reduce(
+              (count, a) => count + a.appeals.filter((ap) => ap.status === "OPEN").length,
+              0
+            ),
+          };
+        })
+      );
+      patchOpenSubmission(withAppeal);
+    },
+    [queue, patchOpenSubmission]
+  );
+
+  const appeals = useGradingAppeals({
+    onAppealUpdated: applyAppealUpdate,
+    onScoreChanged: queue.reloadSubmissions,
+    onDecided: queue.refreshCounters,
+  });
+
+  // Picking another assignment invalidates the open submission.
+  useEffect(() => {
+    clearSelection();
+  }, [queue.selectedAssignmentId, clearSelection]);
 
   useGradingShortcuts({
-    enabled: !!selectedSubmission && !saving,
+    enabled: !!submission && !grading.saving,
     onSaveAndNext: () => {
-      if (selectedSubmission?.gradedAt) return;
-      handleSaveGrades(true);
+      if (submission?.gradedAt) return;
+      grading.finalize(true);
     },
-    onNextSubmission: () => selectAdjacentSubmission(1),
-    onPrevSubmission: () => selectAdjacentSubmission(-1),
+    onNextSubmission: () => grading.selectAdjacent(1),
+    onPrevSubmission: () => grading.selectAdjacent(-1),
     onToggleHelp: () => setShowShortcuts((prev) => !prev),
   });
 
-  const gradedCount = submissions.filter((s) => s.totalScore !== null).length;
-  const ungradedCount = submissions.length - gradedCount;
-  const appealsCount = submissions.filter((s) => s.openAppealCount > 0).length;
-  const allAutoGraded = (selectedSubmission?.answers.length ?? 0) > 0 && (selectedSubmission?.answers.every((a) => a.autoGraded) ?? false);
+  const gradedCount = queue.submissions.filter((s) => s.totalScore !== null).length;
+  const ungradedCount = queue.submissions.length - gradedCount;
+  const appealsCount = queue.submissions.filter((s) => s.openAppealCount > 0).length;
+  const manualAnswerCount = grading.manualAnswers.length;
   const finalizeDisabled =
-    saving ||
-    allAutoGraded ||
-    (!!selectedSubmission &&
-      selectedSubmission.answers.filter((a) => !a.autoGraded).length === 0 &&
-      !overallGrade.confirmed);
+    grading.saving ||
+    grading.allAutoGraded ||
+    (manualAnswerCount === 0 && !grading.overallGrade.confirmed);
 
-  if (loading) {
+  if (queue.loading) {
     return <LoadingSpinner message="Loading..." />;
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Grading</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Review and grade student submissions</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+          Grading
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Review and grade student submissions
+        </p>
       </div>
 
-      {/* Assignment Picker & Submission Controls */}
       <div className="space-y-3">
-        {/* Assignment Picker */}
-        <Popover open={assignmentPicker.open} onOpenChange={(open) => setAssignmentPicker((prev) => ({ ...prev, open }))}>
-          <PopoverTrigger asChild>
-            <button
-              className="flex h-10 w-full sm:w-96 items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-950 px-3 py-2 text-sm shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-            >
-              <span className={selectedAssignmentId ? "text-gray-900 dark:text-gray-100 font-medium truncate" : "text-gray-400 dark:text-gray-500"}>
-                {assignments.find((a) => a.id === selectedAssignmentId)?.title || "Select an assignment to grade"}
-              </span>
-              <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="sm:w-96 p-0">
-            {/* Search */}
-            <div className="p-2 border-b border-neutral-100 dark:border-neutral-800">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <Input
-                  placeholder="Search assignments..."
-                  value={assignmentPicker.search}
-                  onChange={(e) => setAssignmentPicker((prev) => ({ ...prev, search: e.target.value }))}
-                  className="pl-8 h-8 text-sm"
-                />
-              </div>
-            </div>
-            {/* Filter tabs */}
-            <div className="flex items-center gap-1 p-2 border-b border-neutral-100 dark:border-neutral-800">
-              {([
-                { key: "all", label: "All" },
-                { key: "ungraded", label: "Ungraded" },
-                { key: "pending", label: "Appeals" },
-              ] as const).map((f) => (
-                <button
-                  key={f.key}
-                  onClick={() => { setAssignmentPicker((prev) => ({ ...prev, filter: f.key })); setAssignmentPage(1); }}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    assignmentPicker.filter === f.key
-                      ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            {/* Assignment list */}
-            <div className="max-h-64 overflow-y-auto p-1">
-              {(() => {
-                const filtered = assignments.filter((a) => {
-                  if (assignmentPicker.search && !a.title.toLowerCase().includes(assignmentPicker.search.toLowerCase())) return false;
-                  if (assignmentPicker.filter === "ungraded" && a.ungradedCount <= 0) return false;
-                  if (assignmentPicker.filter === "pending" && a.openAppealCount <= 0) return false;
-                  return true;
-                });
-                if (filtered.length === 0) {
-                  return <div className="px-3 py-6 text-sm text-gray-400 text-center">No matching assignments</div>;
-                }
-                return filtered.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => { setSelectedAssignmentId(a.id); setAssignmentPicker((prev) => ({ ...prev, open: false, search: "" })); }}
-                    className={`w-full text-left rounded-md px-3 py-2.5 transition-colors ${
-                      a.id === selectedAssignmentId
-                        ? "bg-gray-100 dark:bg-gray-800"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                    }`}
-                  >
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{a.title}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-                      <span>{a.submissionCount} submissions</span>
-                      {a.ungradedCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded font-semibold text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                          {a.ungradedCount} ungraded
-                        </span>
-                      )}
-                      {a.openAppealCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded font-semibold text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400">
-                          {a.openAppealCount} appeal{a.openAppealCount !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ));
-              })()}
-            </div>
-            {/* Pagination */}
-            {assignmentTotalPages > 1 && (
-              <div className="flex items-center justify-center px-3 py-2 border-t border-neutral-100 dark:border-neutral-800">
-                <Pagination currentPage={assignmentPage} totalPages={assignmentTotalPages} onPageChange={setAssignmentPage} />
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
+        <AssignmentPicker
+          assignments={queue.assignments}
+          selectedAssignmentId={queue.selectedAssignmentId}
+          onSelect={queue.setSelectedAssignmentId}
+          page={queue.page}
+          totalPages={queue.totalPages}
+          onPageChange={queue.setPage}
+        />
 
-        {/* Submission controls -- only visible after selecting an assignment */}
-        {selectedAssignmentId && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={filterMode} onValueChange={(v) => setFilterMode(v as FilterMode)}>
-              <SelectTrigger className="w-32 sm:w-44">
-                <Filter className="h-3.5 w-3.5 mr-1.5" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All ({submissions.length})</SelectItem>
-                <SelectItem value="ungraded">Ungraded ({ungradedCount})</SelectItem>
-                <SelectItem value="graded">Graded ({gradedCount})</SelectItem>
-                {appealsCount > 0 && (
-                  <SelectItem value="appeals">Has Appeals ({appealsCount})</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                const url = `/api/grading/export?assignmentId=${selectedAssignmentId}`;
-                window.open(url, "_blank");
-              }}
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Export CSV</span>
-              <span className="sm:hidden">Export</span>
-            </Button>
-
-            {assignmentInfo?.type === "QUIZ" && (
-              <RegradeButton
-                assignmentId={selectedAssignmentId}
-                submissionCount={submissions.length}
-                onRegraded={() => fetchSubmissions(selectedAssignmentId)}
-              />
-            )}
-
-            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                <CheckCircle2 className="h-3 w-3" />
-                {gradedCount} Graded
-              </span>
-              <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
-                <Clock className="h-3 w-3" />
-                {ungradedCount} Ungraded
-              </span>
-              {appealsCount > 0 && (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 dark:bg-orange-950 px-2.5 py-1 rounded-full border border-orange-200 dark:border-orange-800">
-                  <ShieldAlert className="h-3 w-3" />
-                  {appealsCount} Appeals
-                </span>
-              )}
-            </div>
-          </div>
+        {queue.selectedAssignmentId && (
+          <SubmissionToolbar
+            assignmentId={queue.selectedAssignmentId}
+            assignmentInfo={queue.assignmentInfo}
+            submissionCount={queue.submissions.length}
+            gradedCount={gradedCount}
+            ungradedCount={ungradedCount}
+            appealsCount={appealsCount}
+            filterMode={filterMode}
+            onFilterModeChange={setFilterMode}
+            onRegraded={queue.reloadSubmissions}
+          />
         )}
       </div>
 
-      {!selectedAssignmentId ? (
+      {!queue.selectedAssignmentId ? (
         <EmptyState
           icon={ClipboardList}
           title="Select an assignment to grade"
           description="Choose an assignment from the dropdown above."
         />
-      ) : loadingSubmissions ? (
+      ) : queue.loadingSubmissions ? (
         <LoadingSpinner />
-      ) : assignmentUnavailable ? (
+      ) : queue.unavailableReason ? (
         <EmptyState
           icon={Trash2}
           title="This assignment is not available for grading"
-          description={assignmentUnavailable}
+          description={queue.unavailableReason}
         />
       ) : (
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:h-[calc(100vh-16rem)]">
-          {/* Submission List */}
           <SubmissionList
-            submissions={filteredSubmissions}
-            selectedSubmission={selectedSubmission}
-            onSelectSubmission={selectSubmission}
-            assignmentInfo={assignmentInfo}
+            submissions={visibleSubmissions}
+            selectedSubmission={submission}
+            onSelectSubmission={grading.select}
+            assignmentInfo={queue.assignmentInfo}
             filterMode={filterMode}
           />
 
-          {/* Grading Panel */}
           <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
-            {selectedSubmission ? (
+            {submission ? (
               <>
-                {/* Panel Header */}
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                      <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{selectedSubmission.userName}</h3>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                        Submitted {formatShortDate(selectedSubmission.submittedAt)}
-                      </p>
-                      {selectedSubmission.gradedByName && (
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          &middot; Graded by {selectedSubmission.gradedByName}
-                        </p>
-                      )}
-                      {assignmentInfo?.dueDate && new Date(selectedSubmission.submittedAt) > new Date(assignmentInfo.dueDate) && (
-                        <Badge className="bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 text-[10px]">
-                          Late
-                        </Badge>
-                      )}
-                      {allAutoGraded && selectedSubmission.answers.length > 0 && (
-                        <Badge className="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-[10px]">
-                          Auto-graded
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
-                    {/* Grading progress */}
-                    {selectedSubmission.answers.length > 0 && !allAutoGraded && (
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 hidden sm:inline">
-                        Confirmed {confirmedAnswers.size}/{selectedSubmission.answers.filter(a => !a.autoGraded).length}
-                      </span>
-                    )}
-                    {/* Grading mode toggle - only for QUIZ with questions */}
-                    {selectedSubmission.answers.length > 0 && !allAutoGraded && (
-                      <Select value={gradingMode} onValueChange={(v) => setGradingMode(v as GradingMode)}>
-                        <SelectTrigger className="w-32 sm:w-40 h-9 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="per-question">By Question</SelectItem>
-                          <SelectItem value="overall">Overall Grade</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <SaveStatusIndicator status={gradingAutoSaveStatus} lastSavedAt={gradingAutoSavedAt} />
-                    <GradingShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
-                    {selectedSubmission.gradedAt ? (
-                      <Button
-                        onClick={() => setShowUnfinalizeConfirm(true)}
-                        disabled={saving}
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950 rounded-lg"
-                      >
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                        <span className="hidden sm:inline">Unfinalize</span>
-                        <span className="sm:hidden">Undo</span>
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          onClick={() => handleSaveGrades()}
-                          disabled={finalizeDisabled}
-                          size="sm"
-                          className="gap-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg"
-                        >
-                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                          Finalize
-                        </Button>
-                        <Button
-                          onClick={() => handleSaveGrades(true)}
-                          disabled={finalizeDisabled}
-                          variant="outline"
-                          size="sm"
-                          title="Finalize this submission and open the next one (Ctrl/⌘ + Enter)"
-                          className="gap-1.5 rounded-lg"
-                        >
-                          <ArrowRight className="h-4 w-4" />
-                          <span className="hidden sm:inline">Save &amp; next</span>
-                          <span className="sm:hidden">Next</span>
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <GradingPanelHeader
+                  submission={submission}
+                  assignmentInfo={queue.assignmentInfo}
+                  allAutoGraded={grading.allAutoGraded}
+                  confirmedCount={grading.confirmedAnswers.size}
+                  manualAnswerCount={manualAnswerCount}
+                  gradingMode={grading.gradingMode}
+                  onGradingModeChange={grading.setGradingMode}
+                  autoSaveStatus={grading.autoSaveStatus}
+                  autoSavedAt={grading.autoSavedAt}
+                  showShortcuts={showShortcuts}
+                  onShowShortcutsChange={setShowShortcuts}
+                  saving={grading.saving}
+                  finalizeDisabled={finalizeDisabled}
+                  onFinalize={grading.finalize}
+                  onUnfinalize={() => grading.setShowUnfinalizeConfirm(true)}
+                />
 
-                {/* Panel Body */}
                 <div className="flex-1 overflow-auto p-6 space-y-5">
-                  {/* Grading progress bar */}
-                  {selectedSubmission.answers.length > 0 && !allAutoGraded && gradingMode === "per-question" && (
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">
-                        Graded {confirmedAnswers.size}/{selectedSubmission.answers.filter(a => !a.autoGraded).length}
-                      </span>
-                      <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            confirmedAnswers.size >= selectedSubmission.answers.filter(a => !a.autoGraded).length ? "bg-emerald-500" : "bg-blue-500"
-                          }`}
-                          style={{ width: `${selectedSubmission.answers.filter(a => !a.autoGraded).length > 0 ? (confirmedAnswers.size / selectedSubmission.answers.filter(a => !a.autoGraded).length) * 100 : 0}%` }}
-                        />
-                      </div>
-                      {confirmedAnswers.size > 0 && confirmedAnswers.size >= selectedSubmission.answers.filter(a => !a.autoGraded).length ? (
-                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">All confirmed</span>
-                      ) : confirmedAnswers.size > 0 ? (
-                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 shrink-0">Ready to finalize</span>
-                      ) : null}
-                    </div>
-                  )}
-                  {/* Draft restored banner */}
-                  {gradingDraftRestored && (
-                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                      <p className="text-sm text-blue-700 dark:text-blue-300">Grading progress restored from a previous session.</p>
-                      <button onClick={() => setGradingDraftRestored(false)} className="ml-auto text-blue-400 hover:text-blue-600 dark:hover:text-blue-300">
-                        &times;
-                      </button>
-                    </div>
-                  )}
+                  <GradingPanelStatus
+                    submission={submission}
+                    assignmentInfo={queue.assignmentInfo}
+                    allAutoGraded={grading.allAutoGraded}
+                    showProgress={
+                      grading.answerCount > 0 &&
+                      !grading.allAutoGraded &&
+                      grading.gradingMode === "per-question"
+                    }
+                    confirmedCount={grading.confirmedAnswers.size}
+                    manualAnswerCount={manualAnswerCount}
+                    draftRestored={grading.draftRestored}
+                    onDismissDraftBanner={grading.dismissDraftBanner}
+                  />
 
-                  {/* Uploaded file (student submission) */}
-                  {selectedSubmission.fileUrl && (
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Student Submission File</p>
-                      <a
-                        href={selectedSubmission.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                      >
-                        <Download className="h-4 w-4" />
-                        View / Download Submission
-                      </a>
-                    </div>
-                  )}
-
-                  {/* Auto-graded notice */}
-                  {allAutoGraded && selectedSubmission.answers.length > 0 && (
-                    <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-4">
-                      <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                        This submission was automatically graded.
-                      </p>
-                      <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-                        Score: {selectedSubmission.totalScore}/{assignmentInfo?.totalPoints} &mdash; No manual grading needed.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Per-question grading */}
-                  {gradingMode === "per-question" && (
+                  {grading.gradingMode === "per-question" && (
                     <GradingPanel
-                      answers={selectedSubmission.answers}
-                      grades={grades}
-                      onGradeChange={handleGradeChange}
-                      confirmedAnswers={confirmedAnswers}
-                      onToggleConfirm={handleToggleConfirm}
-                      aiLoading={aiLoading}
-                      onAIGrade={handleAIGrade}
-                      suggestions={suggestions}
-                      onApplySuggestion={handleApplySuggestion}
-                      feedbackImages={feedbackImages}
-                      onFeedbackImagesChange={(answerId, imgs) => setFeedbackImages((prev) => ({ ...prev, [answerId]: imgs }))}
-                      onUploadImage={handleUploadImage}
+                      answers={submission.answers}
+                      grades={grading.grades}
+                      onGradeChange={grading.changeGrade}
+                      confirmedAnswers={grading.confirmedAnswers}
+                      onToggleConfirm={grading.toggleConfirmed}
+                      aiLoading={grading.aiLoading}
+                      onAIGrade={grading.requestAiSuggestion}
+                      suggestions={grading.suggestions}
+                      onApplySuggestion={grading.applySuggestion}
+                      feedbackImages={grading.feedbackImages}
+                      onFeedbackImagesChange={grading.setFeedbackImagesFor}
+                      onUploadImage={uploadAnswerImage}
                       uploadingImage={uploadingImage}
-                      appealMessages={appealMessages}
-                      onAppealMessageChange={(id, v) => setAppealMessages((prev) => ({ ...prev, [id]: v }))}
-                      appealImages={appealImages}
-                      onAppealImagesChange={(id, imgs) => setAppealImages((prev) => ({ ...prev, [id]: imgs }))}
-                      appealNewScores={appealNewScores}
-                      onAppealNewScoreChange={(id, v) => setAppealNewScores((prev) => ({ ...prev, [id]: v }))}
-                      expandedAppeals={expandedAppeals}
-                      onToggleAppealExpand={(id) => setExpandedAppeals((prev) => ({ ...prev, [id]: !prev[id] }))}
-                      resolvingAppeal={resolvingAppeal}
-                      onResolveAppeal={handleResolveAppeal}
-                      onSendAppealMessage={handleAppealMessage}
+                      appealMessages={appeals.messages}
+                      onAppealMessageChange={appeals.setMessage}
+                      appealImages={appeals.images}
+                      onAppealImagesChange={appeals.setImages}
+                      appealNewScores={appeals.newScores}
+                      onAppealNewScoreChange={appeals.setNewScore}
+                      expandedAppeals={appeals.expanded}
+                      onToggleAppealExpand={appeals.toggleExpanded}
+                      resolvingAppeal={appeals.resolving}
+                      onResolveAppeal={appeals.requestDecision}
+                      onSendAppealMessage={appeals.sendMessage}
                     />
                   )}
 
-                  {/* Overall score & feedback + feedback file */}
-                  {!allAutoGraded && (
+                  {!grading.allAutoGraded && (
                     <OverallGradeForm
-                      totalPoints={assignmentInfo?.totalPoints || 100}
-                      overallScore={overallGrade.score}
-                      onOverallScoreChange={(score) =>
-                        setOverallGrade((prev) => ({
-                          ...prev,
-                          score,
-                          confirmed: score === null ? false : prev.confirmed,
-                        }))
-                      }
-                      perQuestionTotal={perQuestionTotal}
-                      overallFeedback={overallGrade.feedback}
-                      onOverallFeedbackChange={(feedback) => setOverallGrade((prev) => ({ ...prev, feedback }))}
-                      overallGradeConfirmed={overallGrade.confirmed}
-                      onToggleOverallConfirm={handleToggleOverallConfirm}
-                      feedbackFileUrl={feedbackFileState.url}
-                      feedbackFileName={feedbackFileState.file?.name || null}
-                      uploadingFeedback={uploadingFeedback}
-                      onUploadFeedbackFile={handleUploadFeedbackFile}
-                      onClearFeedbackFile={() => setFeedbackFileState({ file: null, url: null })}
+                      totalPoints={queue.assignmentInfo?.totalPoints || 100}
+                      overallScore={grading.overallGrade.score}
+                      onOverallScoreChange={grading.setOverallScore}
+                      perQuestionTotal={grading.perQuestionTotal}
+                      overallFeedback={grading.overallGrade.feedback}
+                      onOverallFeedbackChange={grading.setOverallFeedback}
+                      overallGradeConfirmed={grading.overallGrade.confirmed}
+                      onToggleOverallConfirm={grading.toggleOverallConfirm}
+                      feedbackFileUrl={grading.feedbackFile.url}
+                      feedbackFileName={grading.feedbackFile.file?.name || null}
+                      uploadingFeedback={grading.uploadingFeedback}
+                      onUploadFeedbackFile={grading.attachFeedbackFile}
+                      onClearFeedbackFile={grading.clearFeedbackFile}
                     />
                   )}
                 </div>
@@ -1173,109 +279,31 @@ function GradingPageContent() {
           </div>
         </div>
       )}
-      <AlertDialog open={showFinalizeConfirm} onOpenChange={setShowFinalizeConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Finalize with Unconfirmed Scores</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedSubmission && (() => {
-                const manualAnswers = selectedSubmission.answers.filter(a => !a.autoGraded);
-                return `You have only confirmed ${confirmedAnswers.size} out of ${manualAnswers.length} scores. Finalize anyway?`;
-              })()}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); executeSaveGrades(); }}>
-              Finalize
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
-      <AlertDialog open={showOverrideConfirm} onOpenChange={setShowOverrideConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Override the Per-Question Total?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The per-question scores add up to {perQuestionTotal}/{assignmentInfo?.totalPoints ?? 0}.
-              Confirming this override releases {overallGrade.score}/{assignmentInfo?.totalPoints ?? 0}
-              {" "}to the student instead.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
-              setShowOverrideConfirm(false);
-              setOverallGrade((prev) => ({ ...prev, confirmed: true }));
-            }}>
-              Use override
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!pendingAppealAction} onOpenChange={(open) => { if (!open) setPendingAppealAction(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pendingAppealAction?.status === "RESOLVED" ? "Resolve" : pendingAppealAction?.status === "REJECTED" ? "Reject" : "Reopen"} Appeal
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to {pendingAppealAction?.status === "RESOLVED" ? "resolve" : pendingAppealAction?.status === "REJECTED" ? "reject" : "reopen"} this appeal?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={executeResolveAppeal}>
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showUnfinalizeConfirm} onOpenChange={setShowUnfinalizeConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unfinalize Submission</AlertDialogTitle>
-            <AlertDialogDescription>
-              This clears the released score and gradedAt, so the student stops seeing a
-              grade for this submission until you finalize it again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={async () => {
-              setShowUnfinalizeConfirm(false);
-              if (!selectedSubmission) return;
-              setSaving(true);
-              try {
-                const res = await fetch("/api/grading", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ submissionId: selectedSubmission.id, ungrade: true }),
-                });
-                if (res.ok) {
-                  setSubmissions((prev) => prev.map((s) => s.id !== selectedSubmission.id ? s : { ...s, totalScore: null, gradedAt: null, gradedByName: null }));
-                  setSelectedSubmission((prev) => prev ? { ...prev, totalScore: null, gradedAt: null, gradedByName: null } : prev);
-                  fetchAssignmentList(assignmentPage, assignmentPageSize, undefined, true);
-                } else {
-                  const body = await res.json().catch(() => null);
-                  toast.error(body?.error || "Failed to unfinalize this submission");
-                }
-              } catch (err) {
-                logger.error("Ungrade request failed", {
-                  submissionId: selectedSubmission.id,
-                  error: String(err),
-                });
-                toast.error("Failed to unfinalize this submission");
-              } finally { setSaving(false); }
-            }} className="bg-amber-600 hover:bg-amber-700 text-white">
-              Unfinalize
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <GradingDialogs
+        finalizeOpen={grading.showFinalizeConfirm}
+        onFinalizeOpenChange={grading.setShowFinalizeConfirm}
+        confirmedCount={grading.confirmedAnswers.size}
+        manualAnswerCount={manualAnswerCount}
+        onConfirmFinalize={() => {
+          grading.setShowFinalizeConfirm(false);
+          grading.releaseGrade();
+        }}
+        overrideOpen={grading.showOverrideConfirm}
+        onOverrideOpenChange={grading.setShowOverrideConfirm}
+        perQuestionTotal={grading.perQuestionTotal}
+        overrideScore={grading.overallGrade.score}
+        totalPoints={queue.assignmentInfo?.totalPoints ?? 0}
+        onConfirmOverride={grading.confirmOverride}
+        appealStatus={appeals.pendingAction?.status ?? null}
+        onAppealOpenChange={(open) => {
+          if (!open) appeals.cancelDecision();
+        }}
+        onConfirmAppeal={appeals.executePendingAction}
+        unfinalizeOpen={grading.showUnfinalizeConfirm}
+        onUnfinalizeOpenChange={grading.setShowUnfinalizeConfirm}
+        onConfirmUnfinalize={grading.unfinalize}
+      />
     </div>
   );
 }
