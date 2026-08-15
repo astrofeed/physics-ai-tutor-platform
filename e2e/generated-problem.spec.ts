@@ -3,9 +3,31 @@ import { autoGradeAnswer } from "../src/lib/auto-grade";
 import {
   GENERATED_NUMERIC_TOLERANCE_PERCENT,
   generatedTolerance,
+  mcKeyFromValue,
   problemPreview,
   stripOptionLabels,
 } from "../src/lib/generated-problem";
+
+test.describe("resolving an MC key from the answer's value", () => {
+  const options = ["1.20 A", "2.00 A", "3.00 A", "4.00 A"];
+
+  test("the value wins over the letter the model states", () => {
+    expect(mcKeyFromValue("2.00 A", options)).toBe("B");
+  });
+
+  test("LaTeX and spacing differences still match", () => {
+    expect(mcKeyFromValue("$2.00\\ \\mathrm{A}$", options)).toBe("B");
+  });
+
+  test("a value matching no option leaves the caller with the stated letter", () => {
+    expect(mcKeyFromValue("2.5 A", options)).toBeNull();
+    expect(mcKeyFromValue("", options)).toBeNull();
+  });
+
+  test("an ambiguous partial match is refused", () => {
+    expect(mcKeyFromValue("1", ["1 A", "1 mA", "2 A"])).toBeNull();
+  });
+});
 
 test.describe("option labels the model writes into the option text", () => {
   test("a label matching the option's own position is dropped", () => {

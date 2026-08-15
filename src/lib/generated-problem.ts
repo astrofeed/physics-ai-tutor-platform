@@ -46,6 +46,36 @@ export function stripOptionLabels(options: string[]): string[] {
   });
 }
 
+function comparableAnswer(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\$|\\mathrm|\\text|\\,|\\;|\\ |[{}\\]/g, "")
+    .replace(/[\s]/g, "")
+    .replace(/×10\^?/g, "e")
+    .trim();
+}
+
+/**
+ * Resolves an MC key from the answer's *value* rather than the letter the model
+ * claims. The letter is the least reliable field it writes: a solution that
+ * derives 2.00 A (option B) has repeatedly ended with "corresponds to Option C",
+ * and a wrong key still grades cleanly, marking correct students down. Returns
+ * null when the value matches no option, so the caller keeps the stated letter.
+ */
+export function mcKeyFromValue(value: string, options: string[]): string | null {
+  const wanted = comparableAnswer(value);
+  if (!wanted || options.length === 0) return null;
+
+  const comparable = options.map(comparableAnswer);
+  const exact = comparable.indexOf(wanted);
+  if (exact !== -1) return optionLetter(exact);
+
+  const contained = comparable.filter((option) => option.includes(wanted));
+  if (contained.length === 1) return optionLetter(comparable.indexOf(contained[0]));
+
+  return null;
+}
+
 /** One-line plain-text preview of markdown + LaTeX question text. */
 export function problemPreview(questionText: string, maxLength = 120): string {
   const plain = questionText
