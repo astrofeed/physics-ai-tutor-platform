@@ -818,6 +818,24 @@ catch (error) {
 }
 ```
 
+#### 7.4 Hide Features Whose External Service Is Not Configured
+
+An action that always fails is worse than a missing action: students press it, get an opaque error, and report a bug. Never hardcode a third-party endpoint as a default either — a vendor can turn it off (the public `emkc.org` Piston instance became allow-list only and now answers 401).
+
+Read the endpoint from an env var, return 503 from the route when it is unset, and expose availability so the UI can hide the control:
+
+```ts
+// src/lib/code-execution.ts — no default endpoint
+export function codeExecutionEndpoint(): string | null {
+  return process.env.CODE_EXEC_API_URL?.trim() || null;
+}
+
+// GET /api/run-code → { enabled }, consumed by useCodeExecutionAvailable()
+const isRunnable = codeExecutionAvailable && RUNNABLE_LANGUAGES.includes(language);
+```
+
+The availability hook (`src/hooks/use-code-execution.ts`) caches its request in a module-level promise, so a chat page with 20 code blocks still makes one request.
+
 ---
 
 ### 8. Performance
