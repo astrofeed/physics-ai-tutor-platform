@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useEffectiveSession } from "@/lib/effective-session-context";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -9,6 +9,12 @@ import { buildAssignmentNotifyContent } from "@/lib/utils";
 import { useAssignmentAppeals } from "@/hooks/useAssignmentAppeals";
 import type { AssignmentDetail } from "@/types/assignment";
 import type { ExistingSubmission } from "@/types/submission";
+
+/** What an in-progress quiz autosaves: typed answers plus attachment URLs. */
+interface QuizDraft {
+  answers: Record<string, string>;
+  images: Record<string, string[]>;
+}
 
 interface ConfirmDialogState {
   open: boolean;
@@ -76,21 +82,29 @@ export function useAssignmentDetail(assignmentId: string) {
   // --- Auto-save ---
   const isQuizInProgress = assignment?.type === "QUIZ" && (!existingSubmission || existingSubmission.isDraft === true) && !submitted && userRole === "STUDENT";
 
-  const saveDraft = useCallback(async (data: Record<string, string>) => {
+  // Attachments are part of the watched data, so attaching a photo with no typed
+  // answer still saves a draft.
+  const draft: QuizDraft = useMemo(() => ({ answers, images: answerImages }), [answers, answerImages]);
+
+  const saveDraft = useCallback(async (data: QuizDraft) => {
     if (!assignment) return;
-    const answerEntries = Object.entries(data).filter(([qId, v]) => v.trim() !== "" || (answerImages[qId]?.length ?? 0) > 0);
-    if (answerEntries.length === 0) return;
+    const questionIds = new Set([
+      ...Object.keys(data.answers).filter((qId) => data.answers[qId].trim() !== ""),
+      ...Object.keys(data.images).filter((qId) => (data.images[qId]?.length ?? 0) > 0),
+    ]);
+    if (questionIds.size === 0) return;
+    const answers = Array.from(questionIds, (questionId) => ({
+      questionId,
+      answer: data.answers[questionId] ?? "",
+      answerImageUrls: data.images[questionId]?.length ? data.images[questionId] : undefined,
+    }));
     const res = await fetch("/api/submissions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         assignmentId: assignment.id,
         isDraft: true,
-        answers: answerEntries.map(([questionId, answer]) => ({
-          questionId,
-          answer,
-          answerImageUrls: answerImages[questionId]?.length ? answerImages[questionId] : undefined,
-        })),
+        answers,
       }),
     });
     // Throwing keeps the indicator on "error" instead of claiming "Saved".
@@ -98,10 +112,10 @@ export function useAssignmentDetail(assignmentId: string) {
       const body = await res.json().catch(() => null);
       throw new Error(body?.error || "Failed to save draft");
     }
-  }, [assignment, answerImages]);
+  }, [assignment]);
 
   const { status: autoSaveStatus, lastSavedAt, saveNow: flushAutoSave, markSaved } = useAutoSave({
-    data: answers,
+    data: draft,
     saveFn: saveDraft,
     delayMs: 2000,
     enabled: isQuizInProgress,
@@ -133,7 +147,7 @@ export function useAssignmentDetail(assignmentId: string) {
             }
             setAnswers(restored);
             setAnswerImages(restoredImages);
-            markSaved(restored);
+            markSaved({ answers: restored, images: restoredImages });
             setDraftRestored(true);
             draftRestoredRef.current = true;
           }
