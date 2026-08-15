@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { GeneratedProblemCard } from "@/components/problems/GeneratedProblemCard";
 import { ProblemBank } from "@/components/problems/ProblemBank";
 import { ProblemGeneratorConfig } from "@/components/problems/ProblemGeneratorConfig";
+import { generatedTolerance, problemPreview } from "@/lib/generated-problem";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +71,14 @@ interface ProblemSet {
   problems: GeneratedProblem[];
 }
 
+
+/**
+ * Nothing checks a generated answer key against the solution the same model
+ * wrote, and a key that is simply wrong still grades cleanly — so the author is
+ * told to read the keys before the class ever sees the assignment.
+ */
+const VERIFY_KEYS_NOTICE =
+  "Check every answer key before publishing: AI-generated keys are not verified against their own solutions.";
 
 function formatQuestionType(type: string): string {
   const typeMap: Record<string, string> = {
@@ -136,7 +145,7 @@ function SortableProblemItem({
           </span>
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-1">
-          {problem.questionText.replace(/\$\$?[^$]+\$\$?/g, "[math]").slice(0, 120)}
+          {problemPreview(problem.questionText)}
         </p>
       </div>
       <button
@@ -312,11 +321,13 @@ function ProblemGeneratorPageContent() {
             correctAnswer: p.correctAnswer,
             points: p.points,
             diagram: p.diagram || null,
+            ...generatedTolerance(p.questionType),
           })),
         }),
       });
       if (res.ok) {
         const data = await res.json();
+        toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
         router.push(`/assignments/${data.assignment.id}/edit`);
       } else {
         const data = await res.json().catch(() => null);
@@ -439,11 +450,13 @@ function ProblemGeneratorPageContent() {
             correctAnswer: p.correctAnswer,
             points: p.points,
             diagram: p.diagram || null,
+            ...generatedTolerance(p.questionType || questionType),
           })),
         }),
       });
       if (res.ok) {
         const data = await res.json();
+        toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
         router.push(`/assignments/${data.assignment.id}/edit`);
       } else {
         const data = await res.json().catch(() => null);

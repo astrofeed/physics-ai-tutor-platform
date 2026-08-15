@@ -4,6 +4,7 @@ import React from "react";
 import { CheckCircle2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import { GENERATED_NUMERIC_TOLERANCE_PERCENT } from "@/lib/generated-problem";
 import dynamic from "next/dynamic";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
@@ -124,6 +125,12 @@ export function GeneratedProblemCard({ problem, index, isCopied, onCopy }: Gener
             Correct Answer
           </p>
           <MarkdownContent content={problem.correctAnswer} className="text-sm text-emerald-800 font-medium" />
+          {problem.questionType === "NUMERIC" && (
+            <p className="text-xs text-emerald-700 mt-1.5">
+              Auto-graded within &plusmn;{GENERATED_NUMERIC_TOLERANCE_PERCENT}%; editable per question once this
+              becomes an assignment.
+            </p>
+          )}
         </div>
 
         <div className="rounded-lg p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { streamGenerateProblems, type AIProvider } from "@/lib/ai";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+import { stripOptionLabels } from "@/lib/generated-problem";
 
 const GenerateSchema = z.object({
   topic: z.string().min(1).max(200),
@@ -99,7 +100,14 @@ export async function GET() {
         createdBy: ps.createdBy.name,
         createdById: ps.createdById,
         createdAt: ps.createdAt.toISOString(),
-        problems: ps.problems,
+        // Sets generated before option labels were stripped are cleaned on read,
+        // so reusing an old set doesn't carry "A. A." into a new assignment.
+        problems: ps.problems.map((problem) => ({
+          ...problem,
+          options: Array.isArray(problem.options)
+            ? stripOptionLabels(problem.options.map(String))
+            : problem.options,
+        })),
       })),
     });
   } catch (error) {
@@ -221,7 +229,9 @@ export async function POST(req: Request) {
             }
 
             const type = p.questionType || questionType;
-            const options: string[] | null = Array.isArray(p.options) ? p.options : null;
+            const options: string[] | null = Array.isArray(p.options)
+              ? stripOptionLabels(p.options.map(String))
+              : null;
 
             return {
               questionText,
