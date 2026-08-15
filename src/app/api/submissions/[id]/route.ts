@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
+import { humanGradingStarted } from "@/lib/services/submission-service";
 
 // Convert a submission back to draft for editing
 export async function PATCH(
@@ -16,7 +17,7 @@ export async function PATCH(
       where: { id: params.id },
       include: {
         assignment: { select: { lockAfterSubmit: true } },
-        answers: { select: { id: true, score: true } },
+        answers: { select: { id: true, score: true, autoGraded: true } },
       },
     });
 
@@ -35,8 +36,7 @@ export async function PATCH(
       );
     }
 
-    const gradingStarted = submission.gradedAt !== null || submission.answers.some((a) => a.score !== null);
-    if (gradingStarted && !submission.isDraft) {
+    if (humanGradingStarted(submission) && !submission.isDraft) {
       return NextResponse.json(
         { error: submission.gradedAt ? "This submission has been graded and cannot be edited." : "This submission is being graded and cannot be edited." },
         { status: 403 }
@@ -69,7 +69,7 @@ export async function DELETE(
       where: { id: params.id },
       include: {
         assignment: { select: { lockAfterSubmit: true } },
-        answers: { select: { score: true } },
+        answers: { select: { score: true, autoGraded: true } },
       },
     });
 
@@ -88,9 +88,7 @@ export async function DELETE(
       );
     }
 
-    // Block if grading has started (any answer has a score) or is finished
-    const gradingStarted = submission.gradedAt !== null || submission.answers.some((a) => a.score !== null);
-    if (gradingStarted && !submission.isDraft) {
+    if (humanGradingStarted(submission) && !submission.isDraft) {
       return NextResponse.json(
         { error: submission.gradedAt ? "This submission has been graded and cannot be deleted." : "This submission is being graded and cannot be deleted." },
         { status: 403 }

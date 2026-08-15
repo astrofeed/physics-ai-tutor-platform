@@ -103,6 +103,22 @@ const answerRows = (answers: AnswerInput[]) =>
     score: null,
   }));
 
+/**
+ * Whether a *person* has started grading, which is what locks a submission.
+ * The scores auto-grading wrote at submit time don't count: a quiz with a
+ * hand-graded question stays editable until a grader touches it, and a fully
+ * auto-graded one is already locked by its `gradedAt`.
+ */
+export function humanGradingStarted(submission: {
+  gradedAt: Date | null;
+  answers: { score: unknown; autoGraded: boolean }[];
+}): boolean {
+  return (
+    submission.gradedAt !== null ||
+    submission.answers.some((a) => a.score !== null && !a.autoGraded)
+  );
+}
+
 /** Namespace keeping these locks apart from any other advisory lock. */
 const SUBMISSION_LOCK_NAMESPACE = 4271;
 
@@ -158,7 +174,7 @@ export async function saveSubmission(
   const submission = await withSubmissionLock(assignmentId, user.id, async (tx) => {
     const existing = await tx.submission.findFirst({
       where: { assignmentId, userId: user.id, isDeleted: false },
-      include: { answers: { select: { score: true } } },
+      include: { answers: { select: { score: true, autoGraded: true } } },
     });
 
     if (isDraft) {
@@ -198,9 +214,7 @@ export async function saveSubmission(
           403
         );
       }
-      const gradingStarted =
-        existing.gradedAt !== null || existing.answers.some((a) => a.score !== null);
-      if (gradingStarted) {
+      if (humanGradingStarted(existing)) {
         throw new SubmissionError(
           existing.gradedAt
             ? "This submission has been graded and cannot be resubmitted."
