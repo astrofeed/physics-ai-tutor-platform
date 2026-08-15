@@ -76,6 +76,52 @@ export function mcKeyFromValue(value: string, options: string[]): string | null 
   return null;
 }
 
+function numbersIn(text: string): number[] {
+  const matches = text.match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g) ?? [];
+  return matches.map(Number).filter(Number.isFinite);
+}
+
+function keyValueText(problem: GeneratedProblemLike): string | null {
+  if (problem.questionType === "NUMERIC") return problem.correctAnswer;
+  if (problem.questionType !== "MC") return null;
+
+  const options = problem.options ?? [];
+  const index = problem.correctAnswer.trim().toUpperCase().charCodeAt(0) - 65;
+  return options[index] ?? null;
+}
+
+export interface GeneratedProblemLike {
+  questionType: string;
+  options?: string[] | null;
+  correctAnswer: string;
+  solution: string;
+}
+
+/**
+ * Flags a generated problem whose answer key never appears in its own solution.
+ * The model's answer *value* is wrong often enough that mapping it to the right
+ * option is not enough: a solution deriving 11.0 V has been paired with a key on
+ * the 10.9 V distractor. A key the solution never mentions is the cheap, honest
+ * signal for that; it cannot judge whether the physics is right, so a clean
+ * result means "nothing obviously contradictory", not "verified".
+ *
+ * The match has to be tight (0.5%), because the distractors are deliberately
+ * close: 10.9 V sits within 1% of the 11.0 V the solution derived. It is loose
+ * enough for the rounding between a solution's 2.6667 and an option's 2.67.
+ */
+export function keyContradictsSolution(problem: GeneratedProblemLike): boolean {
+  const keyText = keyValueText(problem);
+  if (!keyText || !problem.solution.trim()) return false;
+
+  const [keyValue] = numbersIn(keyText);
+  if (keyValue === undefined) return false;
+
+  const scale = Math.max(Math.abs(keyValue), 1e-12);
+  return !numbersIn(problem.solution).some(
+    (value) => Math.abs(value - keyValue) / scale <= 0.005
+  );
+}
+
 /** One-line plain-text preview of markdown + LaTeX question text. */
 export function problemPreview(questionText: string, maxLength = 120): string {
   const plain = questionText

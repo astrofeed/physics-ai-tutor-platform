@@ -1,10 +1,13 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Copy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { GENERATED_NUMERIC_TOLERANCE_PERCENT } from "@/lib/generated-problem";
+import {
+  GENERATED_NUMERIC_TOLERANCE_PERCENT,
+  keyContradictsSolution,
+} from "@/lib/generated-problem";
 import dynamic from "next/dynamic";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
@@ -117,6 +120,16 @@ export function GeneratedProblemCard({ problem, index, isCopied, onCopy }: Gener
                 <MarkdownContent content={opt} className="text-sm text-gray-700 dark:text-gray-300" />
               </div>
             ))}
+          </div>
+        )}
+
+        {keyContradictsSolution(problem) && (
+          <div className="flex items-start gap-2 rounded-lg p-4 bg-amber-50 border border-amber-200 text-amber-900">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p className="text-sm">
+              This answer&apos;s value never appears in the solution below — the key is probably wrong.
+              Check it before using this problem.
+            </p>
           </div>
         )}
 

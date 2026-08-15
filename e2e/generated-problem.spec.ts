@@ -3,6 +3,7 @@ import { autoGradeAnswer } from "../src/lib/auto-grade";
 import {
   GENERATED_NUMERIC_TOLERANCE_PERCENT,
   generatedTolerance,
+  keyContradictsSolution,
   mcKeyFromValue,
   problemPreview,
   stripOptionLabels,
@@ -26,6 +27,46 @@ test.describe("resolving an MC key from the answer's value", () => {
 
   test("an ambiguous partial match is refused", () => {
     expect(mcKeyFromValue("1", ["1 A", "1 mA", "2 A"])).toBeNull();
+  });
+});
+
+test.describe("keys that contradict their own solution", () => {
+  const options = ["11.0 V", "10.9 V", "8.10 V", "9.00 V"];
+  const solution = "Terminal voltage: $V = 12.0 - (1.00)(1.00) = 11.0\\ \\mathrm{V}$";
+
+  test("a key on a value the solution never derives is flagged", () => {
+    expect(
+      keyContradictsSolution({ questionType: "MC", options, correctAnswer: "B", solution })
+    ).toBe(true);
+  });
+
+  test("a key the solution derives is not flagged", () => {
+    expect(
+      keyContradictsSolution({ questionType: "MC", options, correctAnswer: "A", solution })
+    ).toBe(false);
+  });
+
+  test("numeric keys are checked against the solution too", () => {
+    expect(
+      keyContradictsSolution({ questionType: "NUMERIC", correctAnswer: "20.6", solution: "…gives 20.6 m" })
+    ).toBe(false);
+    expect(
+      keyContradictsSolution({ questionType: "NUMERIC", correctAnswer: "20.6", solution: "…gives 24.0 m" })
+    ).toBe(true);
+  });
+
+  test("nothing to compare means no flag", () => {
+    expect(
+      keyContradictsSolution({
+        questionType: "MC",
+        options: ["north", "south"],
+        correctAnswer: "A",
+        solution: "The field points north.",
+      })
+    ).toBe(false);
+    expect(
+      keyContradictsSolution({ questionType: "FREE_RESPONSE", correctAnswer: "9.8", solution: "" })
+    ).toBe(false);
   });
 });
 

@@ -11,6 +11,7 @@ import {
   GripVertical,
   Layers,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,11 @@ import { toast } from "sonner";
 import { GeneratedProblemCard } from "@/components/problems/GeneratedProblemCard";
 import { ProblemBank } from "@/components/problems/ProblemBank";
 import { ProblemGeneratorConfig } from "@/components/problems/ProblemGeneratorConfig";
-import { generatedTolerance, problemPreview } from "@/lib/generated-problem";
+import {
+  generatedTolerance,
+  keyContradictsSolution,
+  problemPreview,
+} from "@/lib/generated-problem";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -143,6 +148,15 @@ function SortableProblemItem({
           <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
             {problem.points} pts &middot; {problem.questionType}
           </span>
+          {keyContradictsSolution(problem) && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0"
+              title="This answer's value never appears in its solution — check the key"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Check key
+            </span>
+          )}
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-1">
           {problemPreview(problem.questionText)}
