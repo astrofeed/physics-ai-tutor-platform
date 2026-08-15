@@ -7,7 +7,11 @@ import { Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AssignmentForm } from "@/components/assignments/AssignmentForm";
-import type { AssignmentFormData, QuestionFormData } from "@/types/assignment";
+import type {
+  AssignmentFormData,
+  AssignmentQuestion,
+  QuestionFormData,
+} from "@/types/assignment";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,31 +59,21 @@ function EditAssignmentPageContent({
           totalPoints: a.totalPoints,
           lockAfterSubmit: a.lockAfterSubmit || false,
           pdfUrl: a.pdfUrl || null,
-          questions: (a.questions || []).map(
-            (q: {
-              id: string;
-              questionText: string;
-              questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
-              options: string[] | null;
-              correctAnswer: string | null;
-              points: number;
-              diagram?: { type: "svg" | "mermaid"; content: string } | null;
-              imageUrl?: string | null;
-              tolerance?: number | null;
-              toleranceUnit?: "ABSOLUTE" | "PERCENT" | null;
-            }) => ({
+          questions: ((a.questions || []) as AssignmentQuestion[]).map(
+            (q): QuestionFormData => ({
               id: q.id,
               questionText: q.questionText,
               questionType: q.questionType,
               options: q.options || ["", "", "", ""],
               correctAnswer: q.correctAnswer || "",
+              alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
               points: q.points,
               diagram: q.diagram || null,
               imageUrl: q.imageUrl || null,
               tolerance: q.tolerance ?? null,
               toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
             })
-          ) as QuestionFormData[],
+          ),
         });
         setLoading(false);
       })

@@ -36,7 +36,13 @@ const BLANK_PREFIX = "blank-";
  */
 async function recordGradeAudit(
   actorId: string,
-  action: "grade_draft_saved" | "grade_finalized" | "grade_ungraded" | "appeal_resolved" | "appeal_rejected",
+  action:
+    | "grade_draft_saved"
+    | "grade_finalized"
+    | "grade_ungraded"
+    | "appeal_resolved"
+    | "appeal_rejected"
+    | "assignment_regraded",
   details: Prisma.InputJsonObject
 ) {
   try {

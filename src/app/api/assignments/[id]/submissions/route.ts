@@ -23,7 +23,14 @@ export async function GET(
     const allQuestions = await prisma.assignmentQuestion.findMany({
       where: { assignmentId: params.id },
       orderBy: { order: "asc" },
-      select: { id: true, questionText: true, questionType: true, points: true, correctAnswer: true },
+      select: {
+        id: true,
+        questionText: true,
+        questionType: true,
+        points: true,
+        correctAnswer: true,
+        alsoAcceptedAnswers: true,
+      },
     });
 
     const submissions = await prisma.submission.findMany({
@@ -99,6 +106,7 @@ export async function GET(
                 feedback: a.feedback,
                 autoGraded: a.autoGraded,
                 referenceAnswer: q.correctAnswer,
+                alsoAcceptedAnswers: q.alsoAcceptedAnswers,
                 aiSuggestedScore: a.aiSuggestedScore === null ? null : Number(a.aiSuggestedScore),
                 aiSuggestedFeedback: a.aiSuggestedFeedback,
                 aiSuggestedAt: a.aiSuggestedAt?.toISOString() ?? null,
@@ -132,6 +140,7 @@ export async function GET(
               feedback: null,
               autoGraded: false,
               referenceAnswer: q.correctAnswer,
+              alsoAcceptedAnswers: q.alsoAcceptedAnswers,
               aiSuggestedScore: null,
               aiSuggestedFeedback: null,
               aiSuggestedAt: null,

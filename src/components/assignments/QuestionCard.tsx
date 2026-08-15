@@ -63,6 +63,22 @@ export function QuestionCard({
   onImageUpload,
   onRemoveImage,
 }: QuestionCardProps) {
+  /**
+   * MC answers are authored as a set of accepted letters; the first one is kept
+   * as `correctAnswer` so exports and "the answer" displays stay unchanged.
+   */
+  const acceptedLetters = [q.correctAnswer, ...(q.alsoAcceptedAnswers ?? [])]
+    .map((key) => normalizeMcAnswerKey(key, q.options))
+    .filter((letter): letter is string => letter !== null);
+
+  const toggleAccepted = (letter: string) => {
+    const next = acceptedLetters.includes(letter)
+      ? acceptedLetters.filter((l) => l !== letter)
+      : [...acceptedLetters, letter].sort();
+    onUpdate("correctAnswer", next[0] ?? "");
+    onUpdate("alsoAcceptedAnswers", next.slice(1));
+  };
+
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
@@ -265,25 +281,31 @@ export function QuestionCard({
         )}
 
         <div className="space-y-2">
-          <Label>Correct Answer</Label>
+          <Label>{q.questionType === "MC" ? "Correct Answer(s)" : "Correct Answer"}</Label>
           {q.questionType === "MC" ? (
-            <Select
-              value={normalizeMcAnswerKey(q.correctAnswer, q.options) ?? ""}
-              onValueChange={(value) => onUpdate("correctAnswer", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select the correct option" />
-              </SelectTrigger>
-              <SelectContent>
-                {q.options.map((opt, oIndex) =>
-                  opt.trim() ? (
-                    <SelectItem key={oIndex} value={optionLetter(oIndex)}>
-                      {optionLetter(oIndex)} — {opt}
-                    </SelectItem>
-                  ) : null
-                )}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              {q.options.map((opt, oIndex) =>
+                opt.trim() ? (
+                  <label
+                    key={oIndex}
+                    className="flex items-start gap-2 text-sm cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={acceptedLetters.includes(optionLetter(oIndex))}
+                      onChange={() => toggleAccepted(optionLetter(oIndex))}
+                    />
+                    <span>
+                      <span className="font-medium">{optionLetter(oIndex)}</span> — {opt}
+                    </span>
+                  </label>
+                ) : null
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Tick every option that scores full marks. Students still pick one.
+              </p>
+            </div>
           ) : (
             <Input
               value={q.correctAnswer}

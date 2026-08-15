@@ -92,6 +92,7 @@ function toFormQuestion(
     questionType: question.questionType,
     options: question.questionType === "MC" ? question.options : [],
     correctAnswer: question.correctAnswer,
+    alsoAcceptedAnswers: [],
     points: question.points,
     tolerance: null,
     toleranceUnit: "ABSOLUTE",

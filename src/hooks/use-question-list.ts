@@ -13,6 +13,7 @@ const EMPTY_QUESTION: QuestionFormData = {
   questionType: "MC",
   options: DEFAULT_OPTIONS,
   correctAnswer: "",
+  alsoAcceptedAnswers: [],
   points: 10,
   tolerance: null,
   toleranceUnit: "ABSOLUTE",
@@ -84,7 +85,13 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
         if (i !== qIndex || q.options.length <= MIN_MC_OPTIONS) return q;
         const options = q.options.filter((_, index) => index !== oIndex);
         const dropped = q.options.map((option, index) => (index === oIndex ? "" : option));
-        return { ...q, options, correctAnswer: compactMcOptions(dropped, q.correctAnswer).correctAnswer };
+        const compacted = compactMcOptions(dropped, q.correctAnswer, q.alsoAcceptedAnswers);
+        return {
+          ...q,
+          options,
+          correctAnswer: compacted.correctAnswer,
+          alsoAcceptedAnswers: compacted.alsoAcceptedAnswers,
+        };
       })
     );
   }, []);
@@ -131,6 +138,7 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
             questionType: q.questionType,
             options: q.options,
             correctAnswer: q.correctAnswer,
+            alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
             points: q.points,
             ...(q.diagram && { diagram: q.diagram }),
             ...(imageUrl && { imageUrl }),

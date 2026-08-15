@@ -55,7 +55,13 @@ interface GradingPanelProps {
   onSendAppealMessage: (appealId: string) => void;
 }
 
-function ReferenceAnswer({ answer }: { answer: string }) {
+function ReferenceAnswer({
+  answer,
+  alsoAccepted = [],
+}: {
+  answer: string;
+  alsoAccepted?: string[];
+}) {
   const [visible, setVisible] = React.useState(false);
   return (
     <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-4">
@@ -74,10 +80,17 @@ function ReferenceAnswer({ answer }: { answer: string }) {
         </button>
       </div>
       {visible && (
-        <MarkdownContent
-          content={answer}
-          className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
-        />
+        <>
+          <MarkdownContent
+            content={answer}
+            className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
+          />
+          {alsoAccepted.length > 0 && (
+            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+              Also accepted: {alsoAccepted.join(", ")}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
@@ -303,7 +316,10 @@ export function GradingPanel({
             </div>
 
             {answer.referenceAnswer && (
-              <ReferenceAnswer answer={answer.referenceAnswer} />
+              <ReferenceAnswer
+                answer={answer.referenceAnswer}
+                alsoAccepted={answer.alsoAcceptedAnswers}
+              />
             )}
 
             {suggestions[answer.id] && (

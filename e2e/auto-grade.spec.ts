@@ -54,6 +54,27 @@ test.describe("multiple choice auto-grading", () => {
     expect(autoGradeAnswer(" b ", mc()).score).toBe(5);
     expect(autoGradeAnswer("C", mc()).score).toBe(0);
   });
+
+  test("an option opened up after the fact scores full marks too", () => {
+    const question: GradableQuestion = { ...mc(), alsoAcceptedAnswers: ["A"] };
+    expect(autoGradeAnswer("A", question).score).toBe(5);
+    expect(autoGradeAnswer("B", question).score).toBe(5);
+    expect(autoGradeAnswer("C", question).score).toBe(0);
+  });
+});
+
+test.describe("more than one accepted numeric value", () => {
+  test("each accepted value gets the question's tolerance", () => {
+    const question = numeric({
+      correctAnswer: "9.8",
+      alsoAcceptedAnswers: ["9.81"],
+      tolerance: 0.01,
+      toleranceUnit: "ABSOLUTE",
+    });
+    expect(autoGradeAnswer("9.79", question).score).toBe(10);
+    expect(autoGradeAnswer("9.82", question).score).toBe(10);
+    expect(autoGradeAnswer("9.7", question).score).toBe(0);
+  });
 });
 
 test("free response is never auto-graded", () => {

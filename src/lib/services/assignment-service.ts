@@ -16,6 +16,8 @@ export interface QuestionInput {
   questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
   options?: string[];
   correctAnswer?: string;
+  /** Answers that also score full marks (a second correct option, or a second acceptable value). */
+  alsoAcceptedAnswers?: string[];
   points?: number;
   diagram?: { type: string; content: string } | null;
   imageUrl?: string | null;
@@ -40,11 +42,39 @@ export class AssignmentError extends Error {
  */
 export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[] {
   return questions.map((question, index) => {
-    if (question.questionType !== "MC") return question;
+    if (question.questionType === "FREE_RESPONSE") {
+      return { ...question, alsoAcceptedAnswers: [] };
+    }
 
-    const { options, correctAnswer } = compactMcOptions(
-      question.options ?? [],
-      question.correctAnswer ?? ""
+    if (question.questionType === "NUMERIC") {
+      const extras = dedupeExtraAnswers(question.alsoAcceptedAnswers, question.correctAnswer);
+      const invalid = extras.find((value) => !Number.isFinite(Number(value)));
+      if (invalid !== undefined) {
+        throw new AssignmentError(
+          `Question ${index + 1}: "${invalid}" is not a number, so it cannot be an accepted answer.`,
+          400
+        );
+      }
+      return { ...question, alsoAcceptedAnswers: extras };
+    }
+
+    const submittedOptions = question.options ?? [];
+    const extraKeys = dedupeExtraAnswers(question.alsoAcceptedAnswers, question.correctAnswer);
+    const unresolved = extraKeys.find((key) => {
+      const letter = normalizeMcAnswerKey(key, submittedOptions);
+      return letter === null || !submittedOptions[letter.charCodeAt(0) - 65]?.trim();
+    });
+    if (unresolved !== undefined) {
+      throw new AssignmentError(
+        `Question ${index + 1}: "${unresolved}" is not one of its options, so it cannot also be accepted.`,
+        400
+      );
+    }
+
+    const { options, correctAnswer, alsoAcceptedAnswers } = compactMcOptions(
+      submittedOptions,
+      question.correctAnswer ?? "",
+      extraKeys
     );
 
     if (options.length < MIN_MC_OPTIONS || options.length > MAX_MC_OPTIONS) {
@@ -62,8 +92,20 @@ export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[]
       );
     }
 
-    return { ...question, options, correctAnswer: letter };
+    return { ...question, options, correctAnswer: letter, alsoAcceptedAnswers };
   });
+}
+
+/** Keeps the extra accepted answers a distinct, non-blank set that excludes the canonical one. */
+function dedupeExtraAnswers(
+  extras: string[] | undefined,
+  correctAnswer: string | undefined
+): string[] {
+  const canonical = (correctAnswer ?? "").trim();
+  const cleaned = (extras ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value !== canonical);
+  return Array.from(new Set(cleaned));
 }
 
 /**
@@ -88,6 +130,7 @@ const questionFields = (q: QuestionInput, order: number) => ({
   questionType: q.questionType,
   options: q.options ?? Prisma.JsonNull,
   correctAnswer: q.correctAnswer || null,
+  alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
   points: q.points ?? 10,
   order,
   diagram: q.diagram ?? Prisma.JsonNull,

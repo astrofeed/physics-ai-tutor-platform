@@ -11,6 +11,7 @@ test.describe("blank multiple choice options", () => {
     expect(compactMcOptions(["2 m/s", "4 m/s", "", ""], "B")).toEqual({
       options: ["2 m/s", "4 m/s"],
       correctAnswer: "B",
+      alsoAcceptedAnswers: [],
     });
   });
 
@@ -18,6 +19,7 @@ test.describe("blank multiple choice options", () => {
     expect(compactMcOptions(["2 m/s", "", "4 m/s", "8 m/s"], "C")).toEqual({
       options: ["2 m/s", "4 m/s", "8 m/s"],
       correctAnswer: "B",
+      alsoAcceptedAnswers: [],
     });
   });
 
@@ -33,9 +35,30 @@ test.describe("blank multiple choice options", () => {
     ]);
   });
 
-  test("a key pointing at a blank option is left alone so saving is rejected", () => {
-    expect(compactMcOptions(["2 m/s", "", "4 m/s"], "B").correctAnswer).toBe("B");
-    expect(normalizeMcAnswerKey("B", ["2 m/s", "4 m/s"])).toBe("B");
+  test("a key pointing at a blank option comes back empty so saving is rejected", () => {
+    expect(compactMcOptions(["2 m/s", "", "4 m/s"], "B").correctAnswer).toBe("");
+  });
+});
+
+test.describe("more than one accepted answer", () => {
+  test("extra keys move with their option and drop the canonical duplicate", () => {
+    expect(compactMcOptions(["2 m/s", "", "4 m/s", "8 m/s"], "C", ["D", "C"])).toEqual({
+      options: ["2 m/s", "4 m/s", "8 m/s"],
+      correctAnswer: "B",
+      alsoAcceptedAnswers: ["C"],
+    });
+  });
+
+  test("an extra key written as option text normalizes to a letter", () => {
+    expect(
+      compactMcOptions(["2 m/s", "4 m/s", "8 m/s"], "A", ["8 m/s"]).alsoAcceptedAnswers
+    ).toEqual(["C"]);
+  });
+
+  test("an extra key pointing at a blank option is not re-pointed at its neighbour", () => {
+    expect(
+      compactMcOptions(["2 m/s", "", "4 m/s"], "A", ["B"]).alsoAcceptedAnswers
+    ).toEqual([]);
   });
 });
 

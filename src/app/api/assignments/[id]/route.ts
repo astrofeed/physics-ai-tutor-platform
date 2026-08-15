@@ -12,6 +12,7 @@ const PatchQuestionSchema = z.object({
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).optional(),
   correctAnswer: z.string().max(2000).optional(),
+  alsoAcceptedAnswers: z.array(z.string().max(2000)).max(8).optional(),
   points: z.number().positive().max(1000).optional(),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
@@ -156,6 +157,7 @@ export async function GET(
       questions: questions.map((q) => ({
         ...q,
         correctAnswer: released ? q.correctAnswer : null,
+        alsoAcceptedAnswers: released ? q.alsoAcceptedAnswers : [],
       })),
     };
 

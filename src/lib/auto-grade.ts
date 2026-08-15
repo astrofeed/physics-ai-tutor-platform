@@ -9,6 +9,8 @@ export type ToleranceUnit = "ABSOLUTE" | "PERCENT";
 export interface GradableQuestion {
   questionType: string;
   correctAnswer: string | null;
+  /** Answers that also score full marks, e.g. an MC key opened up to a second option. */
+  alsoAcceptedAnswers?: string[];
   points: number;
   tolerance?: number | null;
   toleranceUnit?: ToleranceUnit | null;
@@ -34,26 +36,43 @@ export function toleranceWindow(
   return Math.abs(window);
 }
 
-function gradeNumeric(answer: string, question: GradableQuestion): AutoGradeResult {
-  const given = Number(answer.trim());
-  const expected = Number((question.correctAnswer || "").trim());
-  if (!Number.isFinite(given) || !Number.isFinite(expected)) {
-    return { autoGraded: true, score: 0 };
-  }
+/** Every answer that scores full marks: the canonical one plus any extras. */
+export function acceptedAnswers(question: GradableQuestion): string[] {
+  return [question.correctAnswer ?? "", ...(question.alsoAcceptedAnswers ?? [])]
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
 
-  const window = toleranceWindow(expected, question.tolerance, question.toleranceUnit);
+function matchesNumeric(given: number, expected: string, question: GradableQuestion): boolean {
+  const target = Number(expected);
+  if (!Number.isFinite(target)) return false;
+
+  const window = toleranceWindow(target, question.tolerance, question.toleranceUnit);
   // Absolute difference, so trailing zeros and scientific notation compare by
   // value: 9.80, 9.8 and 9.8e0 are the same answer. The slack keeps binary
   // rounding (9.8 - 9.75 = 0.05000000000000071) from failing an exact boundary.
-  const slack = Math.max(Math.abs(expected), Math.abs(given), 1) * Number.EPSILON * 8;
-  const correct = Math.abs(given - expected) <= window + slack;
+  const slack = Math.max(Math.abs(target), Math.abs(given), 1) * Number.EPSILON * 8;
+  return Math.abs(given - target) <= window + slack;
+}
+
+function gradeNumeric(answer: string, question: GradableQuestion): AutoGradeResult {
+  const given = Number(answer.trim());
+  if (!Number.isFinite(given)) {
+    return { autoGraded: true, score: 0 };
+  }
+
+  const correct = acceptedAnswers(question).some((expected) =>
+    matchesNumeric(given, expected, question)
+  );
   return { autoGraded: true, score: correct ? question.points : 0 };
 }
 
 function gradeMultipleChoice(answer: string, question: GradableQuestion): AutoGradeResult {
-  const correct =
-    answer.trim().toLowerCase() === (question.correctAnswer || "").trim().toLowerCase();
-  return { autoGraded: true, score: correct ? question.points : 0 };
+  const given = answer.trim().toLowerCase();
+  const correct = acceptedAnswers(question).some(
+    (expected) => expected.toLowerCase() === given
+  );
+  return { autoGraded: true, score: correct && given.length > 0 ? question.points : 0 };
 }
 
 export function autoGradeAnswer(
