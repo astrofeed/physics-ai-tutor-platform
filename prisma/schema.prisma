@@ -316,7 +316,12 @@ model Submission {
   id           String    @id @default(cuid())
   assignmentId String
   userId       String
+  /// The student's own upload (FILE_UPLOAD assignments). Graders must never
+  /// write here — their attachment goes to `feedbackFileUrl`.
   fileUrl      String?
+  /// A file the grader attaches to their feedback, shown to the student
+  /// alongside the grade.
+  feedbackFileUrl String?
   submittedAt  DateTime  @default(now())
   totalScore   Float?
   gradedAt     DateTime?

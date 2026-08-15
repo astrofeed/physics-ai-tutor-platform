@@ -84,6 +84,7 @@ export async function GET(
         gradedAt: s.gradedAt?.toISOString() || null,
         gradedByName: s.gradedBy?.name || null,
         fileUrl: s.fileUrl,
+        feedbackFileUrl: s.feedbackFileUrl,
         overallFeedback: s.overallFeedback || null,
         openAppealCount,
         totalAppealCount,

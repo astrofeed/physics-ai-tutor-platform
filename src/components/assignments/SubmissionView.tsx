@@ -134,6 +134,17 @@ export function SubmissionView({
             Download your submission
           </a>
         )}
+        {submission.feedbackFileUrl && (
+          <a
+            href={submission.feedbackFileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            <Download className="h-4 w-4" />
+            Download the grader&apos;s feedback file
+          </a>
+        )}
         {assignment.lockAfterSubmit ||
         submission.totalScore !== null ||
         submission.answers?.some((a) => a.score !== null) ? (

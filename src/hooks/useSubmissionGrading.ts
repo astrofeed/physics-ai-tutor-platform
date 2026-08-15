@@ -172,7 +172,7 @@ export function useSubmissionGrading({
       });
       feedback.setImages(fromServer);
     }
-    feedback.setFileUrl(saved?.feedbackFileUrl ?? null);
+    feedback.setFileUrl(saved?.feedbackFileUrl ?? sub.feedbackFileUrl ?? null);
 
     if (saved?.gradingMode) {
       setGradingMode(saved.gradingMode);

@@ -30,6 +30,34 @@ export class GradingError extends Error {
 const BLANK_PREFIX = "blank-";
 
 /**
+ * The submission columns a grade save writes. `Submission.fileUrl` holds the
+ * student's own upload, so a grader's attachment goes to `feedbackFileUrl` —
+ * writing it to `fileUrl` used to destroy the student's file.
+ */
+export function gradeSaveUpdate(args: {
+  total: number;
+  isDraft?: boolean;
+  graderId: string;
+  feedbackFileUrl?: string | null;
+  overallFeedback?: string | null;
+  gradedAt?: Date;
+}): Prisma.SubmissionUpdateInput {
+  const { total, isDraft, graderId, feedbackFileUrl, overallFeedback } = args;
+  return {
+    ...(isDraft
+      ? { draftTotalScore: total }
+      : {
+          totalScore: total,
+          draftTotalScore: null,
+          gradedAt: args.gradedAt ?? new Date(),
+          gradedById: graderId,
+        }),
+    ...(feedbackFileUrl !== undefined && { feedbackFileUrl }),
+    ...(overallFeedback !== undefined && { overallFeedback }),
+  };
+}
+
+/**
  * Records who changed a grade and how, so score history is auditable.
  * Grade changes are the most disputed data in the app (see appeals), and
  * without this there is no way to answer "who lowered my score?".
@@ -190,13 +218,7 @@ export async function saveGrades(graderId: string, input: SaveGradesInput) {
 
   await prisma.submission.update({
     where: { id: submissionId },
-    data: {
-      ...(isDraft
-        ? { draftTotalScore: total }
-        : { totalScore: total, draftTotalScore: null, gradedAt: new Date(), gradedById: graderId }),
-      ...(feedbackFileUrl !== undefined && { fileUrl: feedbackFileUrl }),
-      ...(overallFeedback !== undefined && { overallFeedback }),
-    },
+    data: gradeSaveUpdate({ total, isDraft, graderId, feedbackFileUrl, overallFeedback }),
   });
 
   await recordGradeAudit(graderId, isDraft ? "grade_draft_saved" : "grade_finalized", {

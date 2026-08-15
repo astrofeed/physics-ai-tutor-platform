@@ -66,7 +66,9 @@ export interface SubmissionForGrading {
   totalScore: number | null;
   gradedAt: string | null;
   gradedByName: string | null;
+  /** The student's own upload; a grader's attachment lives in `feedbackFileUrl`. */
   fileUrl: string | null;
+  feedbackFileUrl: string | null;
   overallFeedback: string | null;
   openAppealCount: number;
   totalAppealCount: number;

@@ -21,6 +21,8 @@ export interface SubmissionAnswer {
 export interface ExistingSubmission {
   id: string;
   fileUrl: string | null;
+  /** A file the grader attached to their feedback; only sent once released. */
+  feedbackFileUrl?: string | null;
   submittedAt: string;
   totalScore: number | null;
   gradedAt?: string | null;

@@ -166,6 +166,7 @@ export async function GET(
           ...submission,
           totalScore: released ? submission.totalScore : null,
           overallFeedback: released ? submission.overallFeedback : null,
+          feedbackFileUrl: released ? submission.feedbackFileUrl : null,
           answers: submission.answers.map((a) => ({
             ...a,
             score: released ? a.score : null,
