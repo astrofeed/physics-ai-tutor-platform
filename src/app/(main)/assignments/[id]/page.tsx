@@ -27,6 +27,7 @@ import { SubmissionView } from "@/components/assignments/SubmissionView";
 import { FileUploadSection } from "@/components/assignments/FileUploadSection";
 import { AssignmentHeader } from "./components/AssignmentHeader";
 import { PublishDialogs } from "./components/PublishDialogs";
+import { KeyReviewSection } from "./components/KeyReviewSection";
 import { StaffAppealsSection } from "./components/StaffAppealsSection";
 import { useAssignmentDetail } from "@/hooks/useAssignmentDetail";
 import { SideChatLayout } from "@/components/chat/SideChatLayout";
@@ -85,6 +86,14 @@ export default function AssignmentDetailPage({
           exportingLatex={s.exportingLatex}
           deleting={s.deleting}
         />
+
+        {isStaffRole(s.userRole) && assignment.requiresKeyReview && (
+          <KeyReviewSection
+            assignmentId={assignment.id}
+            questions={assignment.questions}
+            onQuestionChange={s.handleQuestionChange}
+          />
+        )}
 
         {/* Quiz questions (student answering) */}
         {assignment.type === "QUIZ" && isStudentDraft && (

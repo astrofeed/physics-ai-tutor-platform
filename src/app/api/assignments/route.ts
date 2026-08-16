@@ -35,6 +35,8 @@ const CreateAssignmentSchema = z.object({
   lockAfterSubmit: z.boolean().optional().default(false),
   scheduledPublishAt: z.string().nullable().optional(),
   notifyOnPublish: z.boolean().optional().default(false),
+  /** Set by the AI problem generator: every answer key needs confirming before publish. */
+  requiresKeyReview: z.boolean().optional().default(false),
 });
 
 export async function GET(req: Request) {
@@ -185,7 +187,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish, requiresKeyReview } = parsed.data;
     const questions = normalizeAnswerKeys(
       submittedQuestions.map((q) => ({
         ...q,
@@ -194,6 +196,16 @@ export async function POST(req: Request) {
       }))
     );
     assertValidTolerances(questions);
+
+    if (scheduledPublishAt && requiresKeyReview) {
+      return NextResponse.json(
+        {
+          error:
+            "Confirm every answer key before scheduling an assignment built from generated problems.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Validate scheduledPublishAt if provided
     if (scheduledPublishAt) {
@@ -226,6 +238,7 @@ export async function POST(req: Request) {
         lockAfterSubmit,
         scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : null,
         notifyOnPublish,
+        requiresKeyReview,
         createdById: userId,
         questions: {
           create: questions.map((q, i) => ({

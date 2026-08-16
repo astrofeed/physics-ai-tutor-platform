@@ -39,6 +39,9 @@ export interface AssignmentQuestion {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   diagram?: { type: "svg" | "mermaid"; content: string } | any;
   imageUrl?: string | null;
+  /** Set once staff confirmed this question's answer key; cleared when the key is edited. */
+  keyConfirmedAt?: string | null;
+  keyConfirmedBy?: { name: string | null } | null;
 }
 
 /** A question being authored in the assignment form, before it is saved. */
@@ -117,6 +120,8 @@ export interface AssignmentDetail {
   notifyOnPublish: boolean;
   createdBy: { name: string | null };
   publishedBy?: { name: string | null } | null;
+  /** True for assignments built from AI-generated problems: publishing needs every key confirmed. */
+  requiresKeyReview: boolean;
   questions: AssignmentQuestion[];
   _count: { submissions: number };
 }

@@ -69,6 +69,7 @@ model User {
   uploadEvents           UploadEvent[]
   uploadedFiles          UploadedFile[]
   rateLimitHits          RateLimitHit[]
+  confirmedAnswerKeys    AssignmentQuestion[] @relation("KeyConfirmedBy")
 }
 
 model Account {
@@ -278,6 +279,10 @@ model Assignment {
   publishedById    String?
   scheduledPublishAt DateTime?
   notifyOnPublish    Boolean   @default(false)
+  // Set for assignments built from AI-generated problems: their answer keys are
+  // written by a model and are wrong often enough that every question needs a
+  // human confirmation before students can see it.
+  requiresKeyReview  Boolean   @default(false)
 
   course      Course?        @relation(fields: [courseId], references: [id])
   createdBy   User           @relation("CreatedBy", fields: [createdById], references: [id])
@@ -306,10 +311,17 @@ model AssignmentQuestion {
   toleranceUnit ToleranceUnit @default(ABSOLUTE)
   diagram       Json?        // { type: "svg" | "mermaid", content: string }
   imageUrl      String?
+  // Who signed off on this question's answer key, and when. Cleared whenever the
+  // key changes, so a confirmation can never outlive the answer it approved.
+  keyConfirmedAt   DateTime?
+  keyConfirmedById String?
 
   assignment Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  keyConfirmedBy User?        @relation("KeyConfirmedBy", fields: [keyConfirmedById], references: [id], onDelete: SetNull)
   answers    SubmissionAnswer[]
   rubrics    Rubric[]
+
+  @@index([keyConfirmedById])
 }
 
 model Submission {

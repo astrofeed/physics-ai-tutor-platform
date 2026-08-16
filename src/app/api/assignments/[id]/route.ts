@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
 import { AssignmentError, syncQuestions } from "@/lib/services/assignment-service";
+import { assertAnswerKeysConfirmed } from "@/lib/services/key-review-service";
 import { humanGradingStarted } from "@/lib/services/submission-service";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
@@ -52,7 +53,10 @@ export async function GET(
       prisma.assignment.findFirst({
         where: { id: params.id, isDeleted: false },
         include: {
-          questions: { orderBy: { order: "asc" } },
+          questions: {
+            orderBy: { order: "asc" },
+            include: { keyConfirmedBy: { select: { name: true } } },
+          },
           createdBy: { select: { name: true } },
           publishedBy: { select: { name: true } },
           ...(isStaff && { _count: { select: { submissions: { where: { isDraft: false } } } } }),
@@ -243,6 +247,12 @@ export async function PATCH(
 
     // If publishing immediately, ignore any schedule
     const isPublishingNow = data.published === true;
+
+    // Runs after the question sync, so an edit that changed a key in the same
+    // request withdraws its confirmation and blocks the publish with it.
+    if (isPublishingNow || data.scheduledPublishAt) {
+      await assertAnswerKeysConfirmed(params.id);
+    }
 
     // Cancel linked PENDING scheduled emails when schedule is cleared
     const isClearingSchedule =

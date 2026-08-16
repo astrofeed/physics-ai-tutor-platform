@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
 import { useAssignmentAppeals } from "@/hooks/useAssignmentAppeals";
-import type { AssignmentDetail } from "@/types/assignment";
+import { unconfirmedKeysMessage, unconfirmedQuestionNumbers } from "@/lib/key-review";
+import type { AssignmentDetail, AssignmentQuestion } from "@/types/assignment";
 import type { ExistingSubmission } from "@/types/submission";
 
 /** What an in-progress quiz autosaves: typed answers plus attachment URLs. */
@@ -323,11 +324,37 @@ export function useAssignmentDetail(assignmentId: string) {
     });
   };
 
+  /** Keeps the panel's confirmation state in step with the server's answer. */
+  const handleQuestionChange = (question: AssignmentQuestion) => {
+    setAssignment((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: prev.questions.map((q) => (q.id === question.id ? question : q)),
+          }
+        : prev
+    );
+  };
+
+  const blockedByKeyReview = () => {
+    if (!assignment?.requiresKeyReview) return false;
+    const unconfirmed = unconfirmedQuestionNumbers(
+      assignment.questions.map((q) => ({
+        order: q.order,
+        keyConfirmedAt: q.keyConfirmedAt ?? null,
+      }))
+    );
+    if (unconfirmed.length === 0) return false;
+    toast.error(unconfirmedKeysMessage(unconfirmed));
+    return true;
+  };
+
   const handlePublish = () => {
     if (!assignment) return;
     if (assignment.published) {
       setUnpublishDialogOpen(true);
     } else {
+      if (blockedByKeyReview()) return;
       const { subject, message } = buildAssignmentNotifyContent(assignment);
       setNotifySubject(subject);
       setNotifyMessage(message);
@@ -337,6 +364,7 @@ export function useAssignmentDetail(assignmentId: string) {
 
   const handleSchedule = () => {
     if (!assignment) return;
+    if (blockedByKeyReview()) return;
     const { subject, message } = buildAssignmentNotifyContent(assignment);
     setNotifySubject(subject);
     setNotifyMessage(message);
@@ -433,5 +461,6 @@ export function useAssignmentDetail(assignmentId: string) {
     handleAnswerChange, handleAnswerImagesChange,
     handleSubmit, handleEditSubmission,
     handlePublish, handleSchedule, handleToggleLock, handleDelete, handleExportLatex,
+    handleQuestionChange,
   };
 }

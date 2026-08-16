@@ -8,6 +8,7 @@ import {
   normalizeMcAnswerKey,
 } from "@/lib/mc-answer-key";
 import { validateTolerance, type ToleranceUnit } from "@/lib/auto-grade";
+import { answerKeyChanged } from "@/lib/key-review";
 import type { UserRole } from "@/types/user";
 
 export interface QuestionInput {
@@ -125,6 +126,31 @@ export function assertValidTolerances(questions: QuestionInput[]) {
   });
 }
 
+interface StoredKey {
+  correctAnswer: string | null;
+  alsoAcceptedAnswers: string[];
+  options: Prisma.JsonValue;
+  tolerance: Prisma.Decimal | null;
+}
+
+/** Whether an edit changed the stored answer key into a different one. */
+function keyEdited(current: StoredKey, submitted: QuestionInput): boolean {
+  return answerKeyChanged(
+    {
+      correctAnswer: current.correctAnswer,
+      alsoAcceptedAnswers: current.alsoAcceptedAnswers,
+      options: Array.isArray(current.options) ? current.options.map(String) : null,
+      tolerance: current.tolerance === null ? null : Number(current.tolerance),
+    },
+    {
+      correctAnswer: submitted.correctAnswer || null,
+      alsoAcceptedAnswers: submitted.alsoAcceptedAnswers ?? [],
+      options: submitted.options ?? null,
+      tolerance: submitted.tolerance ?? null,
+    }
+  );
+}
+
 const questionFields = (q: QuestionInput, order: number) => ({
   questionText: q.questionText,
   questionType: q.questionType,
@@ -195,6 +221,10 @@ export async function syncQuestions(
       order: true,
       questionText: true,
       imageUrl: true,
+      correctAnswer: true,
+      alsoAcceptedAnswers: true,
+      options: true,
+      tolerance: true,
       _count: { select: { answers: true } },
     },
   });
@@ -234,7 +264,14 @@ export async function syncQuestions(
         }
         await tx.assignmentQuestion.update({
           where: { id: current.id },
-          data: questionFields(question, index),
+          data: {
+            ...questionFields(question, index),
+            // An edited key is no longer the one staff signed off on.
+            ...(keyEdited(current, question) && {
+              keyConfirmedAt: null,
+              keyConfirmedById: null,
+            }),
+          },
         });
       } else {
         await tx.assignmentQuestion.create({

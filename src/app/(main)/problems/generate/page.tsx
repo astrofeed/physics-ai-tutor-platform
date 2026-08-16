@@ -83,7 +83,7 @@ interface ProblemSet {
  * told to read the keys before the class ever sees the assignment.
  */
 const VERIFY_KEYS_NOTICE =
-  "Check every answer key before publishing: AI-generated keys are not verified against their own solutions.";
+  "Read every answer key and confirm it on the assignment page: publishing is blocked until all of them are confirmed.";
 
 function formatQuestionType(type: string): string {
   const typeMap: Record<string, string> = {
@@ -328,6 +328,7 @@ function ProblemGeneratorPageContent() {
           description: `Merged ${mergedProblems.length} problems from ${topics.length} topic(s): ${topics.join(", ")}.`,
           type: "QUIZ",
           totalPoints,
+          requiresKeyReview: true,
           questions: mergedProblems.map((p) => ({
             questionText: p.questionText,
             questionType: p.questionType,
@@ -342,7 +343,7 @@ function ProblemGeneratorPageContent() {
       if (res.ok) {
         const data = await res.json();
         toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
-        router.push(`/assignments/${data.assignment.id}/edit`);
+        router.push(`/assignments/${data.assignment.id}`);
       } else {
         const data = await res.json().catch(() => null);
         toast.error(data?.error || "Failed to create assignment");
@@ -457,6 +458,7 @@ function ProblemGeneratorPageContent() {
           description: `Auto-generated ${problems.length} ${formatQuestionType(questionType)} problems on ${effectiveTopic} (difficulty ${difficulty}/5).`,
           type: "QUIZ",
           totalPoints,
+          requiresKeyReview: true,
           questions: problems.map((p) => ({
             questionText: p.questionText,
             questionType: p.questionType || questionType,
@@ -471,7 +473,7 @@ function ProblemGeneratorPageContent() {
       if (res.ok) {
         const data = await res.json();
         toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
-        router.push(`/assignments/${data.assignment.id}/edit`);
+        router.push(`/assignments/${data.assignment.id}`);
       } else {
         const data = await res.json().catch(() => null);
         toast.error(data?.error || "Failed to create assignment");
