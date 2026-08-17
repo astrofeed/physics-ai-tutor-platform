@@ -4,6 +4,7 @@ import React from "react";
 import {
   Trash2,
   ImagePlus,
+  Plus,
   X,
   ChevronUp,
   ChevronDown,
@@ -21,10 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import { McAnswerKey } from "@/components/assignments/McAnswerKey";
+import { NumericAnswerFields } from "@/components/assignments/NumericAnswerFields";
 import { getDiagramContent } from "@/lib/diagram-utils";
-import { normalizeMcAnswerKey, optionLetter } from "@/lib/mc-answer-key";
+import { MAX_MC_OPTIONS, MIN_MC_OPTIONS, optionLetter } from "@/lib/mc-answer-key";
 import dynamic from "next/dynamic";
-import type { QuestionFormData } from "@/types/assignment";
+import type { QuestionFormData, ToleranceUnit } from "@/types/assignment";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
 
@@ -35,6 +38,8 @@ interface QuestionCardProps {
   showDiagrams: boolean;
   onUpdate: (field: keyof QuestionFormData, value: unknown) => void;
   onUpdateOption: (optionIndex: number, value: string) => void;
+  onAddOption: () => void;
+  onRemoveOption: (optionIndex: number) => void;
   onMove: (direction: "up" | "down") => void;
   onRemove: () => void;
   onImageUpload: (file: File) => void;
@@ -48,6 +53,8 @@ export function QuestionCard({
   showDiagrams,
   onUpdate,
   onUpdateOption,
+  onAddOption,
+  onRemoveOption,
   onMove,
   onRemove,
   onImageUpload,
@@ -207,14 +214,27 @@ export function QuestionCard({
             {q.options.map((opt, oIndex) => (
               <div key={oIndex}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium w-6">
-                    {String.fromCharCode(65 + oIndex)}.
-                  </span>
+                  <span className="text-sm font-medium w-6">{optionLetter(oIndex)}.</span>
                   <Input
                     value={opt}
                     onChange={(e) => onUpdateOption(oIndex, e.target.value)}
-                    placeholder={`Option ${String.fromCharCode(65 + oIndex)}`}
+                    placeholder={`Option ${optionLetter(oIndex)}`}
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveOption(oIndex)}
+                    disabled={q.options.length <= MIN_MC_OPTIONS}
+                    title={
+                      q.options.length <= MIN_MC_OPTIONS
+                        ? `A question needs at least ${MIN_MC_OPTIONS} options`
+                        : `Remove option ${optionLetter(oIndex)}`
+                    }
+                    className="shrink-0 text-gray-400 hover:text-red-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
                 {opt.includes("$") && (
                   <div className="ml-8 mt-1 text-sm overflow-x-auto">
@@ -223,29 +243,37 @@ export function QuestionCard({
                 )}
               </div>
             ))}
+            {q.options.length < MAX_MC_OPTIONS && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onAddOption}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add option
+              </Button>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Options left blank are dropped when the assignment is saved.
+            </p>
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>Correct Answer</Label>
-          {q.questionType === "MC" ? (
-            <Select
-              value={normalizeMcAnswerKey(q.correctAnswer, q.options) ?? ""}
-              onValueChange={(value) => onUpdate("correctAnswer", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select the correct option" />
-              </SelectTrigger>
-              <SelectContent>
-                {q.options.map((opt, oIndex) => (
-                  <SelectItem key={oIndex} value={optionLetter(oIndex)}>
-                    {optionLetter(oIndex)}
-                    {opt.trim() ? ` — ${opt}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
+        {q.questionType === "MC" ? (
+          <McAnswerKey
+            options={q.options}
+            correctAnswer={q.correctAnswer}
+            alsoAcceptedAnswers={q.alsoAcceptedAnswers ?? []}
+            onChange={(correctAnswer, alsoAcceptedAnswers) => {
+              onUpdate("correctAnswer", correctAnswer);
+              onUpdate("alsoAcceptedAnswers", alsoAcceptedAnswers);
+            }}
+          />
+        ) : (
+          <div className="space-y-2">
+            <Label>Correct Answer</Label>
             <Input
               value={q.correctAnswer}
               onChange={(e) => onUpdate("correctAnswer", e.target.value)}
@@ -255,49 +283,26 @@ export function QuestionCard({
                   : "Sample answer (for reference)"
               }
             />
-          )}
-          {q.questionType !== "MC" && q.correctAnswer.includes("$") && (
-            <div className="text-sm mt-1 overflow-x-auto">
-              <MarkdownContent content={q.correctAnswer} />
-            </div>
-          )}
-        </div>
+            {q.correctAnswer.includes("$") && (
+              <div className="text-sm mt-1 overflow-x-auto">
+                <MarkdownContent content={q.correctAnswer} />
+              </div>
+            )}
+          </div>
+        )}
 
         {q.questionType === "NUMERIC" && (
-          <div className="space-y-2">
-            <Label>Accepted tolerance (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                value={q.tolerance ?? ""}
-                onChange={(e) =>
-                  onUpdate("tolerance", e.target.value === "" ? null : Number(e.target.value))
-                }
-                placeholder="Blank = exact match"
-              />
-              <Select
-                value={q.toleranceUnit}
-                onValueChange={(value) => onUpdate("toleranceUnit", value)}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ABSOLUTE">± absolute</SelectItem>
-                  <SelectItem value="PERCENT">± percent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {q.tolerance
-                ? q.toleranceUnit === "PERCENT"
-                  ? `Answers within ${q.tolerance}% of ${q.correctAnswer || "the answer"} are marked correct.`
-                  : `Answers within ±${q.tolerance} of ${q.correctAnswer || "the answer"} are marked correct.`
-                : "Trailing zeros and spaces are always ignored (9.8 = 9.80), but significant figures are not enforced."}
-            </p>
-          </div>
+          <NumericAnswerFields
+            correctAnswer={q.correctAnswer}
+            alsoAcceptedAnswers={q.alsoAcceptedAnswers ?? []}
+            tolerance={q.tolerance}
+            toleranceUnit={q.toleranceUnit}
+            onChangeAlsoAccepted={(values) => onUpdate("alsoAcceptedAnswers", values)}
+            onChangeTolerance={(tolerance) => onUpdate("tolerance", tolerance)}
+            onChangeToleranceUnit={(unit: ToleranceUnit) =>
+              onUpdate("toleranceUnit", unit)
+            }
+          />
         )}
       </CardContent>
     </Card>

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useRef } from "react";
-import { ImagePlus, X, Loader2 } from "lucide-react";
+import { ImagePlus, X, Loader2, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { isPdfUrl, MAX_UPLOAD_BYTES } from "@/lib/upload-constraints";
 
 interface ImageUploadProps {
   images: string[]; // URLs of uploaded images
@@ -11,7 +12,11 @@ interface ImageUploadProps {
   uploading?: boolean;
   onUpload: (file: File) => Promise<string | null>; // returns URL or null on failure
   className?: string;
+  /** Lets students hand in a scanned or photographed PDF alongside photos. */
+  allowPdf?: boolean;
 }
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export function ImageUpload({
   images,
@@ -20,10 +25,9 @@ export function ImageUpload({
   uploading = false,
   onUpload,
   className = "",
+  allowPdf = false,
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -31,17 +35,29 @@ export function ImageUpload({
 
     const remaining = maxImages - images.length;
     const filesToUpload = Array.from(files).slice(0, remaining);
+    const uploaded = [...images];
 
     for (const file of filesToUpload) {
-      if (!file.type.startsWith("image/")) continue;
-      if (file.size > MAX_IMAGE_SIZE) {
-        toast.error(`Image "${file.name}" exceeds the 5 MB limit. Please use a smaller image.`);
+      const isPdf = file.type === "application/pdf";
+      if (!file.type.startsWith("image/") && !(allowPdf && isPdf)) {
+        toast.error(
+          allowPdf
+            ? `"${file.name}" is not an image or a PDF.`
+            : `"${file.name}" is not an image.`
+        );
+        continue;
+      }
+      const limit = isPdf ? MAX_UPLOAD_BYTES : MAX_IMAGE_SIZE;
+      if (file.size > limit) {
+        toast.error(
+          `"${file.name}" exceeds the ${Math.round(limit / 1024 / 1024)} MB limit. Please use a smaller file.`
+        );
         continue;
       }
       const url = await onUpload(file);
       if (url) {
-        onImagesChange([...images, url]);
-        images = [...images, url]; // update local ref for subsequent iterations
+        uploaded.push(url);
+        onImagesChange([...uploaded]);
       }
     }
 
@@ -59,12 +75,19 @@ export function ImageUpload({
         <div className="flex gap-2 mb-2 flex-wrap">
           {images.map((url, i) => (
             <div key={i} className="relative group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Attachment ${i + 1}`}
-                className="h-16 w-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
-              />
+              {isPdfUrl(url) ? (
+                <span className="h-16 w-16 flex flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs text-gray-600 dark:text-gray-300">
+                  <FileText className="h-5 w-5" />
+                  PDF
+                </span>
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={url}
+                  alt={`Attachment ${i + 1}`}
+                  className="h-16 w-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                />
+              )}
               <button
                 type="button"
                 onClick={() => removeImage(i)}
@@ -85,12 +108,16 @@ export function ImageUpload({
           ) : (
             <ImagePlus className="h-3.5 w-3.5" />
           )}
-          <span>{uploading ? "Uploading..." : `Attach image (${images.length}/${maxImages})`}</span>
+          <span>
+            {uploading
+              ? "Uploading..."
+              : `${allowPdf ? "Attach photo or PDF" : "Attach image"} (${images.length}/${maxImages})`}
+          </span>
           <input
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/*"
+            accept={allowPdf ? "image/*,application/pdf" : "image/*"}
             multiple
             onChange={handleFileSelect}
             disabled={uploading}

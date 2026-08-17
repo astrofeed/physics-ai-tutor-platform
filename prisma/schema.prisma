@@ -69,6 +69,7 @@ model User {
   uploadEvents           UploadEvent[]
   uploadedFiles          UploadedFile[]
   rateLimitHits          RateLimitHit[]
+  confirmedAnswerKeys    AssignmentQuestion[] @relation("KeyConfirmedBy")
 }
 
 model Account {
@@ -278,6 +279,10 @@ model Assignment {
   publishedById    String?
   scheduledPublishAt DateTime?
   notifyOnPublish    Boolean   @default(false)
+  // Set for assignments built from AI-generated problems: their answer keys are
+  // written by a model and are wrong often enough that every question needs a
+  // human confirmation before students can see it.
+  requiresKeyReview  Boolean   @default(false)
 
   course      Course?        @relation(fields: [courseId], references: [id])
   createdBy   User           @relation("CreatedBy", fields: [createdById], references: [id])
@@ -294,6 +299,10 @@ model AssignmentQuestion {
   questionType  QuestionType
   options       Json?        // JSON array for MC options
   correctAnswer String?
+  // Extra answers that also score full marks (an MC key opened up to a second
+  // option, or a second acceptable numeric value). `correctAnswer` stays the
+  // canonical one that is shown as "the" answer.
+  alsoAcceptedAnswers String[] @default([])
   points        Float        @default(10)
   order         Int          @default(0)
   // NUMERIC only: how far a student answer may deviate from correctAnswer and
@@ -302,17 +311,29 @@ model AssignmentQuestion {
   toleranceUnit ToleranceUnit @default(ABSOLUTE)
   diagram       Json?        // { type: "svg" | "mermaid", content: string }
   imageUrl      String?
+  // Who signed off on this question's answer key, and when. Cleared whenever the
+  // key changes, so a confirmation can never outlive the answer it approved.
+  keyConfirmedAt   DateTime?
+  keyConfirmedById String?
 
   assignment Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  keyConfirmedBy User?        @relation("KeyConfirmedBy", fields: [keyConfirmedById], references: [id], onDelete: SetNull)
   answers    SubmissionAnswer[]
   rubrics    Rubric[]
+
+  @@index([keyConfirmedById])
 }
 
 model Submission {
   id           String    @id @default(cuid())
   assignmentId String
   userId       String
+  /// The student's own upload (FILE_UPLOAD assignments). Graders must never
+  /// write here — their attachment goes to `feedbackFileUrl`.
   fileUrl      String?
+  /// A file the grader attaches to their feedback, shown to the student
+  /// alongside the grade.
+  feedbackFileUrl String?
   submittedAt  DateTime  @default(now())
   totalScore   Float?
   gradedAt     DateTime?

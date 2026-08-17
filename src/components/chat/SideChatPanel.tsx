@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Lightbulb, Plus, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { useTrackTime } from "@/lib/use-track-time";
 interface SideChatPanelProps {
   /** Shown under the panel title, e.g. the assignment the student is working on. */
   contextLabel?: string;
+  /** Assignment this panel is docked beside; makes the tutor guide instead of answer. */
+  assignmentId?: string;
   width?: number;
   isMobile: boolean;
   onClose: () => void;
@@ -30,6 +32,7 @@ interface SideChatPanelProps {
  */
 export function SideChatPanel({
   contextLabel,
+  assignmentId,
   width,
   isMobile,
   onClose,
@@ -71,8 +74,13 @@ export function SideChatPanel({
     setActiveConversationId,
     setConversations: ignoreConversationUpdates,
     chatMode,
+    assignmentId,
     onRestoreInput: setInput,
   });
+
+  // Beside an assignment the server always uses the guided prompt, so the
+  // manual toggle would only promise something it cannot deliver.
+  const guidedOnly = Boolean(assignmentId);
 
   const { isPinned, scrollToBottom } = useStickyScroll(scrollContainerRef, messages);
 
@@ -141,7 +149,7 @@ export function SideChatPanel({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {!examModeActive && (
+          {!examModeActive && !guidedOnly && (
             <Button
               type="button"
               variant={chatMode === "socratic" ? "outline" : "ghost"}
@@ -186,9 +194,12 @@ export function SideChatPanel({
         </div>
       </div>
 
-      {chatMode === "socratic" && !examModeActive && (
-        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-400 text-xs text-center">
-          Socratic guided mode: AI will guide your thinking through questions rather than giving direct answers
+      {(guidedOnly || chatMode === "socratic") && !examModeActive && (
+        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-400 text-xs flex items-center justify-center gap-1.5">
+          <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+          {guidedOnly
+            ? "Guided mode for assignments: the tutor asks questions to lead you to the answer instead of giving it"
+            : "Socratic guided mode: AI will guide your thinking through questions rather than giving direct answers"}
         </div>
       )}
 

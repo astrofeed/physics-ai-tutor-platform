@@ -1,8 +1,14 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteFileByUrl } from "@/lib/services/file-storage";
-import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+import {
+  MAX_MC_OPTIONS,
+  MIN_MC_OPTIONS,
+  compactMcOptions,
+  normalizeMcAnswerKey,
+} from "@/lib/mc-answer-key";
 import { validateTolerance, type ToleranceUnit } from "@/lib/auto-grade";
+import { answerKeyChanged } from "@/lib/key-review";
 import type { UserRole } from "@/types/user";
 
 export interface QuestionInput {
@@ -11,6 +17,8 @@ export interface QuestionInput {
   questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
   options?: string[];
   correctAnswer?: string;
+  /** Answers that also score full marks (a second correct option, or a second acceptable value). */
+  alsoAcceptedAnswers?: string[];
   points?: number;
   diagram?: { type: string; content: string } | null;
   imageUrl?: string | null;
@@ -29,15 +37,55 @@ export class AssignmentError extends Error {
 }
 
 /**
- * Rewrites MC answer keys to the option letter students actually submit, so a key
- * entered as option text (or as "2") cannot silently score everyone zero.
+ * Drops blank MC options and rewrites answer keys to the option letter students
+ * actually submit, so a key entered as option text (or as "2") cannot silently
+ * score everyone zero.
  */
 export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[] {
   return questions.map((question, index) => {
-    if (question.questionType !== "MC") return question;
+    if (question.questionType === "FREE_RESPONSE") {
+      return { ...question, alsoAcceptedAnswers: [] };
+    }
 
-    const options = question.options ?? [];
-    const letter = normalizeMcAnswerKey(question.correctAnswer ?? "", options);
+    if (question.questionType === "NUMERIC") {
+      const extras = dedupeExtraAnswers(question.alsoAcceptedAnswers, question.correctAnswer);
+      const invalid = extras.find((value) => !Number.isFinite(Number(value)));
+      if (invalid !== undefined) {
+        throw new AssignmentError(
+          `Question ${index + 1}: "${invalid}" is not a number, so it cannot be an accepted answer.`,
+          400
+        );
+      }
+      return { ...question, alsoAcceptedAnswers: extras };
+    }
+
+    const submittedOptions = question.options ?? [];
+    const extraKeys = dedupeExtraAnswers(question.alsoAcceptedAnswers, question.correctAnswer);
+    const unresolved = extraKeys.find((key) => {
+      const letter = normalizeMcAnswerKey(key, submittedOptions);
+      return letter === null || !submittedOptions[letter.charCodeAt(0) - 65]?.trim();
+    });
+    if (unresolved !== undefined) {
+      throw new AssignmentError(
+        `Question ${index + 1}: "${unresolved}" is not one of its options, so it cannot also be accepted.`,
+        400
+      );
+    }
+
+    const { options, correctAnswer, alsoAcceptedAnswers } = compactMcOptions(
+      submittedOptions,
+      question.correctAnswer ?? "",
+      extraKeys
+    );
+
+    if (options.length < MIN_MC_OPTIONS || options.length > MAX_MC_OPTIONS) {
+      throw new AssignmentError(
+        `Question ${index + 1}: a multiple choice question needs between ${MIN_MC_OPTIONS} and ${MAX_MC_OPTIONS} options with text.`,
+        400
+      );
+    }
+
+    const letter = normalizeMcAnswerKey(correctAnswer, options);
     if (!letter) {
       throw new AssignmentError(
         `Question ${index + 1}: the correct answer must be one of its options (a letter such as "A", or the option's text).`,
@@ -45,8 +93,20 @@ export function normalizeAnswerKeys(questions: QuestionInput[]): QuestionInput[]
       );
     }
 
-    return { ...question, correctAnswer: letter };
+    return { ...question, options, correctAnswer: letter, alsoAcceptedAnswers };
   });
+}
+
+/** Keeps the extra accepted answers a distinct, non-blank set that excludes the canonical one. */
+function dedupeExtraAnswers(
+  extras: string[] | undefined,
+  correctAnswer: string | undefined
+): string[] {
+  const canonical = (correctAnswer ?? "").trim();
+  const cleaned = (extras ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value !== canonical);
+  return Array.from(new Set(cleaned));
 }
 
 /**
@@ -66,11 +126,37 @@ export function assertValidTolerances(questions: QuestionInput[]) {
   });
 }
 
+interface StoredKey {
+  correctAnswer: string | null;
+  alsoAcceptedAnswers: string[];
+  options: Prisma.JsonValue;
+  tolerance: Prisma.Decimal | null;
+}
+
+/** Whether an edit changed the stored answer key into a different one. */
+function keyEdited(current: StoredKey, submitted: QuestionInput): boolean {
+  return answerKeyChanged(
+    {
+      correctAnswer: current.correctAnswer,
+      alsoAcceptedAnswers: current.alsoAcceptedAnswers,
+      options: Array.isArray(current.options) ? current.options.map(String) : null,
+      tolerance: current.tolerance === null ? null : Number(current.tolerance),
+    },
+    {
+      correctAnswer: submitted.correctAnswer || null,
+      alsoAcceptedAnswers: submitted.alsoAcceptedAnswers ?? [],
+      options: submitted.options ?? null,
+      tolerance: submitted.tolerance ?? null,
+    }
+  );
+}
+
 const questionFields = (q: QuestionInput, order: number) => ({
   questionText: q.questionText,
   questionType: q.questionType,
   options: q.options ?? Prisma.JsonNull,
   correctAnswer: q.correctAnswer || null,
+  alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
   points: q.points ?? 10,
   order,
   diagram: q.diagram ?? Prisma.JsonNull,
@@ -135,6 +221,10 @@ export async function syncQuestions(
       order: true,
       questionText: true,
       imageUrl: true,
+      correctAnswer: true,
+      alsoAcceptedAnswers: true,
+      options: true,
+      tolerance: true,
       _count: { select: { answers: true } },
     },
   });
@@ -174,7 +264,14 @@ export async function syncQuestions(
         }
         await tx.assignmentQuestion.update({
           where: { id: current.id },
-          data: questionFields(question, index),
+          data: {
+            ...questionFields(question, index),
+            // An edited key is no longer the one staff signed off on.
+            ...(keyEdited(current, question) && {
+              keyConfirmedAt: null,
+              keyConfirmedById: null,
+            }),
+          },
         });
       } else {
         await tx.assignmentQuestion.create({

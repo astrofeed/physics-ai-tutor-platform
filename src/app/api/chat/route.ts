@@ -24,6 +24,7 @@ const ChatInputSchema = z
     imageUrls: z.array(z.string().url()).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
     documents: z.array(DocumentSchema).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
     mode: z.enum(["normal", "socratic"]).optional(),
+    assignmentId: z.string().max(100).optional(),
   })
   .refine(
     (input) =>
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
       }
       return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
-    const { conversationId, message, imageUrls, documents, mode } = parsed.data;
+    const { conversationId, message, imageUrls, documents, mode, assignmentId } = parsed.data;
 
     const attachedDocuments = (documents ?? []).filter((doc) => isUploadedBlobUrl(doc.url));
     if (attachedDocuments.length !== (documents?.length ?? 0)) {
@@ -198,6 +199,12 @@ export async function POST(req: Request) {
       if (examMode?.isActive) {
         systemPrompt = EXAM_MODE_SYSTEM_PROMPT;
       }
+    }
+
+    // Asking beside an assignment is homework help, so the tutor guides instead
+    // of handing over the solution — students cannot turn this off.
+    if (!systemPrompt && assignmentId) {
+      systemPrompt = SOCRATIC_SYSTEM_PROMPT;
     }
 
     if (!systemPrompt) {

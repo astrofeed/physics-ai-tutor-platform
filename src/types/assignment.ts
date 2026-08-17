@@ -15,6 +15,7 @@ export interface QuestionPayload {
   questionType: string;
   options: string[];
   correctAnswer: string;
+  alsoAcceptedAnswers: string[];
   points: number;
   diagram?: unknown;
   imageUrl?: string;
@@ -29,6 +30,8 @@ export interface AssignmentQuestion {
   questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
   options: string[] | null;
   correctAnswer: string | null;
+  /** Extra answers that also score full marks; empty for students until grades are released. */
+  alsoAcceptedAnswers?: string[];
   points: number;
   order: number;
   tolerance?: number | null;
@@ -36,6 +39,9 @@ export interface AssignmentQuestion {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   diagram?: { type: "svg" | "mermaid"; content: string } | any;
   imageUrl?: string | null;
+  /** Set once staff confirmed this question's answer key; cleared when the key is edited. */
+  keyConfirmedAt?: string | null;
+  keyConfirmedBy?: { name: string | null } | null;
 }
 
 /** A question being authored in the assignment form, before it is saved. */
@@ -46,6 +52,8 @@ export interface QuestionFormData {
   questionType: "MC" | "NUMERIC" | "FREE_RESPONSE";
   options: string[];
   correctAnswer: string;
+  /** Extra answers that also score full marks alongside `correctAnswer`. */
+  alsoAcceptedAnswers: string[];
   points: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   diagram?: { type: "svg" | "mermaid"; content: string } | any;
@@ -112,6 +120,8 @@ export interface AssignmentDetail {
   notifyOnPublish: boolean;
   createdBy: { name: string | null };
   publishedBy?: { name: string | null } | null;
+  /** True for assignments built from AI-generated problems: publishing needs every key confirmed. */
+  requiresKeyReview: boolean;
   questions: AssignmentQuestion[];
   _count: { submissions: number };
 }

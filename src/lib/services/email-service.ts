@@ -101,13 +101,23 @@ export interface PublishAssignmentResult {
 /**
  * Publish an assignment by ID. Uses `updateMany` with `published: false`
  * guard to prevent double-publish. Clears `scheduledPublishAt`.
+ *
+ * An assignment under answer-key review stays unpublished until every key is
+ * confirmed, so a schedule cannot put unreviewed AI keys in front of students.
  */
 export async function publishAssignment(
   assignmentId: string,
   publishedById: string
 ): Promise<PublishAssignmentResult> {
   const updated = await prisma.assignment.updateMany({
-    where: { id: assignmentId, published: false },
+    where: {
+      id: assignmentId,
+      published: false,
+      OR: [
+        { requiresKeyReview: false },
+        { questions: { none: { keyConfirmedAt: null } } },
+      ],
+    },
     data: {
       published: true,
       publishedById,

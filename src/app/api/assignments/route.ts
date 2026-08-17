@@ -16,6 +16,7 @@ const QuestionSchema = z.object({
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).nullable().optional().default([]),
   correctAnswer: z.string().max(2000).nullable().optional().default(""),
+  alsoAcceptedAnswers: z.array(z.string().max(2000)).max(8).optional().default([]),
   points: z.number().positive("Question points must be greater than 0").max(1000).optional().default(10),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
@@ -34,6 +35,8 @@ const CreateAssignmentSchema = z.object({
   lockAfterSubmit: z.boolean().optional().default(false),
   scheduledPublishAt: z.string().nullable().optional(),
   notifyOnPublish: z.boolean().optional().default(false),
+  /** Set by the AI problem generator: every answer key needs confirming before publish. */
+  requiresKeyReview: z.boolean().optional().default(false),
 });
 
 export async function GET(req: Request) {
@@ -184,7 +187,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish } = parsed.data;
+    const { title, description, dueDate, type, totalPoints, questions: submittedQuestions, pdfUrl, lockAfterSubmit, scheduledPublishAt, notifyOnPublish, requiresKeyReview } = parsed.data;
     const questions = normalizeAnswerKeys(
       submittedQuestions.map((q) => ({
         ...q,
@@ -193,6 +196,16 @@ export async function POST(req: Request) {
       }))
     );
     assertValidTolerances(questions);
+
+    if (scheduledPublishAt && requiresKeyReview) {
+      return NextResponse.json(
+        {
+          error:
+            "Confirm every answer key before scheduling an assignment built from generated problems.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Validate scheduledPublishAt if provided
     if (scheduledPublishAt) {
@@ -225,6 +238,7 @@ export async function POST(req: Request) {
         lockAfterSubmit,
         scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : null,
         notifyOnPublish,
+        requiresKeyReview,
         createdById: userId,
         questions: {
           create: questions.map((q, i) => ({
@@ -232,6 +246,7 @@ export async function POST(req: Request) {
             questionType: q.questionType,
             options: q.options?.length ? q.options : Prisma.JsonNull,
             correctAnswer: q.correctAnswer || null,
+            alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
             points: q.points ?? 10,
             order: i,
             diagram: q.diagram ?? Prisma.JsonNull,

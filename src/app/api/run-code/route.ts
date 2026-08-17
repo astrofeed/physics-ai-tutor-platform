@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { consumeActionRateLimit } from "@/lib/services/action-rate-limit";
+import { codeExecutionEndpoint } from "@/lib/code-execution";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
@@ -28,10 +29,27 @@ const LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
   php: { language: "php", version: "8.2.3" },
 };
 
+/** Lets the UI hide Run buttons when no sandbox is configured. */
+export async function GET() {
+  const auth = await requireApiAuth();
+  if (isErrorResponse(auth)) return auth;
+
+  return NextResponse.json({ enabled: codeExecutionEndpoint() !== null });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
+
+    const endpoint = codeExecutionEndpoint();
+
+    if (!endpoint) {
+      return NextResponse.json(
+        { error: "Code execution is not configured on this deployment." },
+        { status: 503 }
+      );
+    }
 
     const parsed = RunCodeSchema.safeParse(await req.json());
 
@@ -64,8 +82,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use Piston API for safe, sandboxed code execution
-    const pistonResponse = await fetch("https://emkc.org/api/v2/piston/execute", {
+    const pistonResponse = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -76,6 +93,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!pistonResponse.ok) {
+      logger.error("Code sandbox rejected the request", {
+        route: "/api/run-code",
+        status: pistonResponse.status,
+      });
       return NextResponse.json(
         { error: "Failed to execute code on remote server" },
         { status: 500 }

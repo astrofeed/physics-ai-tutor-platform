@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { AttachmentThumbnails } from "@/components/ui/attachment-thumbnails";
 import { AppealThread } from "./AppealThread";
 import type { SubmissionAnswer, Appeal } from "./types";
 
@@ -55,7 +56,13 @@ interface GradingPanelProps {
   onSendAppealMessage: (appealId: string) => void;
 }
 
-function ReferenceAnswer({ answer }: { answer: string }) {
+function ReferenceAnswer({
+  answer,
+  alsoAccepted = [],
+}: {
+  answer: string;
+  alsoAccepted?: string[];
+}) {
   const [visible, setVisible] = React.useState(false);
   return (
     <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-4">
@@ -74,10 +81,17 @@ function ReferenceAnswer({ answer }: { answer: string }) {
         </button>
       </div>
       {visible && (
-        <MarkdownContent
-          content={answer}
-          className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
-        />
+        <>
+          <MarkdownContent
+            content={answer}
+            className="mt-2 text-sm text-emerald-900 dark:text-emerald-100"
+          />
+          {alsoAccepted.length > 0 && (
+            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+              Also accepted: {alsoAccepted.join(", ")}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
@@ -220,27 +234,12 @@ export function GradingPanel({
                   {answer.answer || "No typed answer provided"}
                 </p>
               )}
-              {answer.answerImageUrls &&
-                (answer.answerImageUrls as string[]).length > 0 && (
-                  <div className="flex gap-2 mt-2 flex-wrap">
-                    {(answer.answerImageUrls as string[]).map(
-                      (url: string, i: number) => (
-                        <a
-                          key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img
-                            src={url}
-                            alt={`Answer image ${i + 1}`}
-                            className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
-                          />
-                        </a>
-                      )
-                    )}
-                  </div>
-                )}
+              <div className="mt-2">
+                <AttachmentThumbnails
+                  urls={answer.answerImageUrls ?? []}
+                  label="Answer attachment"
+                />
+              </div>
             </div>
 
             {/* Score + Confirm + AI Assist */}
@@ -303,7 +302,10 @@ export function GradingPanel({
             </div>
 
             {answer.referenceAnswer && (
-              <ReferenceAnswer answer={answer.referenceAnswer} />
+              <ReferenceAnswer
+                answer={answer.referenceAnswer}
+                alsoAccepted={answer.alsoAcceptedAnswers}
+              />
             )}
 
             {suggestions[answer.id] && (

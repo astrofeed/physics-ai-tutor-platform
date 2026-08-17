@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useEffectiveSession } from "@/lib/effective-session-context";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -7,8 +7,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { buildAssignmentNotifyContent } from "@/lib/utils";
 import { useAssignmentAppeals } from "@/hooks/useAssignmentAppeals";
-import type { AssignmentDetail } from "@/types/assignment";
+import { unconfirmedKeysMessage, unconfirmedQuestionNumbers } from "@/lib/key-review";
+import type { AssignmentDetail, AssignmentQuestion } from "@/types/assignment";
 import type { ExistingSubmission } from "@/types/submission";
+
+/** What an in-progress quiz autosaves: typed answers plus attachment URLs. */
+interface QuizDraft {
+  answers: Record<string, string>;
+  images: Record<string, string[]>;
+}
 
 interface ConfirmDialogState {
   open: boolean;
@@ -46,6 +53,8 @@ export function useAssignmentDetail(assignmentId: string) {
   // --- Draft state ---
   const [draftRestored, setDraftRestored] = useState(false);
   const draftRestoredRef = useRef(false);
+  /** Whether a draft exists on the server, so an emptied quiz still has to be saved. */
+  const savedDraftRef = useRef(false);
 
   // --- Dialog state ---
   const [unpublishDialogOpen, setUnpublishDialogOpen] = useState(false);
@@ -76,21 +85,31 @@ export function useAssignmentDetail(assignmentId: string) {
   // --- Auto-save ---
   const isQuizInProgress = assignment?.type === "QUIZ" && (!existingSubmission || existingSubmission.isDraft === true) && !submitted && userRole === "STUDENT";
 
-  const saveDraft = useCallback(async (data: Record<string, string>) => {
+  // Attachments are part of the watched data, so attaching a photo with no typed
+  // answer still saves a draft.
+  const draft: QuizDraft = useMemo(() => ({ answers, images: answerImages }), [answers, answerImages]);
+
+  const saveDraft = useCallback(async (data: QuizDraft) => {
     if (!assignment) return;
-    const answerEntries = Object.entries(data).filter(([qId, v]) => v.trim() !== "" || (answerImages[qId]?.length ?? 0) > 0);
-    if (answerEntries.length === 0) return;
+    const questionIds = new Set([
+      ...Object.keys(data.answers).filter((qId) => data.answers[qId].trim() !== ""),
+      ...Object.keys(data.images).filter((qId) => (data.images[qId]?.length ?? 0) > 0),
+    ]);
+    // Sending an empty quiz is only worth it once a draft exists — clearing the
+    // last answer otherwise leaves the stale server copy to come back on reload.
+    if (questionIds.size === 0 && !savedDraftRef.current) return;
+    const answers = Array.from(questionIds, (questionId) => ({
+      questionId,
+      answer: data.answers[questionId] ?? "",
+      answerImageUrls: data.images[questionId]?.length ? data.images[questionId] : undefined,
+    }));
     const res = await fetch("/api/submissions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         assignmentId: assignment.id,
         isDraft: true,
-        answers: answerEntries.map(([questionId, answer]) => ({
-          questionId,
-          answer,
-          answerImageUrls: answerImages[questionId]?.length ? answerImages[questionId] : undefined,
-        })),
+        answers,
       }),
     });
     // Throwing keeps the indicator on "error" instead of claiming "Saved".
@@ -98,10 +117,11 @@ export function useAssignmentDetail(assignmentId: string) {
       const body = await res.json().catch(() => null);
       throw new Error(body?.error || "Failed to save draft");
     }
-  }, [assignment, answerImages]);
+    savedDraftRef.current = true;
+  }, [assignment]);
 
   const { status: autoSaveStatus, lastSavedAt, saveNow: flushAutoSave, markSaved } = useAutoSave({
-    data: answers,
+    data: draft,
     saveFn: saveDraft,
     delayMs: 2000,
     enabled: isQuizInProgress,
@@ -124,6 +144,7 @@ export function useAssignmentDetail(assignmentId: string) {
 
         if (data.submission) {
           setExistingSubmission(data.submission);
+          if (data.submission.isDraft) savedDraftRef.current = true;
           if (data.submission.isDraft && data.submission.answers?.length > 0 && !draftRestoredRef.current) {
             const restored: Record<string, string> = {};
             const restoredImages: Record<string, string[]> = {};
@@ -133,7 +154,7 @@ export function useAssignmentDetail(assignmentId: string) {
             }
             setAnswers(restored);
             setAnswerImages(restoredImages);
-            markSaved(restored);
+            markSaved({ answers: restored, images: restoredImages });
             setDraftRestored(true);
             draftRestoredRef.current = true;
           }
@@ -303,11 +324,37 @@ export function useAssignmentDetail(assignmentId: string) {
     });
   };
 
+  /** Keeps the panel's confirmation state in step with the server's answer. */
+  const handleQuestionChange = (question: AssignmentQuestion) => {
+    setAssignment((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: prev.questions.map((q) => (q.id === question.id ? question : q)),
+          }
+        : prev
+    );
+  };
+
+  const blockedByKeyReview = () => {
+    if (!assignment?.requiresKeyReview) return false;
+    const unconfirmed = unconfirmedQuestionNumbers(
+      assignment.questions.map((q) => ({
+        order: q.order,
+        keyConfirmedAt: q.keyConfirmedAt ?? null,
+      }))
+    );
+    if (unconfirmed.length === 0) return false;
+    toast.error(unconfirmedKeysMessage(unconfirmed));
+    return true;
+  };
+
   const handlePublish = () => {
     if (!assignment) return;
     if (assignment.published) {
       setUnpublishDialogOpen(true);
     } else {
+      if (blockedByKeyReview()) return;
       const { subject, message } = buildAssignmentNotifyContent(assignment);
       setNotifySubject(subject);
       setNotifyMessage(message);
@@ -317,6 +364,7 @@ export function useAssignmentDetail(assignmentId: string) {
 
   const handleSchedule = () => {
     if (!assignment) return;
+    if (blockedByKeyReview()) return;
     const { subject, message } = buildAssignmentNotifyContent(assignment);
     setNotifySubject(subject);
     setNotifyMessage(message);
@@ -413,5 +461,6 @@ export function useAssignmentDetail(assignmentId: string) {
     handleAnswerChange, handleAnswerImagesChange,
     handleSubmit, handleEditSubmission,
     handlePublish, handleSchedule, handleToggleLock, handleDelete, handleExportLatex,
+    handleQuestionChange,
   };
 }

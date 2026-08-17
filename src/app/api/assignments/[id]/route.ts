@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireApiAuth, requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { isStaff as isStaffRole } from "@/lib/constants";
 import { AssignmentError, syncQuestions } from "@/lib/services/assignment-service";
+import { assertAnswerKeysConfirmed } from "@/lib/services/key-review-service";
+import { humanGradingStarted } from "@/lib/services/submission-service";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
@@ -12,6 +14,7 @@ const PatchQuestionSchema = z.object({
   questionType: z.enum(["MC", "NUMERIC", "FREE_RESPONSE"]),
   options: z.array(z.string().max(2000)).optional(),
   correctAnswer: z.string().max(2000).optional(),
+  alsoAcceptedAnswers: z.array(z.string().max(2000)).max(8).optional(),
   points: z.number().positive().max(1000).optional(),
   diagram: z.object({ type: z.string(), content: z.string() }).nullable().optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
@@ -50,7 +53,10 @@ export async function GET(
       prisma.assignment.findFirst({
         where: { id: params.id, isDeleted: false },
         include: {
-          questions: { orderBy: { order: "asc" } },
+          questions: {
+            orderBy: { order: "asc" },
+            include: { keyConfirmedBy: { select: { name: true } } },
+          },
           createdBy: { select: { name: true } },
           publishedBy: { select: { name: true } },
           ...(isStaff && { _count: { select: { submissions: { where: { isDraft: false } } } } }),
@@ -156,14 +162,20 @@ export async function GET(
       questions: questions.map((q) => ({
         ...q,
         correctAnswer: released ? q.correctAnswer : null,
+        alsoAcceptedAnswers: released ? q.alsoAcceptedAnswers : [],
       })),
     };
 
+    // A hand-saved score is hidden until release, so the student's Edit &
+    // Resubmit button needs this flag to know the submission is locked —
+    // otherwise it stays enabled and every click 403s.
     const submissionData = submission
       ? {
           ...submission,
+          beingGraded: humanGradingStarted(submission),
           totalScore: released ? submission.totalScore : null,
           overallFeedback: released ? submission.overallFeedback : null,
+          feedbackFileUrl: released ? submission.feedbackFileUrl : null,
           answers: submission.answers.map((a) => ({
             ...a,
             score: released ? a.score : null,
@@ -235,6 +247,12 @@ export async function PATCH(
 
     // If publishing immediately, ignore any schedule
     const isPublishingNow = data.published === true;
+
+    // Runs after the question sync, so an edit that changed a key in the same
+    // request withdraws its confirmation and blocks the publish with it.
+    if (isPublishingNow || data.scheduledPublishAt) {
+      await assertAnswerKeysConfirmed(params.id);
+    }
 
     // Cancel linked PENDING scheduled emails when schedule is cleared
     const isClearingSchedule =

@@ -34,8 +34,13 @@ function resolveWithinUploads(storagePath: string) {
   return resolved;
 }
 
-export function fileUrl(id: string) {
-  return `${FILE_ROUTE_PREFIX}${id}`;
+/**
+ * `name` carries the original filename so a client can tell a PDF from a photo
+ * without fetching it; `fileIdFromUrl` ignores the query string.
+ */
+export function fileUrl(id: string, filename?: string) {
+  if (!filename) return `${FILE_ROUTE_PREFIX}${id}`;
+  return `${FILE_ROUTE_PREFIX}${id}?name=${encodeURIComponent(filename)}`;
 }
 
 /** `/api/files/<id>` → `<id>`; anything else (legacy `/uploads/...`, blob URLs) → null. */
@@ -88,10 +93,10 @@ export async function storeUploadedFile(params: {
       storageUrl,
       visibility,
     },
-    select: { id: true },
+    select: { id: true, filename: true },
   });
 
-  return { id: record.id, url: fileUrl(record.id) };
+  return { id: record.id, url: fileUrl(record.id, record.filename) };
 }
 
 export function visibilityForUploader(role: UserRole): FileVisibility {

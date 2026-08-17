@@ -138,23 +138,19 @@ export function QuestionRenderer({
           </div>
         )}
 
-        {(question.questionType === "NUMERIC" ||
-          question.questionType === "FREE_RESPONSE") && (
-          <div className="space-y-1 mt-2">
-            <Label className="text-xs text-gray-500">
-              Attach images (up to 3)
-            </Label>
-            <ImageUpload
-              images={answerImages}
-              onImagesChange={(imgs) =>
-                onAnswerImagesChange(question.id, imgs)
-              }
-              onUpload={onUploadImage}
-              uploading={uploadingImage}
-              maxImages={3}
-            />
-          </div>
-        )}
+        <div className="space-y-1 mt-2">
+          <Label className="text-xs text-gray-500">
+            Attach photos or a PDF of your work (up to 3)
+          </Label>
+          <ImageUpload
+            images={answerImages}
+            onImagesChange={(imgs) => onAnswerImagesChange(question.id, imgs)}
+            onUpload={onUploadImage}
+            uploading={uploadingImage}
+            maxImages={3}
+            allowPdf
+          />
+        </div>
       </CardContent>
     </Card>
   );

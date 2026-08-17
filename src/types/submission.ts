@@ -21,6 +21,8 @@ export interface SubmissionAnswer {
 export interface ExistingSubmission {
   id: string;
   fileUrl: string | null;
+  /** A file the grader attached to their feedback; only sent once released. */
+  feedbackFileUrl?: string | null;
   submittedAt: string;
   totalScore: number | null;
   gradedAt?: string | null;
@@ -28,6 +30,11 @@ export interface ExistingSubmission {
   isLate?: boolean;
   isDraft?: boolean;
   overallFeedback?: string | null;
+  /**
+   * A grader has released or hand-scored this submission, so it can no longer
+   * be edited. Sent separately because an unreleased hand score is masked.
+   */
+  beingGraded?: boolean;
   answers: SubmissionAnswer[];
 }
 

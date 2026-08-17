@@ -36,7 +36,9 @@ export async function GET(req: Request) {
     for (const assignment of assignments) {
       try {
         const pubResult = await publishAssignment(assignment.id, assignment.createdById);
-        if (!pubResult.published) continue; // Already published by another process
+        // Already published by another process, or still waiting on answer-key
+        // confirmations, which the schedule must not override.
+        if (!pubResult.published) continue;
         publishedCount++;
 
         // Audit log

@@ -403,10 +403,12 @@ Question type: ${questionType}
 ${customInstructions ? `\nAdditional instructions: ${customInstructions}\n` : ""}
 For each problem, provide:
 1. The question text using proper markdown with LaTeX math ($...$ for inline, $$...$$ for display math)
-2. ${questionType === "MC" ? "4 options labeled A, B, C, D (each option should also use LaTeX for any math)" : ""}
+2. ${questionType === "MC" ? "4 options, in A-B-C-D order, each holding only the option's own text — never prefix an option with its own letter, the platform adds that (write \"1.0 A\", not \"B. 1.0 A\"). Use LaTeX for any math." : ""}
 3. The correct answer, written so the platform's auto-grader can use it:
    - MC: a single option letter (A, B, C or D) and nothing else — no option text, no explanation
-   - NUMERIC: one plain finite number (e.g. 9.8 or -3.2e-4) — no units, no LaTeX, no words, no ranges
+   - NUMERIC: one plain finite number (e.g. 9.8 or -3.2e-4) — no units, no LaTeX, no words, no ranges. Students are graded within a small percentage of it, so keep 3 significant figures rather than rounding hard
+   - MC and NUMERIC: the answer must be the one your own solution derives — re-read the solution's final line before writing it
+   - MC also: a "correctAnswerValue" field holding that option's text exactly as you wrote it in the options array. The platform trusts this value over the letter, so it must be a verbatim copy of the option your solution derives
    - FREE_RESPONSE: a concise reference answer a grader can compare against
 4. A detailed step-by-step solution using markdown formatting and LaTeX for all math
 5. If the problem benefits from a visual diagram, include a "diagram" object with "type" ("svg" or "mermaid") and "content" (the diagram code)
@@ -414,8 +416,9 @@ For each problem, provide:
 ${formatInstruction} having these fields:
 - questionText: string (markdown + LaTeX)
 - questionType: "${questionType}"
-${questionType === "MC" ? '- options: string[] (array of 4 options, each with LaTeX math as needed)' : ""}
+${questionType === "MC" ? '- options: string[] (array of 4 options, option text only with no "A."/"B." prefixes, each with LaTeX math as needed)' : ""}
 - correctAnswer: string (MC: option letter only; NUMERIC: plain number only; FREE_RESPONSE: reference answer)
+${questionType === "MC" ? '- correctAnswerValue: string (verbatim copy of the correct option\'s text, so the letter can be checked against it)' : ""}
 - solution: string (markdown + LaTeX, step-by-step)
 - points: number (suggest appropriate points, typically 10-25)
 - diagram: { type: "svg" | "mermaid", content: string } (optional, include for problems with physical setups like circuits, force diagrams, EM fields, optics, etc.)`;

@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useCodeExecutionAvailable } from "@/hooks/use-code-execution";
 import dynamic from "next/dynamic";
 import "katex/dist/katex.min.css";
 import DOMPurify from "dompurify";
@@ -64,6 +65,7 @@ function CodeBlock({
   const [code, setCode] = useState(initialCode);
   const [style, setStyle] = useState<Record<string, React.CSSProperties> | null>(null);
   const [showRunConfirm, setShowRunConfirm] = useState(false);
+  const codeExecutionAvailable = useCodeExecutionAvailable();
 
   useEffect(() => {
     import("react-syntax-highlighter/dist/esm/styles/prism").then((mod) => setStyle(mod.vscDarkPlus));
@@ -75,7 +77,8 @@ function CodeBlock({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isRunnable = RUNNABLE_LANGUAGES.includes(language.toLowerCase());
+  const isRunnable =
+    codeExecutionAvailable && RUNNABLE_LANGUAGES.includes(language.toLowerCase());
 
   const handleRun = async () => {
     if (!sessionStorage.getItem('code-run-acknowledged')) {

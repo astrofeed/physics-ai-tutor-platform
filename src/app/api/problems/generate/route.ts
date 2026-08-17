@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { streamGenerateProblems, type AIProvider } from "@/lib/ai";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { normalizeMcAnswerKey } from "@/lib/mc-answer-key";
+import { mcKeyFromValue, stripOptionLabels } from "@/lib/generated-problem";
 
 const GenerateSchema = z.object({
   topic: z.string().min(1).max(200),
@@ -12,14 +13,20 @@ const GenerateSchema = z.object({
   customInstructions: z.string().max(5000).optional(),
 });
 
-/** Aligns a generated answer key with what the auto-grader expects. */
+/**
+ * Aligns a generated answer key with what the auto-grader expects. For MC the
+ * answer's value wins over the letter the model states, because the letter is
+ * the field it gets wrong (a solution deriving option B ending "Option C").
+ */
 function normalizeGeneratedAnswer(
   answer: string,
   questionType: string,
-  options: string[] | null
+  options: string[] | null,
+  answerValue?: string
 ): string {
   if (questionType === "MC") {
-    return normalizeMcAnswerKey(answer, options ?? []) ?? answer.trim();
+    const fromValue = answerValue ? mcKeyFromValue(answerValue, options ?? []) : null;
+    return fromValue ?? normalizeMcAnswerKey(answer, options ?? []) ?? answer.trim();
   }
   if (questionType === "NUMERIC") {
     const numeric = answer.replace(/\$/g, "").match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/);
@@ -99,7 +106,14 @@ export async function GET() {
         createdBy: ps.createdBy.name,
         createdById: ps.createdById,
         createdAt: ps.createdAt.toISOString(),
-        problems: ps.problems,
+        // Sets generated before option labels were stripped are cleaned on read,
+        // so reusing an old set doesn't carry "A. A." into a new assignment.
+        problems: ps.problems.map((problem) => ({
+          ...problem,
+          options: Array.isArray(problem.options)
+            ? stripOptionLabels(problem.options.map(String))
+            : problem.options,
+        })),
       })),
     });
   } catch (error) {
@@ -221,13 +235,20 @@ export async function POST(req: Request) {
             }
 
             const type = p.questionType || questionType;
-            const options: string[] | null = Array.isArray(p.options) ? p.options : null;
+            const options: string[] | null = Array.isArray(p.options)
+              ? stripOptionLabels(p.options.map(String))
+              : null;
 
             return {
               questionText,
               questionType: type,
               options,
-              correctAnswer: normalizeGeneratedAnswer(String(p.correctAnswer || ""), type, options),
+              correctAnswer: normalizeGeneratedAnswer(
+                String(p.correctAnswer || ""),
+                type,
+                options,
+                p.correctAnswerValue ? String(p.correctAnswerValue) : undefined
+              ),
               solution: p.solution || "",
               points: p.points || 10,
               diagram,

@@ -49,12 +49,17 @@ export function PublishDialogs({
   const [unpublishing, setUnpublishing] = useState(false);
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
 
+  /** Throws with the server's reason — an unconfirmed AI answer key blocks this. */
   const publishAssignment = async () => {
-    await fetch(`/api/assignments/${assignment.id}`, {
+    const res = await fetch(`/api/assignments/${assignment.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ published: true }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || "Failed to publish assignment");
+    }
     setAssignment({ ...assignment, published: true });
   };
 
@@ -134,7 +139,11 @@ export function PublishDialogs({
         sendButtonLabel="Notify & Publish"
         skipButtonLabel="Skip Notification & Publish"
         onSkip={async () => {
-          await publishAssignment();
+          try {
+            await publishAssignment();
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to publish assignment");
+          }
         }}
         onBeforeSend={async (subj, msg, { audienceRoles }) => {
           await publishAssignment();

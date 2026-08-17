@@ -100,7 +100,7 @@ prisma/
 - **Code Blocks**: Interactive with syntax highlighting, edit mode, and sandboxed execution
   - Supported languages for execution: Python, JavaScript, TypeScript
   - Rate limit: 20 executions per hour per user
-  - API: `/api/run-code` → Piston API
+  - API: `/api/run-code` → the Piston-compatible sandbox at `CODE_EXEC_API_URL`; unset means the Run buttons are hidden (`GET /api/run-code` reports availability)
 - **Message Copy**: Each message has a copy button (user: left of bubble, assistant: action bar below)
 - **Docked side panel**: `SideChatLayout` + `SideChatPanel` (`src/components/chat/`) put the tutor in a resizable column beside page content (used by the assignment detail page). It reuses `useChatStream`/`useChatAttachments` and `/api/chat`, so bans, restrictions, rate limits and exam mode behave exactly as on `/chat`.
 - **Deep link**: `/chat/[id]` opens that conversation on mount via `initialConversationId`
@@ -142,7 +142,8 @@ prisma/
 - Chat attachments upload straight to Blob from the browser via `/api/upload/client`
 
 ### Code Execution Security
-- All code runs in Piston API sandbox (third-party service)
+- All code runs in a Piston-compatible sandbox (third-party service) configured through `CODE_EXEC_API_URL`; there is no default, because the public `emkc.org` instance is allow-list only and answers 401
+- With no endpoint configured the feature is off end to end: `POST /api/run-code` returns 503 and the UI hides its Run buttons
 - Rate limiting: 20 executions/hour per user, counted in the database (`RateLimitHit`) so it holds across serverless instances
 - First-time confirmation dialog warns users about third-party execution
 - Supported languages: Python, JavaScript, TypeScript, Java, C++, C, Go, Rust, Ruby, PHP

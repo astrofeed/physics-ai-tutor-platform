@@ -11,6 +11,7 @@ import {
   GripVertical,
   Layers,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,11 @@ import { toast } from "sonner";
 import { GeneratedProblemCard } from "@/components/problems/GeneratedProblemCard";
 import { ProblemBank } from "@/components/problems/ProblemBank";
 import { ProblemGeneratorConfig } from "@/components/problems/ProblemGeneratorConfig";
+import {
+  generatedTolerance,
+  keyContradictsSolution,
+  problemPreview,
+} from "@/lib/generated-problem";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +76,14 @@ interface ProblemSet {
   problems: GeneratedProblem[];
 }
 
+
+/**
+ * Nothing checks a generated answer key against the solution the same model
+ * wrote, and a key that is simply wrong still grades cleanly — so the author is
+ * told to read the keys before the class ever sees the assignment.
+ */
+const VERIFY_KEYS_NOTICE =
+  "Read every answer key and confirm it on the assignment page: publishing is blocked until all of them are confirmed.";
 
 function formatQuestionType(type: string): string {
   const typeMap: Record<string, string> = {
@@ -134,9 +148,18 @@ function SortableProblemItem({
           <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
             {problem.points} pts &middot; {problem.questionType}
           </span>
+          {keyContradictsSolution(problem) && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0"
+              title="This answer's value never appears in its solution — check the key"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Check key
+            </span>
+          )}
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-1">
-          {problem.questionText.replace(/\$\$?[^$]+\$\$?/g, "[math]").slice(0, 120)}
+          {problemPreview(problem.questionText)}
         </p>
       </div>
       <button
@@ -305,6 +328,7 @@ function ProblemGeneratorPageContent() {
           description: `Merged ${mergedProblems.length} problems from ${topics.length} topic(s): ${topics.join(", ")}.`,
           type: "QUIZ",
           totalPoints,
+          requiresKeyReview: true,
           questions: mergedProblems.map((p) => ({
             questionText: p.questionText,
             questionType: p.questionType,
@@ -312,12 +336,14 @@ function ProblemGeneratorPageContent() {
             correctAnswer: p.correctAnswer,
             points: p.points,
             diagram: p.diagram || null,
+            ...generatedTolerance(p.questionType),
           })),
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        router.push(`/assignments/${data.assignment.id}/edit`);
+        toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
+        router.push(`/assignments/${data.assignment.id}`);
       } else {
         const data = await res.json().catch(() => null);
         toast.error(data?.error || "Failed to create assignment");
@@ -432,6 +458,7 @@ function ProblemGeneratorPageContent() {
           description: `Auto-generated ${problems.length} ${formatQuestionType(questionType)} problems on ${effectiveTopic} (difficulty ${difficulty}/5).`,
           type: "QUIZ",
           totalPoints,
+          requiresKeyReview: true,
           questions: problems.map((p) => ({
             questionText: p.questionText,
             questionType: p.questionType || questionType,
@@ -439,12 +466,14 @@ function ProblemGeneratorPageContent() {
             correctAnswer: p.correctAnswer,
             points: p.points,
             diagram: p.diagram || null,
+            ...generatedTolerance(p.questionType || questionType),
           })),
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        router.push(`/assignments/${data.assignment.id}/edit`);
+        toast.warning(VERIFY_KEYS_NOTICE, { duration: 10000 });
+        router.push(`/assignments/${data.assignment.id}`);
       } else {
         const data = await res.json().catch(() => null);
         toast.error(data?.error || "Failed to create assignment");

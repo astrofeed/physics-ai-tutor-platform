@@ -1,9 +1,13 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Copy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import {
+  GENERATED_NUMERIC_TOLERANCE_PERCENT,
+  keyContradictsSolution,
+} from "@/lib/generated-problem";
 import dynamic from "next/dynamic";
 
 const MermaidDiagram = dynamic(() => import("@/components/chat/MermaidDiagram"), { ssr: false });
@@ -119,11 +123,27 @@ export function GeneratedProblemCard({ problem, index, isCopied, onCopy }: Gener
           </div>
         )}
 
+        {keyContradictsSolution(problem) && (
+          <div className="flex items-start gap-2 rounded-lg p-4 bg-amber-50 border border-amber-200 text-amber-900">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p className="text-sm">
+              This answer&apos;s value never appears in the solution below — the key is probably wrong.
+              Check it before using this problem.
+            </p>
+          </div>
+        )}
+
         <div className="rounded-lg p-4 bg-emerald-50 border border-emerald-200">
           <p className="text-xs font-semibold text-emerald-700 mb-1.5 uppercase tracking-wider">
             Correct Answer
           </p>
           <MarkdownContent content={problem.correctAnswer} className="text-sm text-emerald-800 font-medium" />
+          {problem.questionType === "NUMERIC" && (
+            <p className="text-xs text-emerald-700 mt-1.5">
+              Auto-graded within &plusmn;{GENERATED_NUMERIC_TOLERANCE_PERCENT}%; editable per question once this
+              becomes an assignment.
+            </p>
+          )}
         </div>
 
         <div className="rounded-lg p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
