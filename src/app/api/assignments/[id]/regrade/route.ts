@@ -11,8 +11,11 @@ export async function POST(
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;
 
-    const result = await regradeAssignment(auth.user.id, params.id);
-    return NextResponse.json({ result });
+    const result = await regradeAssignment(
+      { id: auth.user.id, role: auth.user.role },
+      params.id
+    );
+    return NextResponse.json({ data: result });
   } catch (error) {
     if (error instanceof RegradeError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

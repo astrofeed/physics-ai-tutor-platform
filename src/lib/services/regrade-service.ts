@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { autoGradeAnswer, type GradableQuestion, type ToleranceUnit } from "@/lib/auto-grade";
 import { recordGradeAudit } from "@/lib/services/grading-service";
+import type { UserRole } from "@/types/user";
 
 export interface RegradeResult {
   submissionsChecked: number;
@@ -16,6 +17,7 @@ export interface AnswerToRegrade {
   answer: string | null;
   score: number | null;
   autoGraded: boolean;
+  hasResolvedAppeal: boolean;
 }
 
 export interface Rescore {
@@ -35,28 +37,36 @@ export class RegradeError extends Error {
 
 /**
  * Answers whose machine score no longer matches the answer key. Answers a
- * grader touched (`autoGraded` false) are left out, which is what keeps a
- * re-grade from overwriting human judgement.
+ * grader touched (`autoGraded` false) and answers whose score came out of a
+ * resolved appeal are left out, which is what keeps a re-grade from overwriting
+ * human judgement.
  */
 export function plannedRescores(
   answers: AnswerToRegrade[],
   questions: Map<string, GradableQuestion>
 ): Rescore[] {
   return answers.flatMap((answer) => {
-    if (!answer.autoGraded) return [];
+    if (!answer.autoGraded || answer.hasResolvedAppeal) return [];
     const graded = autoGradeAnswer(answer.answer ?? "", questions.get(answer.questionId));
     if (graded.score === null || graded.score === answer.score) return [];
     return [{ id: answer.id, from: answer.score, to: graded.score }];
   });
 }
 
-/** Total after applying `rescores`, keeping every score the re-grade did not touch. */
-export function totalAfterRescores(answers: AnswerToRegrade[], rescores: Rescore[]): number {
-  const rescored = new Map(rescores.map((rescore) => [rescore.id, rescore.to]));
-  return answers.reduce(
-    (sum, answer) => sum + (rescored.get(answer.id) ?? answer.score ?? 0),
-    0
-  );
+/**
+ * Moves the stored total by what the re-grade changed instead of recomputing it
+ * from the answers, because a grader can enter an overall grade that deliberately
+ * differs from the sum of the per-question scores. With no stored total the sum
+ * of the answers is the starting point.
+ */
+export function totalAfterRescores(
+  answers: AnswerToRegrade[],
+  rescores: Rescore[],
+  storedTotal: number | null
+): number {
+  const answerSum = answers.reduce((sum, answer) => sum + (answer.score ?? 0), 0);
+  const delta = rescores.reduce((sum, rescore) => sum + rescore.to - (rescore.from ?? 0), 0);
+  return (storedTotal ?? answerSum) + delta;
 }
 
 /**
@@ -65,13 +75,15 @@ export function totalAfterRescores(answers: AnswerToRegrade[], rescores: Rescore
  * submitted.
  *
  * Deliberate limits:
- * - only answers still flagged `autoGraded` are touched, so a grader's score is
- *   never overwritten by the machine;
+ * - only answers still flagged `autoGraded` and free of a resolved appeal are
+ *   touched, so a grader's score is never overwritten by the machine;
+ * - the stored total moves by the change the re-grade made, so an overall grade
+ *   a grader entered by hand survives;
  * - a submission that was not released stays unreleased (its running total goes
  *   to `draftTotalScore`), so re-grading never publishes grades by itself.
  */
 export async function regradeAssignment(
-  graderId: string,
+  actor: { id: string; role: UserRole },
   assignmentId: string
 ): Promise<RegradeResult> {
   const assignment = await prisma.assignment.findUnique({
@@ -83,6 +95,12 @@ export async function regradeAssignment(
   }
   if (assignment.type !== "QUIZ") {
     throw new RegradeError("Only quiz assignments are auto-graded", 400);
+  }
+  if (actor.role === "TA" && assignment.createdById !== actor.id) {
+    throw new RegradeError(
+      "Forbidden: you can only re-grade your own assignments",
+      403
+    );
   }
 
   const gradable = new Map<string, GradableQuestion>(
@@ -108,7 +126,14 @@ export async function regradeAssignment(
       totalScore: true,
       draftTotalScore: true,
       answers: {
-        select: { id: true, questionId: true, answer: true, score: true, autoGraded: true },
+        select: {
+          id: true,
+          questionId: true,
+          answer: true,
+          score: true,
+          autoGraded: true,
+          appeals: { where: { status: "RESOLVED" }, select: { id: true }, take: 1 },
+        },
       },
     },
   });
@@ -122,11 +147,23 @@ export async function regradeAssignment(
   };
 
   for (const submission of submissions) {
-    const updates = plannedRescores(submission.answers, gradable);
+    const answers: AnswerToRegrade[] = submission.answers.map((answer) => ({
+      id: answer.id,
+      questionId: answer.questionId,
+      answer: answer.answer,
+      score: answer.score,
+      autoGraded: answer.autoGraded,
+      hasResolvedAppeal: answer.appeals.length > 0,
+    }));
+    const updates = plannedRescores(answers, gradable);
     if (updates.length === 0) continue;
 
-    const total = totalAfterRescores(submission.answers, updates);
     const released = submission.gradedAt !== null;
+    const total = totalAfterRescores(
+      answers,
+      updates,
+      released ? submission.totalScore : submission.draftTotalScore
+    );
 
     await prisma.$transaction(async (tx) => {
       for (const update of updates) {
@@ -148,7 +185,7 @@ export async function regradeAssignment(
       else result.scoresLowered += 1;
     }
 
-    await recordGradeAudit(graderId, "assignment_regraded", {
+    await recordGradeAudit(actor.id, "assignment_regraded", {
       submissionId: submission.id,
       assignmentId,
       studentId: submission.userId,

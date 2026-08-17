@@ -84,9 +84,19 @@ function GradingPageContent() {
     [queue, patchOpenSubmission]
   );
 
+  /**
+   * A re-grade or an appeal decision changes scores on the server, so the grades
+   * hydrated into the open submission are stale and finalizing would write them
+   * back over the new ones. Close it and reload from the server instead.
+   */
+  const reloadAfterScoreChange = useCallback(() => {
+    clearSelection();
+    queue.reloadSubmissions();
+  }, [clearSelection, queue]);
+
   const appeals = useGradingAppeals({
     onAppealUpdated: applyAppealUpdate,
-    onScoreChanged: queue.reloadSubmissions,
+    onScoreChanged: reloadAfterScoreChange,
     onDecided: queue.refreshCounters,
   });
 
@@ -150,7 +160,7 @@ function GradingPageContent() {
             appealsCount={appealsCount}
             filterMode={filterMode}
             onFilterModeChange={setFilterMode}
-            onRegraded={queue.reloadSubmissions}
+            onRegraded={reloadAfterScoreChange}
           />
         )}
       </div>

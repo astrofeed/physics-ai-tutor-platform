@@ -3,8 +3,11 @@ import {
   MAX_MC_OPTIONS,
   MIN_MC_OPTIONS,
   compactMcOptions,
+  keysAfterOptionRemoval,
   normalizeMcAnswerKey,
 } from "../src/lib/mc-answer-key";
+import { applyQuestionEdit } from "../src/hooks/use-question-list";
+import type { QuestionFormData } from "../src/types/assignment";
 
 test.describe("blank multiple choice options", () => {
   test("trailing blanks are dropped and the answer key is unchanged", () => {
@@ -59,6 +62,75 @@ test.describe("more than one accepted answer", () => {
     expect(
       compactMcOptions(["2 m/s", "", "4 m/s"], "A", ["B"]).alsoAcceptedAnswers
     ).toEqual([]);
+  });
+});
+
+test.describe("deleting one option while editing", () => {
+  test("letters after the deleted option shift down", () => {
+    expect(keysAfterOptionRemoval(["2", "4", "8", "16"], 1, "C", ["D"])).toEqual({
+      correctAnswer: "B",
+      alsoAcceptedAnswers: ["C"],
+    });
+  });
+
+  test("letters before the deleted option stay put", () => {
+    expect(keysAfterOptionRemoval(["2", "4", "8"], 2, "A", ["B"])).toEqual({
+      correctAnswer: "A",
+      alsoAcceptedAnswers: ["B"],
+    });
+  });
+
+  test("the deleted option's own key comes back empty", () => {
+    expect(keysAfterOptionRemoval(["2", "4", "8"], 1, "B").correctAnswer).toBe("");
+  });
+
+  test("a blank option left earlier in the list does not move the key", () => {
+    expect(keysAfterOptionRemoval(["", "O2", "O3", "O4"], 1, "D").correctAnswer).toBe("C");
+  });
+});
+
+test.describe("changing a question's type", () => {
+  const mcQuestion: QuestionFormData = {
+    questionText: "Which is fastest?",
+    questionType: "MC",
+    options: ["2 m/s", "4 m/s"],
+    correctAnswer: "A",
+    alsoAcceptedAnswers: ["B"],
+    points: 10,
+    tolerance: null,
+    toleranceUnit: "ABSOLUTE",
+  };
+
+  test("MC letters are dropped when the question becomes numeric", () => {
+    expect(applyQuestionEdit(mcQuestion, "questionType", "NUMERIC")).toMatchObject({
+      questionType: "NUMERIC",
+      correctAnswer: "",
+      alsoAcceptedAnswers: [],
+    });
+  });
+
+  test("numeric values and tolerance are dropped when the question becomes MC", () => {
+    const numeric: QuestionFormData = {
+      ...mcQuestion,
+      questionType: "NUMERIC",
+      correctAnswer: "0.834",
+      alsoAcceptedAnswers: ["0.83"],
+      tolerance: 1,
+      toleranceUnit: "PERCENT",
+    };
+    expect(applyQuestionEdit(numeric, "questionType", "MC")).toMatchObject({
+      correctAnswer: "",
+      alsoAcceptedAnswers: [],
+      tolerance: null,
+    });
+  });
+
+  test("editing another field keeps the answer key", () => {
+    expect(applyQuestionEdit(mcQuestion, "points", 5)).toMatchObject({
+      points: 5,
+      correctAnswer: "A",
+      alsoAcceptedAnswers: ["B"],
+    });
   });
 });
 

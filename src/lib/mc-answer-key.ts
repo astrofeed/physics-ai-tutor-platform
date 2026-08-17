@@ -47,6 +47,38 @@ export function compactMcOptions(
   };
 }
 
+/**
+ * Answer keys after one option is deleted from the list the author is editing.
+ * Letters stay relative to that list, blank rows included, so every letter after
+ * the deleted option shifts down one and none of the remaining options changes
+ * meaning. A key that pointed at the deleted option comes back empty, so the
+ * author picks again instead of the tick landing on its neighbour.
+ */
+export function keysAfterOptionRemoval(
+  options: string[],
+  removedIndex: number,
+  correctAnswer: string,
+  alsoAcceptedAnswers: string[] = []
+): { correctAnswer: string; alsoAcceptedAnswers: string[] } {
+  const shift = (key: string): string | null => {
+    const letter = normalizeMcAnswerKey(key, options);
+    if (!letter) return null;
+    const index = letter.charCodeAt(0) - 65;
+    if (index === removedIndex) return null;
+    return optionLetter(index > removedIndex ? index - 1 : index);
+  };
+
+  const primary = shift(correctAnswer);
+  const extras = alsoAcceptedAnswers
+    .map(shift)
+    .filter((letter): letter is string => letter !== null && letter !== primary);
+
+  return {
+    correctAnswer: primary ?? "",
+    alsoAcceptedAnswers: Array.from(new Set(extras)),
+  };
+}
+
 /** Returns the option letter for `correctAnswer`, or null when it matches no option. */
 export function normalizeMcAnswerKey(
   correctAnswer: string,

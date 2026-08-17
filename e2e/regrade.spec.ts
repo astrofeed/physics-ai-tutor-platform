@@ -18,6 +18,7 @@ const answer = (overrides: Partial<AnswerToRegrade>): AnswerToRegrade => ({
   answer: "B",
   score: 0,
   autoGraded: true,
+  hasResolvedAppeal: false,
   ...overrides,
 });
 
@@ -52,12 +53,31 @@ test.describe("re-running auto-grading", () => {
     expect(plannedRescores(skipped, questions)).toEqual([]);
   });
 
+  test("a score granted by a resolved appeal is never re-scored", () => {
+    expect(
+      plannedRescores([answer({ score: 10, hasResolvedAppeal: true })], questions)
+    ).toEqual([]);
+  });
+
   test("the new total keeps every score the re-grade did not touch", () => {
     const answers = [
       answer({ id: "auto", score: 0 }),
       answer({ id: "byHand", questionId: "q3", score: 7, autoGraded: false }),
     ];
     const rescores = plannedRescores(answers, questions);
-    expect(totalAfterRescores(answers, rescores)).toBe(17);
+    expect(totalAfterRescores(answers, rescores, 7)).toBe(17);
+  });
+
+  test("an overall grade entered by hand keeps its offset from the answer sum", () => {
+    const answers = [answer({ id: "auto", score: 0 })];
+    const rescores = plannedRescores(answers, questions);
+    // Released with an override of 5 while the answers sum to 0; +10 from the
+    // re-grade lands on 15, not on the bare per-question sum of 10.
+    expect(totalAfterRescores(answers, rescores, 5)).toBe(15);
+  });
+
+  test("with no stored total the answer sum is the starting point", () => {
+    const answers = [answer({ id: "auto", score: 0 }), answer({ id: "kept", score: 10 })];
+    expect(totalAfterRescores(answers, plannedRescores(answers, questions), null)).toBe(20);
   });
 });

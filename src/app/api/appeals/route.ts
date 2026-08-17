@@ -347,7 +347,9 @@ export async function PATCH(req: Request) {
       if (applyScore) {
         await prisma.submissionAnswer.update({
           where: { id: appeal.submissionAnswerId },
-          data: { score: newScore },
+          // `autoGraded: false` marks the score as human judgement so a later
+          // re-grade cannot revert what the appeal granted.
+          data: { score: newScore, autoGraded: false },
         });
 
         // Recalculate total score
