@@ -38,6 +38,17 @@ function isValidGradingDraft(data: unknown): data is GradingDraftData {
 
 const storageKey = (submissionId: string) => `grading-state-${submissionId}`;
 
+/**
+ * A draft saved before the server's grade is stale: a re-grade or an appeal
+ * decision moves `gradedAt`, so restoring it would let the grader finalize the
+ * old scores back over the new ones.
+ */
+export function draftPredatesGrade(savedAt: number, gradedAt: string | null): boolean {
+  if (!gradedAt) return false;
+  const graded = Date.parse(gradedAt);
+  return Number.isFinite(graded) && savedAt <= graded;
+}
+
 /** Keeps a grader's in-progress work in localStorage so a reload does not lose it. */
 export function useGradingDrafts() {
   const saveDraft = useCallback((draft: GradingDraftInput) => {
@@ -55,7 +66,7 @@ export function useGradingDrafts() {
     }
   }, []);
 
-  /** Persisted grades win over a draft that predates them, so a finalized submission is never shown as zeros. */
+  /** Server grades win over a draft that predates them, so stale scores are never restored. */
   const loadDraft = useCallback(
     (submission: SubmissionForGrading): GradingDraftData | null => {
       const key = storageKey(submission.id);
@@ -67,8 +78,7 @@ export function useGradingDrafts() {
           localStorage.removeItem(key);
           return null;
         }
-        const gradedAt = submission.gradedAt ? Date.parse(submission.gradedAt) : null;
-        if (gradedAt !== null && Number.isFinite(gradedAt) && parsed.savedAt <= gradedAt) {
+        if (draftPredatesGrade(parsed.savedAt, submission.gradedAt)) {
           localStorage.removeItem(key);
           return null;
         }

@@ -52,12 +52,12 @@ export function RegradeButton({
           ? "No scores changed — every auto-graded answer already matches the answer key."
           : `${result.submissionsChanged} submission(s) updated: ${result.scoresRaised} score(s) raised, ${result.scoresLowered} lowered.`
       );
-      setConfirming(false);
       onRegraded();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Re-grading failed");
     } finally {
       setRunning(false);
+      setConfirming(false);
     }
   };
 

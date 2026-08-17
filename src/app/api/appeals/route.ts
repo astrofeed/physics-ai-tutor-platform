@@ -363,7 +363,10 @@ export async function PATCH(req: Request) {
         );
         await prisma.submission.update({
           where: { id: appeal.submissionAnswer.submissionId },
-          data: { totalScore },
+          // `gradedAt` moves with the grade, so a grading draft still held in a
+          // browser is older than these scores and gets discarded rather than
+          // finalized back over them.
+          data: { totalScore, gradedAt: new Date() },
         });
       }
 

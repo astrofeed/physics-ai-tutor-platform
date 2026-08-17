@@ -340,6 +340,8 @@ export function useSubmissionGrading({
     select,
     selectAdjacent,
     clearSelection,
+    /** Throws away the stored draft for a submission whose scores changed on the server. */
+    discardDraft: clearDraft,
     /** Applies an out-of-band change (e.g. an appeal decision) to the open submission. */
     patchOpenSubmission: useCallback(
       (updater: (sub: SubmissionForGrading) => SubmissionForGrading) =>

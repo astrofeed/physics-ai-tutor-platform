@@ -56,7 +56,7 @@ function GradingPageContent() {
     patchSubmission,
     onQueueChanged: queue.refreshCounters,
   });
-  const { submission, clearSelection, patchOpenSubmission } = grading;
+  const { submission, clearSelection, discardDraft, patchOpenSubmission } = grading;
 
   const applyAppealUpdate = useCallback(
     (appealId: string, updated: Appeal) => {
@@ -86,13 +86,15 @@ function GradingPageContent() {
 
   /**
    * A re-grade or an appeal decision changes scores on the server, so the grades
-   * hydrated into the open submission are stale and finalizing would write them
-   * back over the new ones. Close it and reload from the server instead.
+   * held in this browser — both the open panel and the stored drafts — are stale,
+   * and finalizing one would write it back over the new scores. Throw them away
+   * and reload from the server instead.
    */
   const reloadAfterScoreChange = useCallback(() => {
+    for (const s of queue.submissions) discardDraft(s.id);
     clearSelection();
     queue.reloadSubmissions();
-  }, [clearSelection, queue]);
+  }, [clearSelection, discardDraft, queue]);
 
   const appeals = useGradingAppeals({
     onAppealUpdated: applyAppealUpdate,

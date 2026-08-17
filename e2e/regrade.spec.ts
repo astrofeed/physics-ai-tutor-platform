@@ -5,6 +5,7 @@ import {
   totalAfterRescores,
   type AnswerToRegrade,
 } from "../src/lib/services/regrade-service";
+import { draftPredatesGrade } from "../src/hooks/useGradingDrafts";
 
 const questions = new Map<string, GradableQuestion>([
   ["q1", { questionType: "MC", correctAnswer: "A", alsoAcceptedAnswers: ["B"], points: 10 }],
@@ -79,5 +80,25 @@ test.describe("re-running auto-grading", () => {
   test("with no stored total the answer sum is the starting point", () => {
     const answers = [answer({ id: "auto", score: 0 }), answer({ id: "kept", score: 10 })];
     expect(totalAfterRescores(answers, plannedRescores(answers, questions), null)).toBe(20);
+  });
+});
+
+test.describe("stored grading drafts against server scores", () => {
+  const savedAt = Date.parse("2026-08-16T10:00:00.000Z");
+
+  test("a draft older than the grade is stale", () => {
+    expect(draftPredatesGrade(savedAt, "2026-08-16T10:05:00.000Z")).toBe(true);
+  });
+
+  test("work done since the grade is kept", () => {
+    expect(draftPredatesGrade(savedAt, "2026-08-16T09:55:00.000Z")).toBe(false);
+  });
+
+  test("an ungraded submission keeps its draft", () => {
+    expect(draftPredatesGrade(savedAt, null)).toBe(false);
+  });
+
+  test("an unparseable timestamp is not treated as a newer grade", () => {
+    expect(draftPredatesGrade(savedAt, "not a date")).toBe(false);
   });
 });

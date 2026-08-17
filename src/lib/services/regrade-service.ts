@@ -174,7 +174,12 @@ export async function regradeAssignment(
       }
       await tx.submission.update({
         where: { id: submission.id },
-        data: released ? { totalScore: total } : { draftTotalScore: total },
+        // Moving `gradedAt` records when the grade last changed, and makes any
+        // grading draft a browser still holds older than the server's scores,
+        // so it is discarded instead of being finalized back over them.
+        data: released
+          ? { totalScore: total, gradedAt: new Date() }
+          : { draftTotalScore: total },
       });
     });
 
