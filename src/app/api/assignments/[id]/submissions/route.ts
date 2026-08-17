@@ -81,6 +81,7 @@ export async function GET(
         userEmail: s.user.email,
         submittedAt: s.submittedAt.toISOString(),
         totalScore: s.totalScore,
+        draftTotalScore: s.draftTotalScore,
         gradedAt: s.gradedAt?.toISOString() || null,
         gradedByName: s.gradedBy?.name || null,
         fileUrl: s.fileUrl,
