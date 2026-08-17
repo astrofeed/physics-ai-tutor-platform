@@ -46,18 +46,18 @@ export function RegradeButton({
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Re-grading failed");
 
-      const result = body.result as RegradeResult;
+      const result = body.data as RegradeResult;
       toast.success(
         result.submissionsChanged === 0
           ? "No scores changed — every auto-graded answer already matches the answer key."
           : `${result.submissionsChanged} submission(s) updated: ${result.scoresRaised} score(s) raised, ${result.scoresLowered} lowered.`
       );
-      setConfirming(false);
       onRegraded();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Re-grading failed");
     } finally {
       setRunning(false);
+      setConfirming(false);
     }
   };
 

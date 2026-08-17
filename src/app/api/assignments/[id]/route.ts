@@ -174,6 +174,8 @@ export async function GET(
           ...submission,
           beingGraded: humanGradingStarted(submission),
           totalScore: released ? submission.totalScore : null,
+          // Staff work in progress: never send it to the student, rendered or not.
+          draftTotalScore: null,
           overallFeedback: released ? submission.overallFeedback : null,
           feedbackFileUrl: released ? submission.feedbackFileUrl : null,
           answers: submission.answers.map((a) => ({

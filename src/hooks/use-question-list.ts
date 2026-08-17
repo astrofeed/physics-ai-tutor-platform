@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { QuestionFormData, QuestionPayload } from "@/types/assignment";
-import { MAX_MC_OPTIONS, MIN_MC_OPTIONS, compactMcOptions } from "@/lib/mc-answer-key";
+import { MAX_MC_OPTIONS, MIN_MC_OPTIONS, keysAfterOptionRemoval } from "@/lib/mc-answer-key";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_OPTIONS = ["", "", "", ""];
@@ -30,6 +30,23 @@ async function uploadImage(file: File): Promise<string> {
   return (await res.json()).url;
 }
 
+/**
+ * Applies one field edit. Changing the question type also drops the answer key,
+ * because a key only means something for the type it was written for: MC keys are
+ * option letters and numeric keys are values, so carrying one across a change
+ * leaves the form holding a key the new type rejects on save with no control to
+ * clear it.
+ */
+export function applyQuestionEdit(
+  question: QuestionFormData,
+  field: keyof QuestionFormData,
+  value: unknown
+): QuestionFormData {
+  const edited = { ...question, [field]: value };
+  if (field !== "questionType" || value === question.questionType) return edited;
+  return { ...edited, correctAnswer: "", alsoAcceptedAnswers: [], tolerance: null };
+}
+
 /** Owns the authored question list, including staged images and their upload on save. */
 export function useQuestionList(initial: QuestionFormData[] = []) {
   const [questions, setQuestions] = useState<QuestionFormData[]>(initial);
@@ -51,7 +68,7 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
   const updateQuestion = useCallback(
     (index: number, field: keyof QuestionFormData, value: unknown) => {
       setQuestions((prev) =>
-        prev.map((q, i) => (i === index ? { ...q, [field]: value } : q))
+        prev.map((q, i) => (i === index ? applyQuestionEdit(q, field, value) : q))
       );
     },
     []
@@ -83,14 +100,16 @@ export function useQuestionList(initial: QuestionFormData[] = []) {
     setQuestions((prev) =>
       prev.map((q, i) => {
         if (i !== qIndex || q.options.length <= MIN_MC_OPTIONS) return q;
-        const options = q.options.filter((_, index) => index !== oIndex);
-        const dropped = q.options.map((option, index) => (index === oIndex ? "" : option));
-        const compacted = compactMcOptions(dropped, q.correctAnswer, q.alsoAcceptedAnswers);
+        const keys = keysAfterOptionRemoval(
+          q.options,
+          oIndex,
+          q.correctAnswer,
+          q.alsoAcceptedAnswers
+        );
         return {
           ...q,
-          options,
-          correctAnswer: compacted.correctAnswer,
-          alsoAcceptedAnswers: compacted.alsoAcceptedAnswers,
+          options: q.options.filter((_, index) => index !== oIndex),
+          ...keys,
         };
       })
     );

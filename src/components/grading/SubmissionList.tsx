@@ -5,6 +5,7 @@ import {
   ClipboardList,
   CheckCircle2,
   Clock,
+  PencilLine,
   ShieldAlert,
 } from "lucide-react";
 import type { SubmissionForGrading, AssignmentInfo } from "./types";
@@ -50,6 +51,7 @@ export function SubmissionList({
           submissions.map((sub) => {
             const isSelected = selectedSubmission?.id === sub.id;
             const isGraded = sub.totalScore !== null;
+            const hasDraft = !isGraded && sub.draftTotalScore !== null;
 
             return (
               <button
@@ -103,21 +105,31 @@ export function SubmissionList({
                     className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
                       isGraded
                         ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800"
-                        : "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                        : hasDraft
+                          ? "text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-800"
+                          : "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
                     }`}
                   >
                     {isGraded ? (
                       <CheckCircle2 className="h-3 w-3" />
+                    ) : hasDraft ? (
+                      <PencilLine className="h-3 w-3" />
                     ) : (
                       <Clock className="h-3 w-3" />
                     )}
-                    {sub.totalScore ?? 0}/{assignmentInfo?.totalPoints}
+                    {sub.totalScore ?? sub.draftTotalScore ?? 0}/
+                    {assignmentInfo?.totalPoints}
                   </span>
                   {isGraded ? null : sub.openAppealCount > 0 ? (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800">
                       <ShieldAlert className="h-3 w-3" />
                       Pending &middot; {sub.openAppealCount} appeal
                       {sub.openAppealCount !== 1 ? "s" : ""}
+                    </span>
+                  ) : hasDraft ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950 px-2 py-0.5 rounded-full border border-sky-200 dark:border-sky-800">
+                      <PencilLine className="h-3 w-3" />
+                      Draft &middot; not released
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">

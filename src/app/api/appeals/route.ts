@@ -347,7 +347,9 @@ export async function PATCH(req: Request) {
       if (applyScore) {
         await prisma.submissionAnswer.update({
           where: { id: appeal.submissionAnswerId },
-          data: { score: newScore },
+          // `autoGraded: false` marks the score as human judgement so a later
+          // re-grade cannot revert what the appeal granted.
+          data: { score: newScore, autoGraded: false },
         });
 
         // Recalculate total score
@@ -361,7 +363,10 @@ export async function PATCH(req: Request) {
         );
         await prisma.submission.update({
           where: { id: appeal.submissionAnswer.submissionId },
-          data: { totalScore },
+          // `gradedAt` moves with the grade, so a grading draft still held in a
+          // browser is older than these scores and gets discarded rather than
+          // finalized back over them.
+          data: { totalScore, gradedAt: new Date() },
         });
       }
 

@@ -64,6 +64,8 @@ export interface SubmissionForGrading {
   userEmail: string;
   submittedAt: string;
   totalScore: number | null;
+  /** Staff-only work in progress; `null` once the grade is released. */
+  draftTotalScore: number | null;
   gradedAt: string | null;
   gradedByName: string | null;
   /** The student's own upload; a grader's attachment lives in `feedbackFileUrl`. */

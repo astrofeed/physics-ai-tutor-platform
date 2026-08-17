@@ -5,6 +5,7 @@ import {
   totalAfterRescores,
   type AnswerToRegrade,
 } from "../src/lib/services/regrade-service";
+import { draftPredatesGrade } from "../src/hooks/useGradingDrafts";
 
 const questions = new Map<string, GradableQuestion>([
   ["q1", { questionType: "MC", correctAnswer: "A", alsoAcceptedAnswers: ["B"], points: 10 }],
@@ -18,6 +19,7 @@ const answer = (overrides: Partial<AnswerToRegrade>): AnswerToRegrade => ({
   answer: "B",
   score: 0,
   autoGraded: true,
+  hasResolvedAppeal: false,
   ...overrides,
 });
 
@@ -52,12 +54,51 @@ test.describe("re-running auto-grading", () => {
     expect(plannedRescores(skipped, questions)).toEqual([]);
   });
 
+  test("a score granted by a resolved appeal is never re-scored", () => {
+    expect(
+      plannedRescores([answer({ score: 10, hasResolvedAppeal: true })], questions)
+    ).toEqual([]);
+  });
+
   test("the new total keeps every score the re-grade did not touch", () => {
     const answers = [
       answer({ id: "auto", score: 0 }),
       answer({ id: "byHand", questionId: "q3", score: 7, autoGraded: false }),
     ];
     const rescores = plannedRescores(answers, questions);
-    expect(totalAfterRescores(answers, rescores)).toBe(17);
+    expect(totalAfterRescores(answers, rescores, 7)).toBe(17);
+  });
+
+  test("an overall grade entered by hand keeps its offset from the answer sum", () => {
+    const answers = [answer({ id: "auto", score: 0 })];
+    const rescores = plannedRescores(answers, questions);
+    // Released with an override of 5 while the answers sum to 0; +10 from the
+    // re-grade lands on 15, not on the bare per-question sum of 10.
+    expect(totalAfterRescores(answers, rescores, 5)).toBe(15);
+  });
+
+  test("with no stored total the answer sum is the starting point", () => {
+    const answers = [answer({ id: "auto", score: 0 }), answer({ id: "kept", score: 10 })];
+    expect(totalAfterRescores(answers, plannedRescores(answers, questions), null)).toBe(20);
+  });
+});
+
+test.describe("stored grading drafts against server scores", () => {
+  const savedAt = Date.parse("2026-08-16T10:00:00.000Z");
+
+  test("a draft older than the grade is stale", () => {
+    expect(draftPredatesGrade(savedAt, "2026-08-16T10:05:00.000Z")).toBe(true);
+  });
+
+  test("work done since the grade is kept", () => {
+    expect(draftPredatesGrade(savedAt, "2026-08-16T09:55:00.000Z")).toBe(false);
+  });
+
+  test("an ungraded submission keeps its draft", () => {
+    expect(draftPredatesGrade(savedAt, null)).toBe(false);
+  });
+
+  test("an unparseable timestamp is not treated as a newer grade", () => {
+    expect(draftPredatesGrade(savedAt, "not a date")).toBe(false);
   });
 });
