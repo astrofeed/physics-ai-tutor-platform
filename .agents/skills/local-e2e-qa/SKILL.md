@@ -73,6 +73,18 @@ the question field is `questionType` (not `type`), and the multiple-choice enum 
 - Grading-page draft restore banner is different: `Grading progress restored from a previous session.`
   Force it by reloading inside the 5 s grading autosave window, and clear `grading-state-*` in
   localStorage when you want to test **server** hydration rather than the local draft.
+- Grading drafts are invalidated two ways (since `2806c5c`): the grading page calls `discardDraft(id)`
+  for every queued submission after a re-grade / appeal score change, and `draftPredatesGrade(savedAt,
+  gradedAt)` drops any draft saved at or before the server `gradedAt` on load. Re-grade and appeal
+  resolution both bump `Submission.gradedAt`, which is what kills drafts held in *another* tab or
+  browser context. When testing this, assert on the reopened panel's per-question values and the
+  absence of the restore banner — that is the user-visible property — and corroborate with
+  `select "totalScore","gradedAt" from "Submission"`.
+- **Cross-context tests: the `browser_console` tool attaches to the foreground Chrome window.** After
+  opening a second window (e.g. incognito via `ctrl+shift+n`), a `localStorage` read returns *that*
+  window's storage, which silently looks empty. Close or refocus the original window before reading
+  storage, and sanity-check with `location.href` plus a DOM probe. An incognito window is also a
+  separate session: re-set the `e2e-test-user-email` cookie there.
 
 ## Known structural limits when planning tests
 
