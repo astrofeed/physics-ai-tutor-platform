@@ -1633,6 +1633,14 @@ Email-based forgot/reset password for credentials accounts:
 - **Model context**: `src/lib/services/chat-context.ts` inlines document text as `<document>` blocks with an instruction that file contents are data, filenames stripped of quoting characters and `</document>` neutralized. Provider-independent, so DeepSeek (no vision/document support) works too.
 - **Client**: `src/hooks/use-chat-attachments.ts` owns staging, validation, previews and upload; `ChatInput` renders image previews plus document chips, `MessageDocuments` renders them in the transcript.
 
+### Presentation AI Pre-Grading (staff only)
+
+- **Purpose**: before live presentations, staff upload a group's video + slides and the AI drafts a Part I analysis (scorecard, physics error log, items to verify in person) and Part II student feedback with live Q&A questions. The AI output is a pre-grade aid; the TA/professor gives the final grade in person.
+- **Pipeline**: the browser extracts a 16 kHz mono WAV from the video (`src/lib/extract-audio.ts`, Web Audio — the video never leaves the TA's machine) and uploads audio + slides via `/api/presentation-grading/upload` (staff-only Blob token route). `POST /jobs/[id]/process` (maxDuration 800) transcribes with `gpt-4o-mini-transcribe`, reads slides (PDF passed to the model as a file for vision; PPTX text extracted with jszip), grades with `gpt-5.6-luna` at the job's reasoning effort (`high` default, `xhigh` optional), then **deletes both blobs** — no media is retained. Jobs run independently; the client fire-and-forgets the process call, so closing the tab does not stop a job. Stale in-progress jobs (>15 min) can be taken over; FAILED jobs are retryable while their media still exists.
+- **Rubric**: `PresentationRubric` rows are append-only shared versions (seeded from `src/lib/default-presentation-rubric.ts`); each job pins the version it was graded with, so rubric edits never change existing results.
+- **Security**: routes use `requireApiRole(STAFF_ROLES)`; blob downloads only from `*.blob.vercel-storage.com` (`isUploadedBlobUrl`); transcript/slide text is wrapped as untrusted data in the grading prompt; job creation is rate limited via `consumeActionRateLimit` (`presentation_grading_job`, 60/hour).
+- **Code**: service `src/lib/services/presentation-grading-service.ts`, shared constants/parsers `src/lib/presentation-grading.ts`, hooks `src/hooks/usePresentationGrading.ts`, UI `src/app/(main)/presentation-grading/` + `src/components/presentation-grading/`.
+
 ### Abuse Alerts
 
 `src/lib/abuse-detection.ts` emails active TA/PROFESSOR/ADMIN users plus every address in `ABUSE_ALERT_EMAILS` (comma separated). `trackMessageVolume` fires when a single user exceeds `MESSAGE_VOLUME_ALERT_THRESHOLD` user messages in an hour (default 60); repeat alerts are suppressed by looking for a recent `AuditLog` entry. Student-facing mail is unchanged: only the spam-guard auto-ban notifies the student.
