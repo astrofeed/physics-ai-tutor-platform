@@ -13,9 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/lib/chat-attachments";
 import {
   PRESENTATION_SLIDES_MAX_BYTES,
+  PRESENTATION_TRANSCRIPT_MAX_CHARS,
   PRESENTATION_VIDEO_MAX_BYTES,
 } from "@/lib/presentation-grading";
 import {
@@ -50,10 +52,12 @@ function FilePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="space-y-1.5">
-      <Label>
-        {label}
-        {required ? <span className="text-red-500"> *</span> : null}
-      </Label>
+      {label ? (
+        <Label>
+          {label}
+          {required ? <span className="text-red-500"> *</span> : null}
+        </Label>
+      ) : null}
       <input
         ref={inputRef}
         type="file"
@@ -68,7 +72,7 @@ function FilePicker({
           <span className="text-xs text-gray-500 shrink-0">{formatBytes(file.size)}</span>
           <button
             type="button"
-            aria-label={`Remove ${label.toLowerCase()}`}
+            aria-label={label ? `Remove ${label.toLowerCase()}` : "Remove file"}
             onClick={() => {
               onChange(null);
               if (inputRef.current) inputRef.current.value = "";
@@ -98,21 +102,24 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [track, setTrack] = useState<"A" | "B" | "unknown">("unknown");
   const [condition, setCondition] = useState<"AI-assisted" | "no-AI" | "unknown">("unknown");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
+  const [source, setSource] = useState<"video" | "transcript">("video");
   const [video, setVideo] = useState<File | null>(null);
+  const [transcript, setTranscript] = useState("");
   const [slides, setSlides] = useState<File | null>(null);
   const { submit, phase } = useSubmitPresentationJob(onCreated);
 
+  const hasSource = source === "video" ? video !== null : transcript.trim().length > 0;
   const canSubmit =
-    topic.trim().length > 0 && presenters.trim().length > 0 && video !== null && phase === null;
+    topic.trim().length > 0 && presenters.trim().length > 0 && hasSource && phase === null;
 
   const handleSubmit = async () => {
-    if (!video) return;
     const input: NewJobInput = {
       topic: topic.trim(),
       presenters: presenters.trim(),
       track: track === "unknown" ? undefined : track,
       condition: condition === "unknown" ? undefined : condition,
-      video,
+      video: source === "video" ? video : null,
+      transcript: source === "transcript" ? transcript.trim() : null,
       slides,
       reasoningEffort,
     };
@@ -120,6 +127,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       setTopic("");
       setPresenters("");
       setVideo(null);
+      setTranscript("");
       setSlides(null);
     }
   };
@@ -206,15 +214,55 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FilePicker
-            label="Presentation video"
-            hint={`Video, max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
-            accept="video/*"
-            file={video}
-            onChange={setVideo}
-            icon={FileVideo}
-            required
-          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>
+                Presentation <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex rounded-md border border-gray-200 dark:border-gray-800 p-0.5 text-xs">
+                {([
+                  ["video", "Upload video"],
+                  ["transcript", "Paste transcript"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSource(value)}
+                    className={`rounded px-2 py-1 transition-colors ${
+                      source === value
+                        ? "bg-gray-100 dark:bg-gray-800 font-medium"
+                        : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {source === "video" ? (
+              <FilePicker
+                label=""
+                hint={`Video, max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
+                accept="video/*"
+                file={video}
+                onChange={setVideo}
+                icon={FileVideo}
+              />
+            ) : (
+              <div className="space-y-1">
+                <Textarea
+                  placeholder="Paste what was said in the presentation…"
+                  maxLength={PRESENTATION_TRANSCRIPT_MAX_CHARS}
+                  rows={4}
+                  value={transcript}
+                  onChange={(e) => setTranscript(e.target.value)}
+                />
+                <p className="text-xs text-gray-500 text-right">
+                  {transcript.length.toLocaleString()} / {PRESENTATION_TRANSCRIPT_MAX_CHARS.toLocaleString()}
+                </p>
+              </div>
+            )}
+          </div>
           <FilePicker
             label="Slides"
             hint={`PDF or PPTX, up to ${formatBytes(PRESENTATION_SLIDES_MAX_BYTES)}`}

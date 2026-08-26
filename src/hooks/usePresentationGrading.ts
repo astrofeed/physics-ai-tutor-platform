@@ -7,6 +7,7 @@ import { extractAudioFromVideo, AudioExtractionError } from "@/lib/extract-audio
 import { formatBytes } from "@/lib/chat-attachments";
 import {
   PRESENTATION_SLIDES_MAX_BYTES,
+  PRESENTATION_TRANSCRIPT_MAX_CHARS,
   PRESENTATION_VIDEO_MAX_BYTES,
   PRESENTATION_VIDEO_MAX_SECONDS,
   type PresentationJobDetail,
@@ -189,7 +190,9 @@ export interface NewJobInput {
   presenters?: string;
   track?: "A" | "B";
   condition?: "AI-assisted" | "no-AI";
-  video: File;
+  /** Exactly one of video / transcript is provided. */
+  video: File | null;
+  transcript: string | null;
   slides: File | null;
   reasoningEffort: PresentationReasoningEffort;
 }
@@ -202,9 +205,19 @@ export function useSubmitPresentationJob(onCreated: () => void) {
 
   const submit = useCallback(
     async (input: NewJobInput): Promise<boolean> => {
-      if (input.video.size > PRESENTATION_VIDEO_MAX_BYTES) {
+      if (!input.video && !input.transcript) {
+        toast.error("Choose a video or paste the transcript first.");
+        return false;
+      }
+      if (input.video && input.video.size > PRESENTATION_VIDEO_MAX_BYTES) {
         toast.error(
           `The video is ${formatBytes(input.video.size)}; the maximum is ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}.`
+        );
+        return false;
+      }
+      if (input.transcript && input.transcript.length > PRESENTATION_TRANSCRIPT_MAX_CHARS) {
+        toast.error(
+          `The transcript is ${input.transcript.length.toLocaleString()} characters; the maximum is ${PRESENTATION_TRANSCRIPT_MAX_CHARS.toLocaleString()}.`
         );
         return false;
       }
@@ -215,17 +228,21 @@ export function useSubmitPresentationJob(onCreated: () => void) {
         return false;
       }
       try {
-        setPhase("extracting");
-        const { wav, durationSeconds } = await extractAudioFromVideo(input.video);
-        if (durationSeconds > PRESENTATION_VIDEO_MAX_SECONDS) {
-          toast.error(
-            `The video is ${Math.floor(durationSeconds / 60)}:${String(Math.round(durationSeconds % 60)).padStart(2, "0")} long; presentations must be at most 3:30.`
-          );
-          return false;
+        let audioBlobUrl: string | undefined;
+        if (input.video) {
+          setPhase("extracting");
+          const { wav, durationSeconds } = await extractAudioFromVideo(input.video);
+          if (durationSeconds > PRESENTATION_VIDEO_MAX_SECONDS) {
+            toast.error(
+              `The video is ${Math.floor(durationSeconds / 60)}:${String(Math.round(durationSeconds % 60)).padStart(2, "0")} long; presentations must be at most 3:30.`
+            );
+            return false;
+          }
+          setPhase("uploading");
+          audioBlobUrl = await uploadToBlob("audio", "presentation-audio.wav", wav, "audio/wav");
+        } else {
+          setPhase("uploading");
         }
-
-        setPhase("uploading");
-        const audioBlobUrl = await uploadToBlob("audio", "presentation-audio.wav", wav, "audio/wav");
         let slidesBlobUrl: string | undefined;
         if (input.slides) {
           const isPdf = input.slides.name.toLowerCase().endsWith(".pdf");
@@ -249,6 +266,7 @@ export function useSubmitPresentationJob(onCreated: () => void) {
             track: input.track,
             condition: input.condition,
             audioBlobUrl,
+            transcript: input.transcript ?? undefined,
             slidesBlobUrl,
             slidesFilename: input.slides?.name,
             reasoningEffort: input.reasoningEffort,

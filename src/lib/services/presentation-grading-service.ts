@@ -68,7 +68,9 @@ export interface CreatePresentationJobInput {
   presenters?: string;
   track?: string;
   condition?: string;
-  audioBlobUrl: string;
+  audioBlobUrl?: string;
+  /** A transcript the TA pasted directly, skipping transcription. */
+  transcript?: string;
   slidesBlobUrl?: string;
   slidesFilename?: string;
   reasoningEffort: PresentationReasoningEffort;
@@ -78,7 +80,10 @@ export async function createPresentationJob(
   userId: string,
   input: CreatePresentationJobInput
 ) {
-  if (!isUploadedBlobUrl(input.audioBlobUrl)) {
+  if (!input.audioBlobUrl && !input.transcript) {
+    throw new Error("A recording or a transcript is required");
+  }
+  if (input.audioBlobUrl && !isUploadedBlobUrl(input.audioBlobUrl)) {
     throw new Error("Audio URL is not an uploaded file");
   }
   if (input.slidesBlobUrl && !isUploadedBlobUrl(input.slidesBlobUrl)) {
@@ -92,6 +97,7 @@ export async function createPresentationJob(
       track: input.track,
       condition: input.condition,
       audioBlobUrl: input.audioBlobUrl,
+      transcript: input.transcript,
       slidesBlobUrl: input.slidesBlobUrl,
       slidesFilename: input.slidesFilename,
       reasoningEffort: input.reasoningEffort,
@@ -349,6 +355,9 @@ export async function processPresentationJob(id: string): Promise<void> {
       data: { status: "TRANSCRIBING", error: null, gradingStartedAt: startedAt },
     });
 
+    if (!job.transcript && !job.audioBlobUrl) {
+      throw new Error("This job has neither a transcript nor a recording");
+    }
     const transcript = job.transcript ?? (await transcribeAudio(job.audioBlobUrl ?? ""));
     const slides = await loadSlides(job);
     await prisma.presentationGradingJob.update({

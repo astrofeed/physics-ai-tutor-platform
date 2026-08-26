@@ -11,6 +11,7 @@ import {
   PRESENTATION_CONDITIONS,
   PRESENTATION_JOBS_PER_HOUR,
   PRESENTATION_TRACKS,
+  PRESENTATION_TRANSCRIPT_MAX_CHARS,
   REASONING_EFFORT_OPTIONS,
 } from "@/lib/presentation-grading";
 
@@ -19,11 +20,15 @@ const CreateJobSchema = z.object({
   presenters: z.string().max(200).optional(),
   track: z.enum(PRESENTATION_TRACKS).optional(),
   condition: z.enum(PRESENTATION_CONDITIONS).optional(),
-  audioBlobUrl: z.string().url().max(1000),
+  audioBlobUrl: z.string().url().max(1000).optional(),
+  transcript: z.string().min(1).max(PRESENTATION_TRANSCRIPT_MAX_CHARS).optional(),
   slidesBlobUrl: z.string().url().max(1000).optional(),
   slidesFilename: z.string().min(1).max(300).optional(),
   reasoningEffort: z.enum(REASONING_EFFORT_OPTIONS).default("high"),
-});
+}).refine(
+  (input) => Boolean(input.audioBlobUrl) !== Boolean(input.transcript),
+  { message: "Provide either an audio recording or a pasted transcript" }
+);
 
 export async function GET(request: Request) {
   const auth = await requireApiRole([...STAFF_ROLES]);
