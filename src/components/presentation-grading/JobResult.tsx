@@ -29,6 +29,26 @@ function extractSection(markdown: string, headingPattern: RegExp): string | null
   return body.length > 0 ? body : null;
 }
 
+/**
+ * Splits a Q&A section into individual numbered questions so each can be
+ * shown as its own card. Falls back to null when there is no numbered list.
+ */
+function splitNumberedItems(markdown: string): string[] | null {
+  const lines = markdown.split("\n");
+  const items: string[] = [];
+  let current: string[] | null = null;
+  for (const line of lines) {
+    if (/^\s*\d+[.)]\s/.test(line)) {
+      if (current) items.push(current.join("\n").trim());
+      current = [line.replace(/^\s*\d+[.)]\s/, "")];
+    } else if (current) {
+      current.push(line);
+    }
+  }
+  if (current) items.push(current.join("\n").trim());
+  return items.length >= 2 ? items : null;
+}
+
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -47,7 +67,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-type ResultTab = "analysis" | "student" | "transcript" | "slides";
+type ResultTab = "analysis" | "notes" | "transcript" | "slides";
 
 export function JobResult({ job }: { job: PresentationJobDetail }) {
   const [tab, setTab] = useState<ResultTab>("analysis");
@@ -55,13 +75,14 @@ export function JobResult({ job }: { job: PresentationJobDetail }) {
   const qaQuestions = job.partIIOutput
     ? extractSection(job.partIIOutput, /q\s*&\s*a|q&a/i)
     : null;
+  const qaItems = qaQuestions ? splitNumberedItems(qaQuestions) : null;
   const verifyInPerson = job.partIOutput
     ? extractSection(job.partIOutput, /verify in person/i)
     : null;
 
   const tabs: Array<[ResultTab, string, string | null]> = [
     ["analysis", "TA analysis", job.partIOutput],
-    ["student", "Student feedback", job.partIIOutput],
+    ["notes", "Feedback notes", job.partIIOutput],
     ["transcript", "Transcript", job.transcript],
     ["slides", "Slides text", job.slidesText],
   ];
@@ -71,24 +92,42 @@ export function JobResult({ job }: { job: PresentationJobDetail }) {
   return (
     <div className="space-y-6">
       {qaQuestions ? (
-        <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-950/20">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <MessagesSquare className="h-5 w-5 text-purple-600" />
+              <MessagesSquare className="h-4 w-4 text-gray-500" />
               Ask in the live Q&amp;A
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <MarkdownContent content={qaQuestions} className="text-sm" />
+            {qaItems ? (
+              <ol className="space-y-3">
+                {qaItems.map((item, index) => (
+                  <li
+                    key={index}
+                    className="rounded-lg border border-gray-200 dark:border-gray-800 p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        {index + 1}
+                      </span>
+                      <MarkdownContent content={item} className="text-sm" />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <MarkdownContent content={qaQuestions} className="text-sm" />
+            )}
           </CardContent>
         </Card>
       ) : null}
 
       {verifyInPerson ? (
-        <Card className="border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldQuestion className="h-5 w-5 text-amber-600" />
+              <ShieldQuestion className="h-4 w-4 text-gray-500" />
               Verify in person
             </CardTitle>
           </CardHeader>
@@ -117,10 +156,7 @@ export function JobResult({ job }: { job: PresentationJobDetail }) {
             ))}
           </div>
           {activeContent ? (
-            <CopyButton
-              text={activeContent}
-              label={tab === "student" ? "Copy for students" : "Copy"}
-            />
+            <CopyButton text={activeContent} label="Copy" />
           ) : null}
         </CardHeader>
         <CardContent>

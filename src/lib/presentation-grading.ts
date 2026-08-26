@@ -7,6 +7,7 @@
 export const PRESENTATION_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI transcription cap
 export const PRESENTATION_SLIDES_MAX_BYTES = 30 * 1024 * 1024;
 export const PRESENTATION_VIDEO_MAX_SECONDS = 210; // presentations are ≤3:30
+export const PRESENTATION_VIDEO_MAX_BYTES = 500 * 1024 * 1024; // never uploaded, but keeps in-browser extraction sane
 
 export const PRESENTATION_AUDIO_MIME_TYPES = [
   "audio/wav",
@@ -46,6 +47,7 @@ export type PresentationJobStatusValue =
 export interface PresentationJobSummary {
   id: string;
   topic: string;
+  presenters: string | null;
   track: string | null;
   condition: string | null;
   status: PresentationJobStatusValue;

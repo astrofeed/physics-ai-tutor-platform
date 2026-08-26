@@ -65,6 +65,7 @@ async function rubricForNewJob(userId: string) {
 
 export interface CreatePresentationJobInput {
   topic: string;
+  presenters?: string;
   track?: string;
   condition?: string;
   audioBlobUrl: string;
@@ -87,6 +88,7 @@ export async function createPresentationJob(
   return prisma.presentationGradingJob.create({
     data: {
       topic: input.topic,
+      presenters: input.presenters,
       track: input.track,
       condition: input.condition,
       audioBlobUrl: input.audioBlobUrl,
@@ -119,6 +121,7 @@ function toSummary(
   return {
     id: job.id,
     topic: job.topic,
+    presenters: job.presenters,
     track: job.track,
     condition: job.condition,
     status: job.status,
@@ -134,15 +137,28 @@ function toSummary(
   };
 }
 
-export async function listPresentationJobs(page: number, pageSize: number) {
+export async function listPresentationJobs(
+  page: number,
+  pageSize: number,
+  query?: string
+) {
+  const where = query
+    ? {
+        OR: [
+          { topic: { contains: query, mode: "insensitive" as const } },
+          { presenters: { contains: query, mode: "insensitive" as const } },
+        ],
+      }
+    : undefined;
   const [jobs, totalCount] = await Promise.all([
     prisma.presentationGradingJob.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: { createdBy: { select: { name: true } } },
     }),
-    prisma.presentationGradingJob.count(),
+    prisma.presentationGradingJob.count({ where }),
   ]);
   const versions = await Promise.all(jobs.map((j) => rubricVersionOf(j.rubricId)));
   return {
@@ -245,6 +261,7 @@ function buildGradingInput(
 ) {
   const metadata = [
     `Group number / topic: ${job.topic}`,
+    `Presenters: ${job.presenters ?? "unknown"}`,
     `Project track: ${job.track ? `Track ${job.track}` : "unknown"}`,
     `Preparation condition: ${job.condition ?? "unknown"}`,
     "Number of members who spoke: unknown",
@@ -367,6 +384,43 @@ export async function processPresentationJob(id: string): Promise<void> {
       data: { status: "FAILED", error: message },
     });
   }
+}
+
+export interface UpdatePresentationJobInput {
+  topic?: string;
+  presenters?: string | null;
+}
+
+export async function updatePresentationJob(
+  id: string,
+  input: UpdatePresentationJobInput
+): Promise<boolean> {
+  const job = await prisma.presentationGradingJob.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!job) return false;
+  await prisma.presentationGradingJob.update({
+    where: { id },
+    data: {
+      ...(input.topic !== undefined ? { topic: input.topic } : {}),
+      ...(input.presenters !== undefined ? { presenters: input.presenters } : {}),
+    },
+  });
+  return true;
+}
+
+/** Hard-deletes the job row and any media still uploaded for it. */
+export async function deletePresentationJob(id: string): Promise<boolean> {
+  const job = await prisma.presentationGradingJob.findUnique({
+    where: { id },
+    select: { audioBlobUrl: true, slidesBlobUrl: true },
+  });
+  if (!job) return false;
+  await prisma.presentationGradingJob.delete({ where: { id } });
+  await deleteBlobQuietly(job.audioBlobUrl);
+  await deleteBlobQuietly(job.slidesBlobUrl);
+  return true;
 }
 
 /** Puts a FAILED job back in the queue so `processPresentationJob` accepts it. */

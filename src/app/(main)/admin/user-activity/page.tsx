@@ -52,6 +52,7 @@ interface ActivityData {
     avgSessionMs: number;
     totalTimeMs: number;
     avgDailyActivities: number;
+    presentationJobCount: number;
   };
   dailyTrend: Record<string, string | number>[];
   trendCategories: string[];
@@ -210,6 +211,7 @@ function AdminUserActivityPageContent() {
     { key: "chat", label: "Chat" },
     { key: "simulation", label: "Simulation" },
     { key: "submission", label: "Submission" },
+    { key: "presentation", label: "Presentation AI" },
     { key: "other", label: "Other" },
   ];
 
@@ -321,6 +323,11 @@ function AdminUserActivityPageContent() {
                 label: "Recorded events",
                 value: data.summary.totalActivities.toLocaleString(),
                 hint: `${data.summary.avgDailyActivities}/day average`,
+              },
+              {
+                label: "Presentation gradings",
+                value: data.summary.presentationJobCount.toLocaleString(),
+                hint: "Grading jobs submitted",
               },
             ]}
           />

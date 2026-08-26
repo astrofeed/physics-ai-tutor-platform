@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { JobActions } from "@/components/presentation-grading/JobActions";
 import { JobResult } from "@/components/presentation-grading/JobResult";
 import {
   STATUS_BADGE_VARIANTS,
@@ -17,9 +18,11 @@ import {
   formatTimestamp,
 } from "@/components/presentation-grading/job-format";
 import { usePresentationJob } from "@/hooks/usePresentationGrading";
+import { useTrackTime } from "@/lib/use-track-time";
 
 function JobDetailContent({ id }: { id: string }) {
-  const { job, loading, notFound } = usePresentationJob(id);
+  const { job, loading, notFound, refresh } = usePresentationJob(id);
+  useTrackTime("PRESENTATION_GRADING", "detail");
 
   if (loading) {
     return (
@@ -53,6 +56,7 @@ function JobDetailContent({ id }: { id: string }) {
           <h1 className="text-2xl font-bold">{job.topic}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {[
+              job.presenters,
               job.track ? `Track ${job.track}` : null,
               job.condition,
               job.model,
@@ -70,10 +74,18 @@ function JobDetailContent({ id }: { id: string }) {
               : ""}
           </p>
         </div>
-        <Badge variant={STATUS_BADGE_VARIANTS[job.status]} className="mt-8 shrink-0">
-          {STATUS_LABELS[job.status]}
-          {inProgress ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : null}
-        </Badge>
+        <div className="mt-8 flex shrink-0 flex-col items-end gap-2">
+          <Badge variant={STATUS_BADGE_VARIANTS[job.status]}>
+            {STATUS_LABELS[job.status]}
+            {inProgress ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : null}
+          </Badge>
+          <JobActions
+            jobId={job.id}
+            topic={job.topic}
+            presenters={job.presenters}
+            onUpdated={() => void refresh()}
+          />
+        </div>
       </div>
 
       {job.status === "FAILED" ? (

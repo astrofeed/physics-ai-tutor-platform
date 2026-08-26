@@ -16,6 +16,7 @@ import {
 
 const CreateJobSchema = z.object({
   topic: z.string().min(1).max(200),
+  presenters: z.string().max(200).optional(),
   track: z.enum(PRESENTATION_TRACKS).optional(),
   condition: z.enum(PRESENTATION_CONDITIONS).optional(),
   audioBlobUrl: z.string().url().max(1000),
@@ -31,8 +32,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(searchParams.get("pageSize")) || 20));
+  const query = (searchParams.get("q") ?? "").trim().slice(0, 200) || undefined;
 
-  const result = await listPresentationJobs(page, pageSize);
+  const result = await listPresentationJobs(page, pageSize, query);
   return NextResponse.json({ data: result });
 }
 

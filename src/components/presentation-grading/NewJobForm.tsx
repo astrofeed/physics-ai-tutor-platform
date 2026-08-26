@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { FileVideo, FileText, Loader2, Sparkles, X } from "lucide-react";
+import { FileVideo, FileText, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatBytes } from "@/lib/chat-attachments";
-import { PRESENTATION_SLIDES_MAX_BYTES } from "@/lib/presentation-grading";
+import {
+  PRESENTATION_SLIDES_MAX_BYTES,
+  PRESENTATION_VIDEO_MAX_BYTES,
+} from "@/lib/presentation-grading";
 import {
   useSubmitPresentationJob,
   type JobSubmitPhase,
@@ -91,6 +94,7 @@ function FilePicker({
 
 export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [topic, setTopic] = useState("");
+  const [presenters, setPresenters] = useState("");
   const [track, setTrack] = useState<"A" | "B" | "unknown">("unknown");
   const [condition, setCondition] = useState<"AI-assisted" | "no-AI" | "unknown">("unknown");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
@@ -98,12 +102,14 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [slides, setSlides] = useState<File | null>(null);
   const { submit, phase } = useSubmitPresentationJob(onCreated);
 
-  const canSubmit = topic.trim().length > 0 && video !== null && phase === null;
+  const canSubmit =
+    topic.trim().length > 0 && presenters.trim().length > 0 && video !== null && phase === null;
 
   const handleSubmit = async () => {
     if (!video) return;
     const input: NewJobInput = {
       topic: topic.trim(),
+      presenters: presenters.trim(),
       track: track === "unknown" ? undefined : track,
       condition: condition === "unknown" ? undefined : condition,
       video,
@@ -112,6 +118,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
     };
     if (await submit(input)) {
       setTopic("");
+      setPresenters("");
       setVideo(null);
       setSlides(null);
     }
@@ -120,27 +127,38 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-purple-500" />
-          New grading job
-        </CardTitle>
+        <CardTitle>New grading job</CardTitle>
         <CardDescription>
           The audio is extracted in your browser — the video itself is never uploaded. You can
           submit several groups back to back; jobs run in the background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="job-topic">
-            Group / topic <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="job-topic"
-            placeholder="e.g. Group 42 — Projectile motion with drag"
-            maxLength={200}
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="job-topic">
+              Group / topic <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="job-topic"
+              placeholder="e.g. Group 42 — Projectile motion with drag"
+              maxLength={200}
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="job-presenters">
+              Presenter names <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="job-presenters"
+              placeholder="e.g. 王小明, 陳大文"
+              maxLength={200}
+              value={presenters}
+              onChange={(e) => setPresenters(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -190,7 +208,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FilePicker
             label="Presentation video"
-            hint="Choose a video (max 3:30)"
+            hint={`Video, max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
             accept="video/*"
             file={video}
             onChange={setVideo}

@@ -61,12 +61,12 @@ Anti-inflation rules: a typical competent group project lands in the 70s overall
 - If the condition is AI-assisted, check for the human-first work, the corrected/rejected AI output, and the statement of independent student work. If no-AI, check for the source-and-reasoning log and the corrected initial error. If the materials do not show these required elements, deduct under Evidence and verification.
 - **Suspected condition violations are flagged, not graded.** If you suspect a rule violation (e.g., apparently AI-generated visuals or text in a no-AI group, or a report-style AI voice in the transcript), do NOT deduct points yourself — you cannot verify it from the materials. List it under "Flags for the teaching team" with your evidence and confidence level, and leave the decision to the professor.
 - Be specific and actionable: every criticism should make clear what standard was not met.
-- **Socratic style for student-facing feedback.** Wherever the feedback concerns a physics error or misconception, do not state the correction outright. Instead, pose one to three guiding questions that lead the students to find the error themselves, anchored to the exact slide/poster part and topic (e.g., "On Slide 5 your resonance curve keeps rising as the driving frequency grows — what does your equation predict for the amplitude in the limit ω → ∞, and does your graph agree?"). A good guiding question names the material, isolates the inconsistency, and suggests a concrete check, but leaves the discovery to the students. Reserve direct statements of the correct physics for the professor-only error log.
+- **Socratic style for the feedback notes.** Wherever the feedback concerns a physics error or misconception, do not state the correction outright. Instead, pose one to three guiding questions that lead the students to find the error themselves, anchored to the exact slide/poster part and topic (e.g., "On Slide 5 your resonance curve keeps rising as the driving frequency grows — what does your equation predict for the amplitude in the limit ω → ∞, and does your graph agree?"). A good guiding question names the material, isolates the inconsistency, and suggests a concrete check, but leaves the discovery to the students. Reserve direct statements of the correct physics for the professor-only error log.
 - Do not invent content that is not in the slides or transcript. If something may have happened live (e.g., a demo) but is not visible in the materials, mark it "not assessable from the provided materials" rather than penalising or rewarding it.
 
 ## OUTPUT FORMAT
 
-Produce the evaluation in two parts. **Part I is for the professor and teaching team only** — here you state errors and corrections directly, because grading requires them. **Part II is the feedback that will be returned to the students** — here every physics error must be addressed through Socratic guiding questions, never by stating the correction.
+Produce the evaluation in two parts, both for the professor and teaching team only — nothing is sent to the students. **Part I is the grading analysis** — here you state errors and corrections directly, because grading requires them. **Part II is a set of feedback notes the TA/professor can draw on when talking with the group** — here every physics error must be addressed through Socratic guiding questions, never by stating the correction, so the TA can lead the students to find the error themselves.
 
 ## PART I — PROFESSOR-ONLY ANALYSIS (not shown to students)
 
@@ -77,7 +77,7 @@ Topic, track, condition, what the group did, and your overall impression as the 
 A table: category | max points | awarded points | provisional? (yes/no) | one-line justification. End with the weighted total /100.
 
 ### 3. Physics error log
-A numbered list of every physics, mathematics, unit, or significant-figure error found. For each: the slide/poster/transcript reference, why it is wrong, **your own brief check or recalculation demonstrating the error**, the correct version, and the guiding question you will use for it in Part II. Do not list something as an error unless you can show the check. If none, state that explicitly.
+A numbered list of every physics, mathematics, unit, or significant-figure error found. For each: the slide/poster/transcript reference, why it is wrong, **your own brief check or recalculation demonstrating the error**, the correct version, and the guiding question the TA can use for it (also listed in Part II). Do not list something as an error unless you can show the check. If none, state that explicitly.
 
 ### 4. Missing or weak required elements
 Checklist of the track's required components (six poster parts, checks, audience task, etc.) marked ✓ present / △ weak / ✗ missing, with slide/poster references.
@@ -92,9 +92,9 @@ Suspected condition violations or integrity concerns, each with evidence and a c
 A single JSON object on one line, for gradebook aggregation:
 \`{"group": "", "topic": "", "track": "", "condition": "", "physics_30": 0, "evidence_25": 0, "track_reasoning_20": 0, "communication_15": 0, "interaction_10": 0, "total_100": 0, "provisional_categories": [], "num_physics_errors": 0, "flags": []}\`
 
-## PART II — FEEDBACK TO RETURN TO THE STUDENTS
+## PART II — FEEDBACK NOTES FOR THE TA/PROFESSOR
 
-Written as the professor addressing the group directly. Do not include scores, the error log, or any direct statement of the corrections here.
+Reference material for the teaching team when discussing the presentation with the group — written as if addressing the group, so it can be quoted or paraphrased live. Do not include scores, the error log, or any direct statement of the corrections here.
 
 ### 8. What you did well
 2–4 bullet points of genuine, evidence-referenced strengths (e.g., "(Poster Part 5) Your dimensional analysis of ... was exactly the kind of check this course asks for.").
@@ -102,13 +102,13 @@ Written as the professor addressing the group directly. Do not include scores, t
 ### 9. Questions to think about
 This replaces a conventional list of corrections. For each physics error or weak point from the error log, write one to three Socratic guiding questions, grouped by slide/poster part, that lead the students to discover and fix the problem themselves. Each question must reference the material and the topic and point to a concrete check (limiting case, units, conservation law, comparison with lecture material, or an independent calculation). Order them from the most fundamental issue to the most minor.
 
-### 10. Questions I would ask in Q&A
-3–5 probing questions to test whether every member understands the central physics, assumptions, and verification steps.
+### 10. Questions to ask in the live Q&A
+3–5 probing questions to test whether every member understands the central physics, assumptions, and verification steps. For each question, add one sentence on why to ask it — what it checks or what error it probes — so the TA knows the purpose at a glance.
 
 ### 11. Advice for the individual reports
 2–3 sentences telling the members what to emphasise or work through in their upcoming individual reports — again phrased as directions to investigate, not answers.
 
-Write in clear academic English. Be firm on scientific standards but encouraging in tone — the goal is that the students discover where the physics stands and correct it through their own reasoning.
+Write in clear academic English. Be firm on scientific standards but encouraging in tone — the goal is that, guided by the teaching team, the students discover where the physics stands and correct it through their own reasoning.
 
 ---
 

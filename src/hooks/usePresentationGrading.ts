@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { toast } from "sonner";
 import { extractAudioFromVideo, AudioExtractionError } from "@/lib/extract-audio";
+import { formatBytes } from "@/lib/chat-attachments";
 import {
+  PRESENTATION_SLIDES_MAX_BYTES,
+  PRESENTATION_VIDEO_MAX_BYTES,
   PRESENTATION_VIDEO_MAX_SECONDS,
   type PresentationJobDetail,
   type PresentationJobSummary,
@@ -64,20 +67,37 @@ export function usePresentationRubric() {
 
 const ACTIVE_STATUSES = new Set(["QUEUED", "TRANSCRIBING", "GRADING"]);
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function usePresentationJobs() {
   const [jobs, setJobs] = useState<PresentationJobSummary[]>([]);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const pageRef = useRef(page);
   pageRef.current = page;
+  const searchRef = useRef(debouncedSearch);
+  searchRef.current = debouncedSearch;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(
-        `/api/presentation-grading/jobs?page=${pageRef.current}&pageSize=${JOBS_PAGE_SIZE}`
-      );
+      const params = new URLSearchParams({
+        page: String(pageRef.current),
+        pageSize: String(JOBS_PAGE_SIZE),
+      });
+      if (searchRef.current) params.set("q", searchRef.current);
+      const res = await fetch(`/api/presentation-grading/jobs?${params}`);
       if (!res.ok) throw new Error(String(res.status));
       const body = await res.json();
       setJobs(body.data.jobs);
@@ -91,7 +111,7 @@ export function usePresentationJobs() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh, page]);
+  }, [refresh, page, debouncedSearch]);
 
   const hasActiveJobs = jobs.some((job) => ACTIVE_STATUSES.has(job.status));
   useEffect(() => {
@@ -104,6 +124,8 @@ export function usePresentationJobs() {
     jobs,
     page,
     setPage,
+    search,
+    setSearch,
     totalPages: Math.max(1, Math.ceil(totalCount / JOBS_PAGE_SIZE)),
     totalCount,
     loading,
@@ -164,6 +186,7 @@ async function uploadToBlob(
 
 export interface NewJobInput {
   topic: string;
+  presenters?: string;
   track?: "A" | "B";
   condition?: "AI-assisted" | "no-AI";
   video: File;
@@ -179,6 +202,18 @@ export function useSubmitPresentationJob(onCreated: () => void) {
 
   const submit = useCallback(
     async (input: NewJobInput): Promise<boolean> => {
+      if (input.video.size > PRESENTATION_VIDEO_MAX_BYTES) {
+        toast.error(
+          `The video is ${formatBytes(input.video.size)}; the maximum is ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}.`
+        );
+        return false;
+      }
+      if (input.slides && input.slides.size > PRESENTATION_SLIDES_MAX_BYTES) {
+        toast.error(
+          `The slides file is ${formatBytes(input.slides.size)}; the maximum is ${formatBytes(PRESENTATION_SLIDES_MAX_BYTES)}.`
+        );
+        return false;
+      }
       try {
         setPhase("extracting");
         const { wav, durationSeconds } = await extractAudioFromVideo(input.video);
@@ -210,6 +245,7 @@ export function useSubmitPresentationJob(onCreated: () => void) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             topic: input.topic,
+            presenters: input.presenters,
             track: input.track,
             condition: input.condition,
             audioBlobUrl,
@@ -253,12 +289,50 @@ export function useSubmitPresentationJob(onCreated: () => void) {
   return { submit, phase };
 }
 
+/**
+ * Restarts a failed job. Processing takes minutes, so this only waits briefly
+ * for an immediate rejection (e.g. media already deleted) — if none arrives,
+ * the pipeline is running and the job list polling picks up the new status.
+ */
 export async function retryPresentationJob(id: string): Promise<void> {
-  const res = await fetch(`/api/presentation-grading/jobs/${id}/process`, {
+  const request = fetch(`/api/presentation-grading/jobs/${id}/process`, {
     method: "POST",
+    keepalive: true,
+  });
+  request.catch((error) => {
+    console.error(`[presentation-grading] retry request for job ${id} failed:`, error);
+  });
+  const res = await Promise.race([
+    request,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
+  ]);
+  if (res && !res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? "Retry failed");
+  }
+}
+
+export async function updatePresentationJob(
+  id: string,
+  input: { topic?: string; presenters?: string | null }
+): Promise<void> {
+  const res = await fetch(`/api/presentation-grading/jobs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? "Retry failed");
+    throw new Error(body?.error ?? "Failed to save changes");
+  }
+}
+
+export async function deletePresentationJob(id: string): Promise<void> {
+  const res = await fetch(`/api/presentation-grading/jobs/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? "Failed to delete the record");
   }
 }

@@ -3,6 +3,7 @@ export const ACTIVITY_CATEGORIES = [
   "ASSIGNMENT_VIEW",
   "ASSIGNMENT_SUBMIT",
   "GRADING",
+  "PRESENTATION_GRADING",
   "SIMULATION",
   "PROBLEM_GEN",
   "ANALYTICS_VIEW",
@@ -16,6 +17,7 @@ export const ACTIVITY_FILTER_CATEGORIES: Record<string, ActivityCategory[]> = {
   chat: ["AI_CHAT"],
   simulation: ["SIMULATION"],
   submission: ["ASSIGNMENT_SUBMIT", "ASSIGNMENT_VIEW"],
+  presentation: ["PRESENTATION_GRADING"],
 };
 
 /**

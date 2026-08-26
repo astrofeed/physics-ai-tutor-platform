@@ -97,9 +97,11 @@ model PresentationRubric {
 }
 
 model PresentationGradingJob {
-  id        String                @id @default(cuid())
-  topic     String
-  track     String?
+  id         String                @id @default(cuid())
+  topic      String
+  /// Presenter names, free text — the TA searches by this right after a talk.
+  presenters String?
+  track      String?
   condition String?
   status    PresentationJobStatus @default(QUEUED)
   error     String?               @db.Text
