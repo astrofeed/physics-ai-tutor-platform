@@ -242,65 +242,54 @@ interface MarkdownContentProps {
 
 export function MarkdownContent({ content, className }: MarkdownContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [copiedPos, setCopiedPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Click-to-copy for formulas via a delegated listener — the rendered
+  // KaTeX DOM is never restructured, so React reconciliation stays valid.
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const mathEl = target?.closest('.katex-display, .katex');
+      if (!mathEl || !container.contains(mathEl)) return;
+      const latex = mathEl.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
+      if (!latex) return;
+      event.preventDefault();
+      navigator.clipboard.writeText(latex).then(
+        () => {
+          const rect = mathEl.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          setCopiedPos({
+            left: rect.right - containerRect.left,
+            top: rect.top - containerRect.top,
+          });
+        },
+        (error) => console.error('[markdown-content] failed to copy formula', error)
+      );
+    };
+
+    container.addEventListener('click', handleClick);
+    return () => container.removeEventListener('click', handleClick);
+  }, []);
 
   useEffect(() => {
-    // Make math elements clickable to copy
-    // Use setTimeout to ensure ReactMarkdown and KaTeX have finished rendering
-    const timer = setTimeout(() => {
-      const container = contentRef.current;
-      if (!container) return;
-
-      const mathElements = container.querySelectorAll('.katex-display, .katex:not(.katex-display .katex)');
-
-      mathElements.forEach((mathEl) => {
-        // Skip if already processed
-        if (mathEl.parentElement?.classList.contains('math-wrapper')) return;
-
-        // Get the LaTeX source from the annotation element
-        const annotation = mathEl.querySelector('annotation[encoding="application/x-tex"]');
-        const latex = annotation?.textContent || '';
-
-        if (!latex) return;
-
-        // Create wrapper
-        const wrapper = document.createElement('div');
-        wrapper.className = 'math-wrapper relative inline-block cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded px-1';
-        wrapper.title = 'Click to copy formula';
-
-        if (mathEl.classList.contains('katex-display')) {
-          wrapper.className = 'math-wrapper relative block cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded px-2 py-1 my-4';
-        }
-
-        // Create "Copied!" indicator
-        const copiedIndicator = document.createElement('span');
-        copiedIndicator.className = 'absolute top-1 right-1 text-xs font-medium text-green-600 dark:text-green-400 bg-white dark:bg-gray-900 px-2 py-1 rounded shadow-sm opacity-0 transition-opacity pointer-events-none';
-        copiedIndicator.textContent = 'Copied!';
-
-        // Handle click to copy
-        wrapper.onclick = async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          await navigator.clipboard.writeText(latex);
-
-          // Show copied indicator
-          copiedIndicator.style.opacity = '1';
-          setTimeout(() => {
-            copiedIndicator.style.opacity = '0';
-          }, 1500);
-        };
-
-        // Wrap the math element
-        mathEl.parentNode?.insertBefore(wrapper, mathEl);
-        wrapper.appendChild(mathEl);
-        wrapper.appendChild(copiedIndicator);
-      });
-    }, 100); // Delay to ensure ReactMarkdown has rendered
-
+    if (!copiedPos) return;
+    const timer = setTimeout(() => setCopiedPos(null), 1500);
     return () => clearTimeout(timer);
-  }, [content]);
+  }, [copiedPos]);
 
   return (
-    <div ref={contentRef} className={`min-w-0 ${className ?? ""}`}>
+    <div ref={contentRef} className={`min-w-0 relative math-copy break-words ${className ?? ""}`}>
+      {copiedPos ? (
+        <span
+          className="absolute z-10 -translate-x-full text-xs font-medium text-green-600 dark:text-green-400 bg-white dark:bg-gray-900 px-2 py-1 rounded shadow-sm pointer-events-none"
+          style={{ left: copiedPos.left, top: copiedPos.top }}
+        >
+          Copied!
+        </span>
+      ) : null}
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeRaw, rehypeKatex]}

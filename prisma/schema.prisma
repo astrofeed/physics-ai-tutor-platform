@@ -70,6 +70,72 @@ model User {
   uploadedFiles          UploadedFile[]
   rateLimitHits          RateLimitHit[]
   confirmedAnswerKeys    AssignmentQuestion[] @relation("KeyConfirmedBy")
+  presentationRubrics    PresentationRubric[] @relation("RubricUpdatedBy")
+  presentationGradingJobs PresentationGradingJob[] @relation("PresentationJobCreatedBy")
+}
+
+enum PresentationJobStatus {
+  QUEUED
+  TRANSCRIBING
+  GRADING
+  DONE
+  FAILED
+}
+
+/// Shared presentation-grading rubric. Each save creates a new row; the
+/// highest version is the current rubric. Jobs reference the version they
+/// were graded with, so rubric edits never change existing results.
+model PresentationRubric {
+  id          String   @id @default(cuid())
+  version     Int      @unique
+  content     String   @db.Text
+  updatedById String
+  createdAt   DateTime @default(now())
+
+  updatedBy User                     @relation("RubricUpdatedBy", fields: [updatedById], references: [id])
+  jobs      PresentationGradingJob[]
+}
+
+model PresentationGradingJob {
+  id         String                @id @default(cuid())
+  topic      String
+  /// Presenter names, free text — the TA searches by this right after a talk.
+  presenters String?
+  track      String?
+  condition String?
+  status    PresentationJobStatus @default(QUEUED)
+  error     String?               @db.Text
+
+  /// Blob URLs are temporary: cleared after processing so no media is retained.
+  audioBlobUrl  String?
+  slidesBlobUrl String?
+  slidesFilename String?
+
+  transcript String? @db.Text
+  slidesText String? @db.Text
+
+  partIOutput  String? @db.Text
+  partIIOutput String? @db.Text
+  /// The one-line machine-readable scorecard emitted by the rubric (raw JSON string).
+  summaryJson  String? @db.Text
+  totalScore   Decimal? @db.Decimal(10, 2)
+
+  model             String?
+  reasoningEffort   String   @default("high")
+  gradingStartedAt  DateTime?
+  gradingDurationMs Int?
+
+  rubricId    String
+  createdById String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  createdBy User               @relation("PresentationJobCreatedBy", fields: [createdById], references: [id])
+  rubric    PresentationRubric @relation(fields: [rubricId], references: [id])
+
+  @@index([rubricId])
+  @@index([status, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model Account {

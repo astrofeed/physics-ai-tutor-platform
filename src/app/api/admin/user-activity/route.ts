@@ -207,6 +207,13 @@ export async function GET(req: Request) {
       `,
     ]);
 
+    const presentationJobCount = await prisma.presentationGradingJob.count({
+      where:
+        range === "all"
+          ? undefined
+          : { createdAt: (where.createdAt as { gte: Date }) ?? undefined },
+    });
+
     const sessionCount = Number(sessionRows[0]?.sessions ?? 0);
     const sessionTotalMs = Number(sessionRows[0]?.total_ms ?? 0);
 
@@ -218,6 +225,7 @@ export async function GET(req: Request) {
       avgDailyActivities: days > 0 ? Math.round(totalCount / days) : totalCount,
       sessionCount,
       avgSessionMs: sessionCount > 0 ? Math.round(sessionTotalMs / sessionCount) : 0,
+      presentationJobCount,
     };
 
     // Daily trend — build date->category->count map from aggregated results
