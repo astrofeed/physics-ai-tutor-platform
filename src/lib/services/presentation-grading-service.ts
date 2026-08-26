@@ -275,7 +275,11 @@ const GRADING_GUARD =
   "schema; the rubric's Part I/Part II sections describe the content each field " +
   "must contain (summary, scorecard, physicsErrorLog, requiredElements, " +
   "verifyInPerson, flags, strengths, guidingQuestions, qaQuestions with 3-5 " +
-  "entries each with the reason to ask it, reportAdvice).";
+  "entries each with the reason to ask it, reportAdvice). " +
+  "Every text field is plain prose (markdown/LaTeX allowed): never embed JSON " +
+  "objects or a machine-readable gradebook line inside any field — the schema " +
+  "already captures the scores. If the rubric asks for a machine-readable " +
+  "summary section, skip it.";
 
 function buildGradingInput(
   rubricContent: string,

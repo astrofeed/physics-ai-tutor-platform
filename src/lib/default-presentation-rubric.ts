@@ -88,10 +88,6 @@ Rubric items that could not be assessed from the materials (live demo, audience 
 ### 6. Flags for the teaching team
 Suspected condition violations or integrity concerns, each with evidence and a confidence level (low/medium/high). Write "none" if there are none.
 
-### 7. Machine-readable summary
-A single JSON object on one line, for gradebook aggregation:
-\`{"group": "", "topic": "", "track": "", "condition": "", "physics_30": 0, "evidence_25": 0, "track_reasoning_20": 0, "communication_15": 0, "interaction_10": 0, "total_100": 0, "provisional_categories": [], "num_physics_errors": 0, "flags": []}\`
-
 ## PART II — FEEDBACK NOTES FOR THE TA/PROFESSOR
 
 Reference material for the teaching team when discussing the presentation with the group — written as if addressing the group, so it can be quoted or paraphrased live. Do not include scores, the error log, or any direct statement of the corrections here.

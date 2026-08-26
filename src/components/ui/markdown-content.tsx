@@ -281,7 +281,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
   }, [copiedPos]);
 
   return (
-    <div ref={contentRef} className={`min-w-0 relative math-copy ${className ?? ""}`}>
+    <div ref={contentRef} className={`min-w-0 relative math-copy break-words ${className ?? ""}`}>
       {copiedPos ? (
         <span
           className="absolute z-10 -translate-x-full text-xs font-medium text-green-600 dark:text-green-400 bg-white dark:bg-gray-900 px-2 py-1 rounded shadow-sm pointer-events-none"
