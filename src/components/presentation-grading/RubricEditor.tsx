@@ -1,17 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { BookOpenCheck, Loader2 } from "lucide-react";
+import { BookOpenCheck, History, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { usePresentationRubric } from "@/hooks/usePresentationGrading";
+import { usePresentationRubric, useRubricHistory } from "@/hooks/usePresentationGrading";
 import { formatTimestamp } from "./job-format";
 
 export function RubricEditor() {
   const { rubric, loading, saving, save } = usePresentationRubric();
   const [draft, setDraft] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const history = useRubricHistory();
 
   useEffect(() => {
     if (rubric) setDraft(rubric.content);
@@ -50,7 +52,13 @@ export function RubricEditor() {
           className="font-mono text-xs leading-relaxed"
         />
         <div className="flex items-center gap-3">
-          <Button onClick={() => void save(draft)} disabled={!dirty || saving}>
+          <Button
+            onClick={async () => {
+              const saved = await save(draft);
+              if (saved && history.versions !== null) void history.load();
+            }}
+            disabled={!dirty || saving}
+          >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save as new version
           </Button>
@@ -59,7 +67,46 @@ export function RubricEditor() {
               Discard changes
             </Button>
           ) : null}
+          <Button
+            variant="outline"
+            onClick={() => {
+              const next = !showHistory;
+              setShowHistory(next);
+              if (next && history.versions === null) void history.load();
+            }}
+          >
+            <History className="mr-1.5 h-4 w-4" />
+            {showHistory ? "Hide history" : "Version history"}
+          </Button>
         </div>
+        {showHistory ? (
+          history.loading ? (
+            <div className="flex justify-center py-6">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+              {(history.versions ?? []).map((version) => (
+                <li key={version.version} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span>
+                    v{version.version}
+                    {version.version === rubric.version ? (
+                      <span className="ml-1.5 text-xs text-emerald-600 dark:text-emerald-400">current</span>
+                    ) : null}
+                    <span className="ml-2 text-gray-500">
+                      {version.updatedByName ?? "unknown"} · {formatTimestamp(version.updatedAt)}
+                    </span>
+                  </span>
+                  {version.version !== rubric.version || dirty ? (
+                    <Button variant="ghost" size="sm" onClick={() => setDraft(version.content)}>
+                      Load into editor
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -66,6 +66,28 @@ export function usePresentationRubric() {
   return { rubric, loading, saving, save };
 }
 
+export function useRubricHistory() {
+  const [versions, setVersions] = useState<RubricState[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/presentation-grading/rubric/history");
+      if (!res.ok) throw new Error(String(res.status));
+      const body = await res.json();
+      setVersions(body.data);
+    } catch (error) {
+      console.error("[presentation-grading] failed to load rubric history:", error);
+      toast.error("Failed to load rubric history");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { versions, loading, load };
+}
+
 const ACTIVE_STATUSES = new Set(["QUEUED", "TRANSCRIBING", "GRADING"]);
 
 const SEARCH_DEBOUNCE_MS = 300;

@@ -260,13 +260,26 @@ body {
   overflow-wrap: break-word;
 }
 
-.math-wrapper {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
 .dark .katex {
   color: var(--foreground);
+}
+
+/* Click-to-copy affordance for formulas inside MarkdownContent */
+.math-copy .katex-display,
+.math-copy .katex {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s;
+}
+
+.math-copy .katex-display:hover,
+.math-copy .katex:hover {
+  background-color: rgb(249 250 251);
+}
+
+.dark .math-copy .katex-display:hover,
+.dark .math-copy .katex:hover {
+  background-color: rgb(31 41 55 / 0.5);
 }
 
 /* Auth page animations */

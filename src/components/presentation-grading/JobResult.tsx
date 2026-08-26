@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { cn } from "@/lib/utils";
-import type { PresentationJobDetail } from "@/lib/presentation-grading";
+import { parseEvaluation, type PresentationJobDetail } from "@/lib/presentation-grading";
+import { AnalysisView, NotesView, QaCard } from "./EvaluationView";
+import { analysisToText, notesToText } from "./job-format";
 
 /**
  * Returns the body of the first markdown section whose heading matches,
@@ -70,6 +72,118 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 type ResultTab = "analysis" | "notes" | "transcript" | "slides";
 
 export function JobResult({ job }: { job: PresentationJobDetail }) {
+  const evaluation = parseEvaluation(job.summaryJson);
+  if (evaluation) {
+    return <StructuredResult job={job} evaluation={evaluation} />;
+  }
+  return <LegacyResult job={job} />;
+}
+
+function StructuredResult({
+  job,
+  evaluation,
+}: {
+  job: PresentationJobDetail;
+  evaluation: NonNullable<ReturnType<typeof parseEvaluation>>;
+}) {
+  const [tab, setTab] = useState<ResultTab>("analysis");
+
+  const tabs: Array<[ResultTab, string, boolean]> = [
+    ["analysis", "TA analysis", true],
+    ["notes", "Feedback notes", true],
+    ["transcript", "Transcript", job.transcript !== null],
+    ["slides", "Slides text", job.slidesText !== null],
+  ];
+  const copyText =
+    tab === "analysis"
+      ? analysisToText(evaluation)
+      : tab === "notes"
+        ? notesToText(evaluation)
+        : tab === "transcript"
+          ? job.transcript
+          : job.slidesText;
+
+  return (
+    <div className="space-y-6">
+      <QaCard
+        qaQuestions={evaluation.qaQuestions}
+        icon={<MessagesSquare className="h-4 w-4 text-gray-500" />}
+      />
+
+      {evaluation.verifyInPerson.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldQuestion className="h-4 w-4 text-gray-500" />
+              Verify in person
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {evaluation.verifyInPerson.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+          <TabBar
+            tabs={tabs.filter(([, , present]) => present).map(([value, label]) => [value, label])}
+            active={tab}
+            onSelect={setTab}
+          />
+          {copyText ? <CopyButton text={copyText} label="Copy" /> : null}
+        </CardHeader>
+        <CardContent>
+          {tab === "analysis" ? (
+            <AnalysisView evaluation={evaluation} />
+          ) : tab === "notes" ? (
+            <NotesView evaluation={evaluation} />
+          ) : (
+            <pre className="whitespace-pre-wrap break-words rounded-lg bg-gray-50 dark:bg-gray-900 p-4 text-sm leading-relaxed">
+              {tab === "transcript" ? job.transcript : job.slidesText}
+            </pre>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: Array<[ResultTab, string]>;
+  active: ResultTab;
+  onSelect: (tab: ResultTab) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-800 p-0.5">
+      {tabs.map(([value, label]) => (
+        <button
+          key={value}
+          onClick={() => onSelect(value)}
+          className={cn(
+            "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+            active === value
+              ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Markdown-based rendering for jobs graded before structured output. */
+function LegacyResult({ job }: { job: PresentationJobDetail }) {
   const [tab, setTab] = useState<ResultTab>("analysis");
 
   const qaQuestions = job.partIIOutput
@@ -86,7 +200,9 @@ export function JobResult({ job }: { job: PresentationJobDetail }) {
     ["transcript", "Transcript", job.transcript],
     ["slides", "Slides text", job.slidesText],
   ];
-  const available = tabs.filter(([, , content]) => content !== null);
+  const available: Array<[ResultTab, string]> = tabs
+    .filter(([, , content]) => content !== null)
+    .map(([value, label]) => [value, label]);
   const activeContent = tabs.find(([value]) => value === tab)?.[2] ?? job.partIOutput;
 
   return (
@@ -139,22 +255,7 @@ export function JobResult({ job }: { job: PresentationJobDetail }) {
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-          <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-800 p-0.5">
-            {available.map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setTab(value)}
-                className={cn(
-                  "rounded-md px-3 py-1 text-sm font-medium transition-colors",
-                  tab === value
-                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <TabBar tabs={available} active={tab} onSelect={setTab} />
           {activeContent ? (
             <CopyButton text={activeContent} label="Copy" />
           ) : null}

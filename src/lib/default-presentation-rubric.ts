@@ -66,7 +66,7 @@ Anti-inflation rules: a typical competent group project lands in the 70s overall
 
 ## OUTPUT FORMAT
 
-Produce the evaluation in two parts, both for the professor and teaching team only — nothing is sent to the students. **Part I is the grading analysis** — here you state errors and corrections directly, because grading requires them. **Part II is a set of feedback notes the TA/professor can draw on when talking with the group** — here every physics error must be addressed through Socratic guiding questions, never by stating the correction, so the TA can lead the students to find the error themselves.
+The platform enforces a structured JSON response schema; the sections below describe the content each field must contain. Produce the evaluation in two parts, both for the professor and teaching team only — nothing is sent to the students. **Part I is the grading analysis** — here you state errors and corrections directly, because grading requires them. **Part II is a set of feedback notes the TA/professor can draw on when talking with the group** — here every physics error must be addressed through Socratic guiding questions, never by stating the correction, so the TA can lead the students to find the error themselves.
 
 ## PART I — PROFESSOR-ONLY ANALYSIS (not shown to students)
 

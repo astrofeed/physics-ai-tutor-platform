@@ -4,6 +4,8 @@
  * two always agree on limits and option values.
  */
 
+import { z } from "zod";
+
 export const PRESENTATION_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI transcription cap
 export const PRESENTATION_SLIDES_MAX_BYTES = 30 * 1024 * 1024;
 export const PRESENTATION_VIDEO_MAX_SECONDS = 210; // presentations are ≤3:30
@@ -74,47 +76,71 @@ export interface PresentationJobDetail extends PresentationJobSummary {
 }
 
 /**
- * Splits the model's evaluation into the professor-only analysis (Part I) and
- * the student-facing feedback (Part II), as required by the rubric's output
- * format. Falls back to treating everything as Part I when the marker is
- * missing so nothing is lost.
+ * Structured evaluation the grading model must return (enforced with OpenAI
+ * structured outputs). The rubric's Part I/II sections describe the content
+ * of each field; this schema fixes the shape so the UI never mis-parses it.
  */
-export function splitEvaluationParts(text: string): {
-  partI: string;
-  partII: string | null;
-} {
-  const match = text.match(/^#{1,3}\s*PART II\b.*$/im);
-  if (!match || match.index === undefined) {
-    return { partI: text.trim(), partII: null };
-  }
-  return {
-    partI: text.slice(0, match.index).trim(),
-    partII: text.slice(match.index).trim(),
-  };
-}
+export const PresentationEvaluationSchema = z.object({
+  summary: z.string(),
+  scorecard: z.array(
+    z.object({
+      category: z.string(),
+      maxPoints: z.number(),
+      awardedPoints: z.number(),
+      provisional: z.boolean(),
+      justification: z.string(),
+    })
+  ),
+  totalScore: z.number(),
+  physicsErrorLog: z.array(
+    z.object({
+      reference: z.string(),
+      error: z.string(),
+      check: z.string(),
+      correction: z.string(),
+      guidingQuestion: z.string(),
+    })
+  ),
+  requiredElements: z.array(
+    z.object({
+      element: z.string(),
+      status: z.enum(["present", "weak", "missing"]),
+      reference: z.string(),
+    })
+  ),
+  verifyInPerson: z.array(z.string()),
+  flags: z.array(
+    z.object({
+      concern: z.string(),
+      evidence: z.string(),
+      confidence: z.enum(["low", "medium", "high"]),
+    })
+  ),
+  strengths: z.array(z.string()),
+  guidingQuestions: z.array(
+    z.object({
+      reference: z.string(),
+      questions: z.array(z.string()),
+    })
+  ),
+  qaQuestions: z.array(
+    z.object({
+      question: z.string(),
+      reason: z.string(),
+    })
+  ),
+  reportAdvice: z.string(),
+});
 
-/**
- * Finds the one-line machine-readable JSON scorecard the rubric asks for.
- * Returns the raw JSON string and the parsed total, when present and valid.
- */
-export function extractSummaryJson(text: string): {
-  raw: string | null;
-  totalScore: number | null;
-} {
-  const candidates = text.match(/\{[^{}\n]*"total_100"[^{}\n]*\}/g);
-  const raw = candidates?.[candidates.length - 1] ?? null;
-  if (!raw) return { raw: null, totalScore: null };
+export type PresentationEvaluation = z.infer<typeof PresentationEvaluationSchema>;
+
+/** Parses a stored evaluation; null for legacy markdown jobs or bad JSON. */
+export function parseEvaluation(json: string | null): PresentationEvaluation | null {
+  if (!json) return null;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    const total =
-      typeof parsed === "object" && parsed !== null && "total_100" in parsed
-        ? Number((parsed as { total_100: unknown }).total_100)
-        : NaN;
-    return {
-      raw,
-      totalScore: Number.isFinite(total) && total >= 0 && total <= 100 ? total : null,
-    };
+    const result = PresentationEvaluationSchema.safeParse(JSON.parse(json));
+    return result.success ? result.data : null;
   } catch {
-    return { raw, totalScore: null };
+    return null;
   }
 }
