@@ -296,7 +296,18 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
       });
     }, 100); // Delay to ensure ReactMarkdown has rendered
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Undo the DOM mutation so React can unmount the tree it rendered:
+      // move each math element back out of its wrapper and drop the wrapper.
+      const container = contentRef.current;
+      if (!container) return;
+      container.querySelectorAll('.math-wrapper').forEach((wrapper) => {
+        const mathEl = wrapper.querySelector('.katex-display, .katex');
+        if (mathEl) wrapper.parentNode?.insertBefore(mathEl, wrapper);
+        wrapper.remove();
+      });
+    };
   }, [content]);
 
   return (
