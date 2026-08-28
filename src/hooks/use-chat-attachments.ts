@@ -27,18 +27,42 @@ export interface UploadedAttachments {
 }
 
 /**
- * Turns a Blob client error into something a student can act on. The client
- * wraps the token route's message (e.g. an email-verification refusal) in
- * transport noise like "Vercel Blob: Failed to retrieve the client token.
- * Status: 403, message: ..."; the part after "message:" is ours.
+ * The Blob client throws a fixed error and discards the token route's
+ * response body, so after a failed upload we ask the route for a token again
+ * just to read its refusal (an email-verification 403, a missing storage
+ * token, a quota rejection). Returns the server's message, or null when the
+ * route would have issued a token — i.e. the failure happened elsewhere.
  */
-function uploadFailureDetail(rawMessage: string): string {
-  const serverMessage = rawMessage.match(/message: (.+)$/)?.[1]?.trim();
-  if (serverMessage && serverMessage !== "No token found") return serverMessage;
-  if (rawMessage.includes("No token found")) {
-    return "File storage is not configured on this server.";
+async function fetchUploadRefusal(file: File, mimeType: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/upload/client", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "blob.generate-client-token",
+        payload: {
+          pathname: file.name,
+          callbackUrl: `${window.location.origin}/api/upload/client`,
+          multipart: false,
+          clientPayload: JSON.stringify({
+            filename: file.name,
+            contentType: mimeType,
+            sizeBytes: file.size,
+          }),
+        },
+      }),
+    });
+    if (res.ok) return null;
+    const data: unknown = await res.json();
+    const message = (data as { error?: unknown }).error;
+    if (typeof message !== "string" || !message) return null;
+    if (message.includes("No token found")) {
+      return "File storage is not configured on this server.";
+    }
+    return message;
+  } catch {
+    return null;
   }
-  return "Please try again.";
 }
 
 function readPreview(file: File): Promise<string> {
@@ -174,8 +198,8 @@ export function useChatAttachments() {
         }
       } catch (err) {
         console.error(`Chat attachment upload failed for "${file.name}":`, err);
-        const detail = err instanceof Error && err.message ? ` ${uploadFailureDetail(err.message)}` : "";
-        setError(`Failed to upload "${file.name}".${detail}`);
+        const refusal = await fetchUploadRefusal(file, mimeType);
+        setError(`Failed to upload "${file.name}". ${refusal ?? "Please try again."}`);
         return null;
       }
     }
