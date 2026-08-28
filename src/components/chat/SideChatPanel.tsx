@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChatMessageList } from "./ChatMessageList";
 import { ChatInput } from "./ChatInput";
+import { FileDropOverlay } from "./FileDropOverlay";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
+import { useFileDrop } from "@/hooks/use-file-drop";
 import { useExamMode } from "@/hooks/use-exam-mode";
 import { useStickyScroll } from "@/hooks/use-sticky-scroll";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -56,6 +58,8 @@ export function SideChatPanel({
     clearError: clearAttachmentError,
     uploadAll,
   } = useChatAttachments();
+
+  const { isDragging, dropHandlers } = useFileDrop(selectFiles);
 
   // The panel has no conversation list of its own; new conversations show up on
   // the chat page, which loads them from the server.
@@ -122,6 +126,7 @@ export function SideChatPanel({
     <aside
       aria-label="AI tutor chat"
       style={isMobile ? undefined : { width }}
+      {...dropHandlers}
       className={cn(
         "flex flex-col min-h-0 bg-white dark:bg-gray-950 border-gray-200 dark:border-gray-800",
         isMobile
@@ -129,6 +134,7 @@ export function SideChatPanel({
           : "relative shrink-0 border-l"
       )}
     >
+      <FileDropOverlay visible={isDragging} />
       {!isMobile && (
         <div
           role="separator"

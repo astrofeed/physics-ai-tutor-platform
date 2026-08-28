@@ -27,8 +27,10 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { exportAsMarkdown, exportAsPdf } from "@/components/chat/export-conversation";
+import { FileDropOverlay } from "@/components/chat/FileDropOverlay";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useChatAttachments } from "@/hooks/use-chat-attachments";
+import { useFileDrop } from "@/hooks/use-file-drop";
 import { useConversationFolders } from "@/hooks/use-conversation-folders";
 import { useExamMode } from "@/hooks/use-exam-mode";
 import { useStickyScroll } from "@/hooks/use-sticky-scroll";
@@ -78,6 +80,8 @@ export default function ChatPageClient({
     clearError: clearAttachmentError,
     uploadAll,
   } = useChatAttachments();
+
+  const { isDragging, dropHandlers } = useFileDrop(selectFiles);
 
   const {
     messages,
@@ -273,7 +277,8 @@ export default function ChatPageClient({
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-950">
+      <div className="relative flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-950" {...dropHandlers}>
+        <FileDropOverlay visible={isDragging} />
         {/* Chat Header */}
         <div className="h-14 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between px-3 sm:px-4 shrink-0 bg-white dark:bg-gray-950">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">

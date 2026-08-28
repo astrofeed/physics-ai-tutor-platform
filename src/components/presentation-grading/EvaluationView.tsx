@@ -166,7 +166,49 @@ export function NotesView({ evaluation }: { evaluation: PresentationEvaluation }
       <Section title="Advice for the individual reports">
         <p className="text-sm">{evaluation.reportAdvice}</p>
       </Section>
+
+      {evaluation.topicSuggestions ? (
+        <TopicSuggestionsSection suggestions={evaluation.topicSuggestions} />
+      ) : null}
     </div>
+  );
+}
+
+function TopicSuggestionsSection({
+  suggestions,
+}: {
+  suggestions: NonNullable<PresentationEvaluation["topicSuggestions"]>;
+}) {
+  return (
+    <Section title="Report topic suggestions">
+      <p
+        className={cn(
+          "text-sm",
+          suggestions.verdict === "revise"
+            ? "text-amber-700 dark:text-amber-400"
+            : "text-green-700 dark:text-green-400"
+        )}
+      >
+        {suggestions.verdict === "revise"
+          ? "Revise the report first — "
+          : "The report is on solid ground — "}
+        {suggestions.assessment}
+      </p>
+      <ol className="space-y-3">
+        {suggestions.options.map((option, i) => (
+          <li
+            key={i}
+            className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-sm space-y-1"
+          >
+            <p className="font-medium">
+              {i + 1}. {option.title}
+            </p>
+            <MarkdownContent content={option.direction} className="text-sm" />
+            <p className="text-gray-500">Why: {option.rationale}</p>
+          </li>
+        ))}
+      </ol>
+    </Section>
   );
 }
 

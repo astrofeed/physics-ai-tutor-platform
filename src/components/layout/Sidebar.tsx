@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ClipboardList,
   MonitorPlay,
+  BookOpenCheck,
   BarChart3,
   Atom,
   PanelLeftClose,
@@ -86,6 +87,12 @@ const toolItems: NavItem[] = [
     label: "Presentation AI",
     href: "/presentation-grading",
     icon: MonitorPlay,
+    roles: ["TA", "PROFESSOR", "ADMIN"],
+  },
+  {
+    label: "Report AI",
+    href: "/report-grading",
+    icon: BookOpenCheck,
     roles: ["TA", "PROFESSOR", "ADMIN"],
   },
 ];

@@ -76,6 +76,26 @@ export interface PresentationJobDetail extends PresentationJobSummary {
 }
 
 /**
+ * Report-topic guidance derived from the presentation: when the project has
+ * substantive problems the verdict is "revise" and the options extend from
+ * fixing them; when it is strong the verdict is "extend" and the options are
+ * three more advanced related directions.
+ */
+export const TopicSuggestionsSchema = z.object({
+  verdict: z.enum(["revise", "extend"]),
+  assessment: z.string(),
+  options: z.array(
+    z.object({
+      title: z.string(),
+      direction: z.string(),
+      rationale: z.string(),
+    })
+  ),
+});
+
+export type TopicSuggestions = z.infer<typeof TopicSuggestionsSchema>;
+
+/**
  * Structured evaluation the grading model must return (enforced with OpenAI
  * structured outputs). The rubric's Part I/II sections describe the content
  * of each field; this schema fixes the shape so the UI never mis-parses it.
@@ -130,6 +150,7 @@ export const PresentationEvaluationSchema = z.object({
     })
   ),
   reportAdvice: z.string(),
+  topicSuggestions: TopicSuggestionsSchema.nullable(),
 });
 
 export type PresentationEvaluation = z.infer<typeof PresentationEvaluationSchema>;
@@ -138,7 +159,12 @@ export type PresentationEvaluation = z.infer<typeof PresentationEvaluationSchema
 export function parseEvaluation(json: string | null): PresentationEvaluation | null {
   if (!json) return null;
   try {
-    const result = PresentationEvaluationSchema.safeParse(JSON.parse(json));
+    const parsed: unknown = JSON.parse(json);
+    // Jobs graded before topic suggestions existed lack the field entirely.
+    if (parsed !== null && typeof parsed === "object" && !("topicSuggestions" in parsed)) {
+      (parsed as { topicSuggestions: null }).topicSuggestions = null;
+    }
+    const result = PresentationEvaluationSchema.safeParse(parsed);
     return result.success ? result.data : null;
   } catch {
     return null;

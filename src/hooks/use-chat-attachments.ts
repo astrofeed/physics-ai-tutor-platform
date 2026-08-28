@@ -68,7 +68,9 @@ export function useChatAttachments() {
           return;
         }
         if (file.size > spec.maxBytes) {
-          setError(`"${file.name}" exceeds the ${formatBytes(spec.maxBytes)} limit for this file type.`);
+          setError(
+            `"${file.name}" is ${formatBytes(file.size)}; the limit for this file type is ${formatBytes(spec.maxBytes)}.`
+          );
           return;
         }
         staged.push({

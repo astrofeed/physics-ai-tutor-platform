@@ -275,7 +275,13 @@ const GRADING_GUARD =
   "schema; the rubric's Part I/Part II sections describe the content each field " +
   "must contain (summary, scorecard, physicsErrorLog, requiredElements, " +
   "verifyInPerson, flags, strengths, guidingQuestions, qaQuestions with 3-5 " +
-  "entries each with the reason to ask it, reportAdvice). " +
+  "entries each with the reason to ask it, reportAdvice, topicSuggestions). " +
+  "For topicSuggestions: if the project has substantive physics or structural " +
+  "problems, set verdict to 'revise', explain in assessment what must be fixed, " +
+  "and give exactly three options that start from fixing those problems and " +
+  "extend the report from there; if the project is strong, set verdict to " +
+  "'extend', say so in assessment, and give exactly three related but more " +
+  "advanced directions the report could pursue. " +
   "Every text field is plain prose (markdown/LaTeX allowed): never embed JSON " +
   "objects or a machine-readable gradebook line inside any field — the schema " +
   "already captures the scores. If the rubric asks for a machine-readable " +
