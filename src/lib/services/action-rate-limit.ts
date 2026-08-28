@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 /** Namespace keeping these locks apart from any other advisory lock. */
 const RATE_LIMIT_LOCK_NAMESPACE = 4272;
 
-export type RateLimitedAction = "run_code" | "presentation_grading_job";
+export type RateLimitedAction = "run_code" | "presentation_grading_job" | "report_grading_job";
 
 export interface ActionRateLimitResult {
   allowed: boolean;

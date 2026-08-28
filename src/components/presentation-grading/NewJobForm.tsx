@@ -99,6 +99,7 @@ function FilePicker({
 export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [topic, setTopic] = useState("");
   const [presenters, setPresenters] = useState("");
+  const [studentIds, setStudentIds] = useState("");
   const [track, setTrack] = useState<"A" | "B" | "unknown">("unknown");
   const [condition, setCondition] = useState<"AI-assisted" | "no-AI" | "unknown">("unknown");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
@@ -116,6 +117,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
     const input: NewJobInput = {
       topic: topic.trim(),
       presenters: presenters.trim(),
+      studentIds: studentIds.trim() || undefined,
       track: track === "unknown" ? undefined : track,
       condition: condition === "unknown" ? undefined : condition,
       video: source === "video" ? video : null,
@@ -126,6 +128,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
     if (await submit(input)) {
       setTopic("");
       setPresenters("");
+      setStudentIds("");
       setVideo(null);
       setTranscript("");
       setSlides(null);
@@ -167,6 +170,17 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
               onChange={(e) => setPresenters(e.target.value)}
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="job-student-ids">Student IDs</Label>
+          <Input
+            id="job-student-ids"
+            placeholder="e.g. 113012345, 113054321 — comma-separated, used in CSV exports"
+            maxLength={200}
+            value={studentIds}
+            onChange={(e) => setStudentIds(e.target.value)}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

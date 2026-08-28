@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
-import { PRESENTATION_STUDENT_IDS_MAX_CHARS } from "@/lib/presentation-grading";
 import {
-  getPresentationJob,
-  updatePresentationJob,
-  deletePresentationJob,
-} from "@/lib/services/presentation-grading-service";
+  getReportJob,
+  updateReportJob,
+  deleteReportJob,
+} from "@/lib/services/report-grading-service";
+import { REPORT_STUDENT_ID_MAX_CHARS } from "@/lib/report-grading";
 
 export async function GET(
   _request: Request,
@@ -16,7 +16,7 @@ export async function GET(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
-  const job = await getPresentationJob(params.id);
+  const job = await getReportJob(params.id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
@@ -24,9 +24,9 @@ export async function GET(
 }
 
 const UpdateJobSchema = z.object({
-  topic: z.string().min(1).max(200).optional(),
-  presenters: z.string().max(200).nullable().optional(),
-  studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).nullable().optional(),
+  title: z.string().min(1).max(200).optional(),
+  authors: z.string().max(200).nullable().optional(),
+  studentId: z.string().max(REPORT_STUDENT_ID_MAX_CHARS).nullable().optional(),
 });
 
 export async function PATCH(
@@ -40,7 +40,7 @@ export async function PATCH(
   if (!body.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-  const updated = await updatePresentationJob(params.id, body.data);
+  const updated = await updateReportJob(params.id, body.data);
   if (!updated) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
@@ -54,7 +54,7 @@ export async function DELETE(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
-  const deleted = await deletePresentationJob(params.id);
+  const deleted = await deleteReportJob(params.id);
   if (!deleted) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }

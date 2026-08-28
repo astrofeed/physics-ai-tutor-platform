@@ -11,14 +11,16 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
-import type {
-  PresentationJobDetail,
-  PresentationJobSummary,
-} from "@/lib/presentation-grading";
-import { retryPresentationJob } from "@/hooks/usePresentationGrading";
+import type { ReportJobDetail, ReportJobSummary } from "@/lib/report-grading";
+import { retryReportJob } from "@/hooks/useReportGrading";
 import { useCsvExport, useRowSelection } from "@/hooks/useGradingCsvExport";
-import { presentationJobsToCsv } from "@/lib/grading-csv";
-import { STATUS_BADGE_VARIANTS, STATUS_LABELS, formatDuration, formatTimestamp } from "./job-format";
+import { reportJobsToCsv } from "@/lib/grading-csv";
+import {
+  REPORT_STATUS_BADGE_VARIANTS,
+  REPORT_STATUS_LABELS,
+  formatDuration,
+  formatTimestamp,
+} from "./report-job-format";
 
 function RetryButton({ jobId, onDone }: { jobId: string; onDone: () => void }) {
   const [retrying, setRetrying] = useState(false);
@@ -31,7 +33,7 @@ function RetryButton({ jobId, onDone }: { jobId: string; onDone: () => void }) {
         e.preventDefault();
         setRetrying(true);
         try {
-          await retryPresentationJob(jobId);
+          await retryReportJob(jobId);
           onDone();
         } catch (error) {
           toast.error((error as Error).message);
@@ -46,7 +48,7 @@ function RetryButton({ jobId, onDone }: { jobId: string; onDone: () => void }) {
   );
 }
 
-export function JobList({
+export function ReportJobList({
   jobs,
   loading,
   page,
@@ -57,7 +59,7 @@ export function JobList({
   onPageChange,
   onRefresh,
 }: {
-  jobs: PresentationJobSummary[];
+  jobs: ReportJobSummary[];
   loading: boolean;
   page: number;
   totalPages: number;
@@ -68,10 +70,10 @@ export function JobList({
   onRefresh: () => void;
 }) {
   const { selected, toggle, selectAll, clear } = useRowSelection();
-  const { exporting, exportIds } = useCsvExport<PresentationJobDetail>(
-    "/api/presentation-grading/jobs",
-    "presentation-grading.csv",
-    presentationJobsToCsv
+  const { exporting, exportIds } = useCsvExport<ReportJobDetail>(
+    "/api/report-grading/jobs",
+    "report-grading.csv",
+    reportJobsToCsv
   );
   const allSelected = jobs.length > 0 && jobs.every((job) => selected.has(job.id));
 
@@ -81,9 +83,9 @@ export function JobList({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search presenter or group…"
+        placeholder="Search title, author, or student ID…"
         className="pl-8 pr-8"
-        aria-label="Search by presenter name or group/topic"
+        aria-label="Search by report title, author name, or student ID"
       />
       {search ? (
         <button
@@ -115,8 +117,8 @@ export function JobList({
           title={search ? "No matching results" : "No grading jobs yet"}
           description={
             search
-              ? "Try a different presenter name or group/topic."
-              : "Submit a presentation above — results will appear here."
+              ? "Try a different title or author name."
+              : "Submit a report above — results will appear here."
           }
         />
       </div>
@@ -160,30 +162,28 @@ export function JobList({
               <label className="flex shrink-0 cursor-pointer items-center self-stretch pl-4 pr-1">
                 <input
                   type="checkbox"
-                  aria-label={`Select ${job.topic} for CSV export`}
+                  aria-label={`Select ${job.title} for CSV export`}
                   className="h-4 w-4 accent-blue-600"
                   checked={selected.has(job.id)}
                   onChange={() => toggle(job.id)}
                 />
               </label>
               <Link
-                href={`/presentation-grading/${job.id}`}
+                href={`/report-grading/${job.id}`}
                 className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-sm">
-                    {job.topic}
-                    {job.presenters ? (
-                      <span className="font-normal text-gray-500"> — {job.presenters}</span>
+                    {job.title}
+                    {job.authors ? (
+                      <span className="font-normal text-gray-500"> — {job.authors}</span>
                     ) : null}
                   </p>
                   <p className="text-xs text-gray-500">
                     {[
-                      job.studentIds,
-                      job.track ? `Track ${job.track}` : null,
-                      job.condition,
+                      job.studentId ? `ID ${job.studentId}` : "no student ID",
                       `effort ${job.reasoningEffort}`,
-                      job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,
+                      job.rubricVersion !== null ? `instructions v${job.rubricVersion}` : null,
                       formatTimestamp(job.createdAt),
                     ]
                       .filter(Boolean)
@@ -193,19 +193,14 @@ export function JobList({
                     <p className="mt-0.5 truncate text-xs text-red-500">{job.error}</p>
                   ) : null}
                 </div>
-                {job.totalScore !== null ? (
-                  <span className="text-sm font-semibold tabular-nums">
-                    {job.totalScore.toFixed(0)}/100
-                  </span>
-                ) : null}
                 {job.gradingDurationMs !== null ? (
                   <span className="text-xs text-gray-500 tabular-nums">
                     {formatDuration(job.gradingDurationMs)}
                   </span>
                 ) : null}
-                <Badge variant={STATUS_BADGE_VARIANTS[job.status]}>
-                  {STATUS_LABELS[job.status]}
-                  {job.status === "TRANSCRIBING" || job.status === "GRADING" ? (
+                <Badge variant={REPORT_STATUS_BADGE_VARIANTS[job.status]}>
+                  {REPORT_STATUS_LABELS[job.status]}
+                  {job.status === "GRADING" ? (
                     <Loader2 className="ml-1 h-3 w-3 animate-spin" />
                   ) : null}
                 </Badge>

@@ -68,7 +68,12 @@ export function notesToText(e: PresentationEvaluation): string {
   const qa = e.qaQuestions
     .map((q, i) => `${i + 1}. ${q.question}\n   Why: ${q.reason}`)
     .join("\n");
-  return `## What they did well\n${strengths}\n\n## Questions to think about\n${guiding}\n\n## Live Q&A questions\n${qa}\n\n## Advice for the individual reports\n${e.reportAdvice}`;
+  const topics = e.topicSuggestions
+    ? `\n\n## Report topic suggestions (${e.topicSuggestions.verdict})\n${e.topicSuggestions.assessment}\n${e.topicSuggestions.options
+        .map((o, i) => `${i + 1}. ${o.title}\n   ${o.direction}\n   Why: ${o.rationale}`)
+        .join("\n")}`
+    : "";
+  return `## What they did well\n${strengths}\n\n## Questions to think about\n${guiding}\n\n## Live Q&A questions\n${qa}\n\n## Advice for the individual reports\n${e.reportAdvice}${topics}`;
 }
 
 export function formatTimestamp(iso: string | null): string {

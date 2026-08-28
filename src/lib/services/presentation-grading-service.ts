@@ -79,6 +79,7 @@ async function rubricForNewJob(userId: string) {
 export interface CreatePresentationJobInput {
   topic: string;
   presenters?: string;
+  studentIds?: string;
   track?: string;
   condition?: string;
   audioBlobUrl?: string;
@@ -107,6 +108,7 @@ export async function createPresentationJob(
     data: {
       topic: input.topic,
       presenters: input.presenters,
+      studentIds: input.studentIds,
       track: input.track,
       condition: input.condition,
       audioBlobUrl: input.audioBlobUrl,
@@ -141,6 +143,7 @@ function toSummary(
     id: job.id,
     topic: job.topic,
     presenters: job.presenters,
+    studentIds: job.studentIds,
     track: job.track,
     condition: job.condition,
     status: job.status,
@@ -166,6 +169,7 @@ export async function listPresentationJobs(
         OR: [
           { topic: { contains: query, mode: "insensitive" as const } },
           { presenters: { contains: query, mode: "insensitive" as const } },
+          { studentIds: { contains: query, mode: "insensitive" as const } },
         ],
       }
     : undefined;
@@ -275,7 +279,13 @@ const GRADING_GUARD =
   "schema; the rubric's Part I/Part II sections describe the content each field " +
   "must contain (summary, scorecard, physicsErrorLog, requiredElements, " +
   "verifyInPerson, flags, strengths, guidingQuestions, qaQuestions with 3-5 " +
-  "entries each with the reason to ask it, reportAdvice). " +
+  "entries each with the reason to ask it, reportAdvice, topicSuggestions). " +
+  "For topicSuggestions: if the project has substantive physics or structural " +
+  "problems, set verdict to 'revise', explain in assessment what must be fixed, " +
+  "and give exactly three options that start from fixing those problems and " +
+  "extend the report from there; if the project is strong, set verdict to " +
+  "'extend', say so in assessment, and give exactly three related but more " +
+  "advanced directions the report could pursue. " +
   "Every text field is plain prose (markdown/LaTeX allowed): never embed JSON " +
   "objects or a machine-readable gradebook line inside any field — the schema " +
   "already captures the scores. If the rubric asks for a machine-readable " +
@@ -425,6 +435,7 @@ export async function processPresentationJob(id: string): Promise<void> {
 export interface UpdatePresentationJobInput {
   topic?: string;
   presenters?: string | null;
+  studentIds?: string | null;
 }
 
 export async function updatePresentationJob(
@@ -441,6 +452,7 @@ export async function updatePresentationJob(
     data: {
       ...(input.topic !== undefined ? { topic: input.topic } : {}),
       ...(input.presenters !== undefined ? { presenters: input.presenters } : {}),
+      ...(input.studentIds !== undefined ? { studentIds: input.studentIds } : {}),
     },
   });
   return true;

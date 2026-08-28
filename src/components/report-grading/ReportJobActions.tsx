@@ -26,50 +26,54 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  deletePresentationJob,
-  updatePresentationJob,
-} from "@/hooks/usePresentationGrading";
+import { deleteReportJob, updateReportJob } from "@/hooks/useReportGrading";
+import { REPORT_STUDENT_ID_MAX_CHARS } from "@/lib/report-grading";
 
-interface JobActionsProps {
+interface ReportJobActionsProps {
   jobId: string;
-  topic: string;
-  presenters: string | null;
-  studentIds: string | null;
+  title: string;
+  authors: string | null;
+  studentId: string | null;
   onUpdated: () => void;
 }
 
-/** Edit (topic / presenter names) and delete controls for one grading job. */
-export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: JobActionsProps) {
+/** Edit (title / authors / student ID) and delete controls for one grading job. */
+export function ReportJobActions({
+  jobId,
+  title,
+  authors,
+  studentId,
+  onUpdated,
+}: ReportJobActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [draftTopic, setDraftTopic] = useState(topic);
-  const [draftPresenters, setDraftPresenters] = useState(presenters ?? "");
-  const [draftStudentIds, setDraftStudentIds] = useState(studentIds ?? "");
+  const [draftTitle, setDraftTitle] = useState(title);
+  const [draftAuthors, setDraftAuthors] = useState(authors ?? "");
+  const [draftStudentId, setDraftStudentId] = useState(studentId ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const openEdit = (open: boolean) => {
     if (open) {
-      setDraftTopic(topic);
-      setDraftPresenters(presenters ?? "");
-      setDraftStudentIds(studentIds ?? "");
+      setDraftTitle(title);
+      setDraftAuthors(authors ?? "");
+      setDraftStudentId(studentId ?? "");
     }
     setEditOpen(open);
   };
 
   const handleSave = async () => {
-    const nextTopic = draftTopic.trim();
-    if (!nextTopic) {
-      toast.error("Group / topic cannot be empty");
+    const nextTitle = draftTitle.trim();
+    if (!nextTitle) {
+      toast.error("Report title cannot be empty");
       return;
     }
     setSaving(true);
     try {
-      await updatePresentationJob(jobId, {
-        topic: nextTopic,
-        presenters: draftPresenters.trim() || null,
-        studentIds: draftStudentIds.trim() || null,
+      await updateReportJob(jobId, {
+        title: nextTitle,
+        authors: draftAuthors.trim() || null,
+        studentId: draftStudentId.trim() || null,
       });
       toast.success("Job updated");
       setEditOpen(false);
@@ -84,9 +88,9 @@ export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: 
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await deletePresentationJob(jobId);
+      await deleteReportJob(jobId);
       toast.success("Record deleted");
-      router.push("/presentation-grading");
+      router.push("/report-grading");
     } catch (error) {
       toast.error((error as Error).message);
       setDeleting(false);
@@ -108,31 +112,31 @@ export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: 
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-topic">Group / topic</Label>
+              <Label htmlFor="edit-report-title">Report title</Label>
               <Input
-                id="edit-topic"
+                id="edit-report-title"
                 maxLength={200}
-                value={draftTopic}
-                onChange={(e) => setDraftTopic(e.target.value)}
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-presenters">Presenter names</Label>
+              <Label htmlFor="edit-report-authors">Author names</Label>
               <Input
-                id="edit-presenters"
+                id="edit-report-authors"
                 maxLength={200}
-                value={draftPresenters}
-                onChange={(e) => setDraftPresenters(e.target.value)}
+                value={draftAuthors}
+                onChange={(e) => setDraftAuthors(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-student-ids">Student IDs</Label>
+              <Label htmlFor="edit-report-student-id">Student ID</Label>
               <Input
-                id="edit-student-ids"
-                maxLength={200}
-                placeholder="comma-separated"
-                value={draftStudentIds}
-                onChange={(e) => setDraftStudentIds(e.target.value)}
+                id="edit-report-student-id"
+                maxLength={REPORT_STUDENT_ID_MAX_CHARS}
+                placeholder="Used in CSV exports"
+                value={draftStudentId}
+                onChange={(e) => setDraftStudentId(e.target.value)}
               />
             </div>
           </div>
@@ -158,8 +162,8 @@ export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: 
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this grading record?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the database record — transcript, scores, and analysis
-              included. This cannot be undone.
+              This permanently deletes the database record — report text and review included.
+              This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

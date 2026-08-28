@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Plus,
   MessageSquare,
@@ -58,6 +58,15 @@ export function ChatSidebar({
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
+  useEffect(() => {
+    if (!isMobile || !sidebarOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobile, sidebarOpen, onClose]);
+
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -109,6 +118,16 @@ export function ChatSidebar({
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Conversations</h2>
             <div className="flex items-center gap-1.5">
+              {isMobile && (
+                <button
+                  onClick={onClose}
+                  title="Close sidebar"
+                  aria-label="Close conversation sidebar"
+                  className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
               <button
                 onClick={() => setCreatingFolder(true)}
                 title="New folder"

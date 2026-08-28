@@ -26,6 +26,45 @@ export interface UploadedAttachments {
   documents: DocumentAttachment[];
 }
 
+/**
+ * The Blob client throws a fixed error and discards the token route's
+ * response body, so after a failed upload we ask the route for a token again
+ * just to read its refusal (an email-verification 403, a missing storage
+ * token, a quota rejection). Returns the server's message, or null when the
+ * route would have issued a token — i.e. the failure happened elsewhere.
+ */
+async function fetchUploadRefusal(file: File, mimeType: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/upload/client", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "blob.generate-client-token",
+        payload: {
+          pathname: file.name,
+          callbackUrl: `${window.location.origin}/api/upload/client`,
+          multipart: false,
+          clientPayload: JSON.stringify({
+            filename: file.name,
+            contentType: mimeType,
+            sizeBytes: file.size,
+          }),
+        },
+      }),
+    });
+    if (res.ok) return null;
+    const data: unknown = await res.json();
+    const message = (data as { error?: unknown }).error;
+    if (typeof message !== "string" || !message) return null;
+    if (message.includes("No token found")) {
+      return "File storage is not configured on this server.";
+    }
+    return message;
+  } catch {
+    return null;
+  }
+}
+
 function readPreview(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -68,7 +107,9 @@ export function useChatAttachments() {
           return;
         }
         if (file.size > spec.maxBytes) {
-          setError(`"${file.name}" exceeds the ${formatBytes(spec.maxBytes)} limit for this file type.`);
+          setError(
+            `"${file.name}" is ${formatBytes(file.size)}; the limit for this file type is ${formatBytes(spec.maxBytes)}.`
+          );
           return;
         }
         staged.push({
@@ -155,8 +196,10 @@ export function useChatAttachments() {
             sizeBytes: file.size,
           });
         }
-      } catch {
-        setError(`Failed to upload "${file.name}". Please try again.`);
+      } catch (err) {
+        console.error(`Chat attachment upload failed for "${file.name}":`, err);
+        const refusal = await fetchUploadRefusal(file, mimeType);
+        setError(`Failed to upload "${file.name}". ${refusal ?? "Please try again."}`);
         return null;
       }
     }

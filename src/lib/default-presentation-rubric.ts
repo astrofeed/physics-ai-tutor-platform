@@ -104,6 +104,11 @@ This replaces a conventional list of corrections. For each physics error or weak
 ### 11. Advice for the individual reports
 2–3 sentences telling the members what to emphasise or work through in their upcoming individual reports — again phrased as directions to investigate, not answers.
 
+### 12. Report topic suggestions
+Judge whether the project as presented has substantive physics or structural problems.
+- If it does, the verdict is **revise**: state in one short assessment what must be fixed first, then give exactly THREE topic options that start from fixing those problems and extend the report from there (each with a title, the concrete direction to pursue, and why it follows from the group's current work).
+- If the project is strong, the verdict is **extend**: say so briefly, then give exactly THREE related but more advanced directions the report could pursue (each with a title, the concrete direction, and why it is a natural next step from the group's topic).
+
 Write in clear academic English. Be firm on scientific standards but encouraging in tone — the goal is that, guided by the teaching team, the students discover where the physics stands and correct it through their own reasoning.
 
 ---

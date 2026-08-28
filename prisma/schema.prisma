@@ -72,6 +72,66 @@ model User {
   confirmedAnswerKeys    AssignmentQuestion[] @relation("KeyConfirmedBy")
   presentationRubrics    PresentationRubric[] @relation("RubricUpdatedBy")
   presentationGradingJobs PresentationGradingJob[] @relation("PresentationJobCreatedBy")
+  reportRubrics    ReportRubric[]     @relation("ReportRubricUpdatedBy")
+  reportGradingJobs ReportGradingJob[] @relation("ReportJobCreatedBy")
+}
+
+enum ReportJobStatus {
+  QUEUED
+  GRADING
+  DONE
+  FAILED
+}
+
+/// Shared written-report grading instructions. Versioned exactly like
+/// PresentationRubric: each save is a new row; jobs keep the version they
+/// were graded with.
+model ReportRubric {
+  id          String   @id @default(cuid())
+  version     Int      @unique
+  content     String   @db.Text
+  updatedById String
+  createdAt   DateTime @default(now())
+
+  updatedBy User               @relation("ReportRubricUpdatedBy", fields: [updatedById], references: [id])
+  jobs      ReportGradingJob[]
+}
+
+model ReportGradingJob {
+  id      String          @id @default(cuid())
+  title   String
+  /// Author names, free text — staff search by this.
+  authors String?
+  /// Student ID, usually parsed from the uploaded file's name; used in CSV exports.
+  studentId String?
+  status  ReportJobStatus @default(QUEUED)
+  error   String?         @db.Text
+
+  /// Blob URL is temporary: cleared after grading so no report file is retained.
+  reportBlobUrl  String?
+  reportFilename String?
+  /// A report the grader pasted directly instead of uploading a PDF.
+  reportText     String? @db.Text
+
+  /// Structured summary/comments/questions result (raw JSON string).
+  resultJson String? @db.Text
+
+  model             String?
+  reasoningEffort   String    @default("high")
+  gradingStartedAt  DateTime?
+  gradingDurationMs Int?
+
+  rubricId    String
+  createdById String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  createdBy User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
+  rubric    ReportRubric @relation(fields: [rubricId], references: [id])
+
+  @@index([rubricId])
+  @@index([status, createdAt])
+  @@index([createdById, createdAt])
 }
 
 enum PresentationJobStatus {
@@ -101,6 +161,8 @@ model PresentationGradingJob {
   topic      String
   /// Presenter names, free text — the TA searches by this right after a talk.
   presenters String?
+  /// Presenter student IDs, free text (comma-separated); used in CSV exports.
+  studentIds String?
   track      String?
   condition String?
   status    PresentationJobStatus @default(QUEUED)

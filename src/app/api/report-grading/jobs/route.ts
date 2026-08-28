@@ -4,32 +4,27 @@ import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
 import { consumeActionRateLimit } from "@/lib/services/action-rate-limit";
 import {
-  createPresentationJob,
-  listPresentationJobs,
-} from "@/lib/services/presentation-grading-service";
+  createReportJob,
+  listReportJobs,
+} from "@/lib/services/report-grading-service";
 import {
-  PRESENTATION_CONDITIONS,
-  PRESENTATION_JOBS_PER_HOUR,
-  PRESENTATION_STUDENT_IDS_MAX_CHARS,
-  PRESENTATION_TRACKS,
-  PRESENTATION_TRANSCRIPT_MAX_CHARS,
   REASONING_EFFORT_OPTIONS,
-} from "@/lib/presentation-grading";
+  REPORT_JOBS_PER_HOUR,
+  REPORT_STUDENT_ID_MAX_CHARS,
+  REPORT_TEXT_MAX_CHARS,
+} from "@/lib/report-grading";
 
 const CreateJobSchema = z.object({
-  topic: z.string().min(1).max(200),
-  presenters: z.string().max(200).optional(),
-  studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).optional(),
-  track: z.enum(PRESENTATION_TRACKS).optional(),
-  condition: z.enum(PRESENTATION_CONDITIONS).optional(),
-  audioBlobUrl: z.string().url().max(1000).optional(),
-  transcript: z.string().min(1).max(PRESENTATION_TRANSCRIPT_MAX_CHARS).optional(),
-  slidesBlobUrl: z.string().url().max(1000).optional(),
-  slidesFilename: z.string().min(1).max(300).optional(),
+  title: z.string().min(1).max(200),
+  authors: z.string().max(200).optional(),
+  studentId: z.string().max(REPORT_STUDENT_ID_MAX_CHARS).optional(),
+  reportBlobUrl: z.string().url().max(1000).optional(),
+  reportFilename: z.string().min(1).max(300).optional(),
+  reportText: z.string().min(1).max(REPORT_TEXT_MAX_CHARS).optional(),
   reasoningEffort: z.enum(REASONING_EFFORT_OPTIONS).default("high"),
 }).refine(
-  (input) => Boolean(input.audioBlobUrl) !== Boolean(input.transcript),
-  { message: "Provide either an audio recording or a pasted transcript" }
+  (input) => Boolean(input.reportBlobUrl) !== Boolean(input.reportText),
+  { message: "Provide either an uploaded report PDF or pasted report text" }
 );
 
 export async function GET(request: Request) {
@@ -41,7 +36,7 @@ export async function GET(request: Request) {
   const pageSize = Math.min(50, Math.max(1, Number(searchParams.get("pageSize")) || 20));
   const query = (searchParams.get("q") ?? "").trim().slice(0, 200) || undefined;
 
-  const result = await listPresentationJobs(page, pageSize, query);
+  const result = await listReportJobs(page, pageSize, query);
   return NextResponse.json({ data: result });
 }
 
@@ -56,8 +51,8 @@ export async function POST(request: Request) {
 
   const rate = await consumeActionRateLimit({
     userId: auth.user.id,
-    action: "presentation_grading_job",
-    limit: PRESENTATION_JOBS_PER_HOUR,
+    action: "report_grading_job",
+    limit: REPORT_JOBS_PER_HOUR,
     windowMs: 60 * 60 * 1000,
   });
   if (!rate.allowed) {
@@ -68,7 +63,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const job = await createPresentationJob(auth.user.id, parsed.data);
+    const job = await createReportJob(auth.user.id, parsed.data);
     return NextResponse.json({ data: { id: job.id } }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 400 });

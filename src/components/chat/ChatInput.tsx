@@ -113,7 +113,7 @@ export function ChatInput({
         </div>
       )}
 
-      <div className="p-4">
+      <div className="p-2 pb-3 sm:p-4">
         {canRetry && (
           <div className="max-w-3xl mx-auto mb-2 flex justify-center">
             <button
@@ -189,7 +189,7 @@ export function ChatInput({
               </button>
             )}
           </div>
-          <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-2">
+          <p className="hidden sm:block text-center text-xs text-gray-400 dark:text-gray-500 mt-2">
             Press Enter to send, Shift+Enter for new line
           </p>
         </form>
