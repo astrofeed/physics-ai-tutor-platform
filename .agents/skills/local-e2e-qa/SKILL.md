@@ -52,7 +52,10 @@ Then reload. Seed extra users/assignments with a throwaway `prXX-seed.ts` at the
 
 Prisma gotchas when writing seeds: the assignment flag is `lockAfterSubmit` (not `allowResubmit`),
 the question field is `questionType` (not `type`), and the multiple-choice enum value is `MC`
-(not `MULTIPLE_CHOICE`).
+(not `MULTIPLE_CHOICE`). Under Prisma 7 a bare `new PrismaClient()` throws
+`PrismaClientInitializationError` — construct it with the pg adapter:
+`new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) })`
+(import `PrismaPg` from `@prisma/adapter-pg`).
 
 ## Quiz autosave / draft behaviour
 
@@ -158,6 +161,13 @@ the question field is `questionType` (not `type`), and the multiple-choice enum 
   compare rather than assuming the key is right.
 - Generated MC options are stripped of self-labels on write and on bank read (`stripOptionLabels`), so
   `A. A. 0.50 A` should no longer appear; a regression here is student-visible.
+
+## Upload & drag/drop testing gotchas
+
+- Seeded e2e users have `emailVerified` NULL, so chat-attachment uploads return 403 until you run
+  `UPDATE "User" SET "emailVerified" = NOW();` in the scratch DB.
+- Synthetic drag/drop must be dispatched on an element *inside* the chat column div (e.g. the
+  message textarea), not on `<main>` — the drop handlers live on the chat column.
 
 ## Teardown
 
