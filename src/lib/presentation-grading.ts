@@ -38,6 +38,8 @@ export const PRESENTATION_CONDITIONS = ["AI-assisted", "no-AI"] as const;
 /** DB-backed hourly cap on new jobs per staff member (guards API spend). */
 export const PRESENTATION_JOBS_PER_HOUR = 60;
 
+export const PRESENTATION_STUDENT_IDS_MAX_CHARS = 200;
+
 export const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 export const PRESENTATION_GRADING_MODEL = "gpt-5.6-luna";
 
@@ -52,6 +54,7 @@ export interface PresentationJobSummary {
   id: string;
   topic: string;
   presenters: string | null;
+  studentIds: string | null;
   track: string | null;
   condition: string | null;
   status: PresentationJobStatusValue;

@@ -189,30 +189,75 @@ export function useReportJob(id: string) {
   return { job, loading, notFound, refresh: load };
 }
 
+export interface ReportBatchFile {
+  file: File;
+  /** Parsed from the filename; the grader can correct it before submitting. */
+  studentId: string | null;
+}
+
 export interface NewReportJobInput {
   title: string;
   authors?: string;
-  /** Exactly one of file / reportText is provided. */
-  file: File | null;
+  /** Exactly one of files / reportText is provided. */
+  files: ReportBatchFile[];
   reportText: string | null;
   reasoningEffort: ReportReasoningEffort;
 }
 
-export type ReportSubmitPhase = "uploading" | "creating" | null;
+export interface ReportSubmitProgress {
+  phase: "uploading" | "creating";
+  /** 1-based index of the file being processed; 0 for pasted text. */
+  current: number;
+  total: number;
+}
 
-/** Uploads the report, creates the job, and starts processing. */
+async function createJobAndProcess(payload: Record<string, unknown>): Promise<void> {
+  const res = await fetch("/api/report-grading/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body.error ?? "Failed to create the grading job");
+  }
+  // Fire-and-forget: the serverless function keeps processing even if
+  // the grader navigates away or closes the tab.
+  void fetch(`/api/report-grading/jobs/${body.data.id}/process`, {
+    method: "POST",
+    keepalive: true,
+  }).catch((error) => {
+    console.error(
+      `[report-grading] processing kickoff for job ${body.data.id} failed:`,
+      error
+    );
+    // The job list shows it as QUEUED; retry restarts it.
+  });
+}
+
+/** Strips the extension: "113012345_final.pdf" → "113012345_final". */
+function filenameStem(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
+}
+
+/**
+ * Uploads each report, creates one job per file (or one job for pasted
+ * text), and starts processing. Files are handled sequentially so a large
+ * batch doesn't fire dozens of parallel uploads.
+ */
 export function useSubmitReportJob(onCreated: () => void) {
-  const [phase, setPhase] = useState<ReportSubmitPhase>(null);
+  const [progress, setProgress] = useState<ReportSubmitProgress | null>(null);
 
   const submit = useCallback(
     async (input: NewReportJobInput): Promise<boolean> => {
-      if (!input.file && !input.reportText) {
-        toast.error("Choose a report PDF or paste the report text first.");
+      if (input.files.length === 0 && !input.reportText) {
+        toast.error("Choose report PDFs or paste the report text first.");
         return false;
       }
-      if (input.file && input.file.size > REPORT_FILE_MAX_BYTES) {
+      const oversized = input.files.find((f) => f.file.size > REPORT_FILE_MAX_BYTES);
+      if (oversized) {
         toast.error(
-          `The file is ${formatBytes(input.file.size)}; the maximum is ${formatBytes(REPORT_FILE_MAX_BYTES)}.`
+          `"${oversized.file.name}" is ${formatBytes(oversized.file.size)}; the maximum is ${formatBytes(REPORT_FILE_MAX_BYTES)}.`
         );
         return false;
       }
@@ -222,70 +267,78 @@ export function useSubmitReportJob(onCreated: () => void) {
         );
         return false;
       }
+
+      if (input.reportText) {
+        setProgress({ phase: "creating", current: 0, total: 1 });
+        try {
+          await createJobAndProcess({
+            title: input.title,
+            authors: input.authors,
+            reportText: input.reportText,
+            reasoningEffort: input.reasoningEffort,
+          });
+          toast.success(`Grading job for "${input.title}" started`);
+          onCreated();
+          return true;
+        } catch (error) {
+          toast.error(
+            (error as Error).message || "Something went wrong while submitting the job"
+          );
+          return false;
+        } finally {
+          setProgress(null);
+        }
+      }
+
+      const total = input.files.length;
+      let started = 0;
       try {
-        let reportBlobUrl: string | undefined;
-        if (input.file) {
-          setPhase("uploading");
-          const blob = await upload(input.file.name, input.file, {
+        for (let index = 0; index < input.files.length; index += 1) {
+          const { file, studentId } = input.files[index];
+          setProgress({ phase: "uploading", current: index + 1, total });
+          const blob = await upload(file.name, file, {
             access: "public",
             handleUploadUrl: UPLOAD_ENDPOINT,
             contentType: "application/pdf",
             clientPayload: JSON.stringify({
               contentType: "application/pdf",
-              sizeBytes: input.file.size,
+              sizeBytes: file.size,
             }),
           });
-          reportBlobUrl = blob.url;
-        }
-
-        setPhase("creating");
-        const res = await fetch("/api/report-grading/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: input.title,
+          setProgress({ phase: "creating", current: index + 1, total });
+          await createJobAndProcess({
+            title: total === 1 && input.title ? input.title : filenameStem(file.name),
             authors: input.authors,
-            reportBlobUrl,
-            reportFilename: input.file?.name,
-            reportText: input.reportText ?? undefined,
+            studentId: studentId ?? undefined,
+            reportBlobUrl: blob.url,
+            reportFilename: file.name,
             reasoningEffort: input.reasoningEffort,
-          }),
-        });
-        const body = await res.json();
-        if (!res.ok) {
-          toast.error(body.error ?? "Failed to create the grading job");
-          return false;
+          });
+          started += 1;
         }
-
-        // Fire-and-forget: the serverless function keeps processing even if
-        // the grader navigates away or closes the tab.
-        void fetch(`/api/report-grading/jobs/${body.data.id}/process`, {
-          method: "POST",
-          keepalive: true,
-        }).catch((error) => {
-          console.error(
-            `[report-grading] processing kickoff for job ${body.data.id} failed:`,
-            error
-          );
-          // The job list shows it as QUEUED; retry restarts it.
-        });
-
-        toast.success(`Grading job for "${input.title}" started`);
+        toast.success(
+          total === 1
+            ? "Grading job started"
+            : `Started grading jobs for ${total} reports`
+        );
         onCreated();
         return true;
       } catch (error) {
         toast.error(
-          (error as Error).message || "Something went wrong while submitting the job"
+          `${(error as Error).message || "Something went wrong while submitting"}${
+            started > 0 ? ` — ${started} of ${total} reports were already submitted` : ""
+          }`
         );
+        if (started > 0) onCreated();
         return false;
       } finally {
-        setPhase(null);
+        setProgress(null);
       }
     },
     [onCreated]
   );
 
-  return { submit, phase };
+  return { submit, progress };
 }
 
 /**
@@ -313,7 +366,7 @@ export async function retryReportJob(id: string): Promise<void> {
 
 export async function updateReportJob(
   id: string,
-  input: { title?: string; authors?: string | null }
+  input: { title?: string; authors?: string | null; studentId?: string | null }
 ): Promise<void> {
   const res = await fetch(`/api/report-grading/jobs/${id}`, {
     method: "PATCH",

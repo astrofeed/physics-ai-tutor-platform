@@ -72,6 +72,7 @@ async function rubricForNewJob(userId: string) {
 export interface CreateReportJobInput {
   title: string;
   authors?: string;
+  studentId?: string;
   reportBlobUrl?: string;
   reportFilename?: string;
   /** A report the grader pasted directly instead of uploading a PDF. */
@@ -91,6 +92,7 @@ export async function createReportJob(userId: string, input: CreateReportJobInpu
     data: {
       title: input.title,
       authors: input.authors,
+      studentId: input.studentId,
       reportBlobUrl: input.reportBlobUrl,
       reportFilename: input.reportFilename,
       reportText: input.reportText,
@@ -122,6 +124,7 @@ function toSummary(
     id: job.id,
     title: job.title,
     authors: job.authors,
+    studentId: job.studentId,
     status: job.status,
     error: job.error,
     model: job.model,
@@ -140,6 +143,7 @@ export async function listReportJobs(page: number, pageSize: number, query?: str
         OR: [
           { title: { contains: query, mode: "insensitive" as const } },
           { authors: { contains: query, mode: "insensitive" as const } },
+          { studentId: { contains: query, mode: "insensitive" as const } },
         ],
       }
     : undefined;
@@ -340,6 +344,7 @@ export async function processReportJob(id: string): Promise<void> {
 export interface UpdateReportJobInput {
   title?: string;
   authors?: string | null;
+  studentId?: string | null;
 }
 
 export async function updateReportJob(
@@ -356,6 +361,7 @@ export async function updateReportJob(
     data: {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.authors !== undefined ? { authors: input.authors } : {}),
+      ...(input.studentId !== undefined ? { studentId: input.studentId } : {}),
     },
   });
   return true;

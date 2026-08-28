@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
+import { PRESENTATION_STUDENT_IDS_MAX_CHARS } from "@/lib/presentation-grading";
 import {
   getPresentationJob,
   updatePresentationJob,
@@ -25,6 +26,7 @@ export async function GET(
 const UpdateJobSchema = z.object({
   topic: z.string().min(1).max(200).optional(),
   presenters: z.string().max(200).nullable().optional(),
+  studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).nullable().optional(),
 });
 
 export async function PATCH(

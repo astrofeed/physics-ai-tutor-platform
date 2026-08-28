@@ -10,12 +10,14 @@ import {
 import {
   REASONING_EFFORT_OPTIONS,
   REPORT_JOBS_PER_HOUR,
+  REPORT_STUDENT_ID_MAX_CHARS,
   REPORT_TEXT_MAX_CHARS,
 } from "@/lib/report-grading";
 
 const CreateJobSchema = z.object({
   title: z.string().min(1).max(200),
   authors: z.string().max(200).optional(),
+  studentId: z.string().max(REPORT_STUDENT_ID_MAX_CHARS).optional(),
   reportBlobUrl: z.string().url().max(1000).optional(),
   reportFilename: z.string().min(1).max(300).optional(),
   reportText: z.string().min(1).max(REPORT_TEXT_MAX_CHARS).optional(),

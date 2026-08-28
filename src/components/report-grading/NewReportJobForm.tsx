@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { FileText, Loader2, X } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,17 +16,26 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/lib/chat-attachments";
-import { REPORT_FILE_MAX_BYTES, REPORT_TEXT_MAX_CHARS } from "@/lib/report-grading";
+import {
+  REPORT_BATCH_MAX_FILES,
+  REPORT_FILE_MAX_BYTES,
+  REPORT_TEXT_MAX_CHARS,
+  studentIdFromFilename,
+} from "@/lib/report-grading";
 import {
   useSubmitReportJob,
   type NewReportJobInput,
-  type ReportSubmitPhase,
+  type ReportBatchFile,
+  type ReportSubmitProgress,
 } from "@/hooks/useReportGrading";
+import { ReportBatchFileList } from "./ReportBatchFileList";
 
-const PHASE_LABELS: Record<Exclude<ReportSubmitPhase, null>, string> = {
-  uploading: "Uploading the report…",
-  creating: "Starting the grading job…",
-};
+function progressLabel(progress: ReportSubmitProgress): string {
+  const step = progress.total > 1 ? ` ${progress.current}/${progress.total}` : "";
+  return progress.phase === "uploading"
+    ? `Uploading report${step}…`
+    : `Starting grading job${step}…`;
+}
 
 type Source = "pdf" | "text";
 
@@ -33,14 +43,27 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
   const [title, setTitle] = useState("");
   const [authors, setAuthors] = useState("");
   const [source, setSource] = useState<Source>("pdf");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<ReportBatchFile[]>([]);
   const [reportText, setReportText] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { submit, phase } = useSubmitReportJob(onCreated);
+  const { submit, progress } = useSubmitReportJob(onCreated);
 
-  const clearFile = () => {
-    setFile(null);
+  const addFiles = (picked: FileList | null) => {
+    if (!picked) return;
+    const next = [...files];
+    for (const file of Array.from(picked)) {
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        toast.error(`"${file.name}" is not a PDF and was skipped.`);
+        continue;
+      }
+      next.push({ file, studentId: studentIdFromFilename(file.name) });
+    }
+    if (next.length > REPORT_BATCH_MAX_FILES) {
+      toast.error(`At most ${REPORT_BATCH_MAX_FILES} reports per batch.`);
+      next.length = REPORT_BATCH_MAX_FILES;
+    }
+    setFiles(next);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -48,7 +71,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
     const input: NewReportJobInput = {
       title: title.trim(),
       authors: authors.trim() || undefined,
-      file: source === "pdf" ? file : null,
+      files: source === "pdf" ? files : [],
       reportText: source === "text" ? reportText.trim() || null : null,
       reasoningEffort,
     };
@@ -57,36 +80,42 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
       setTitle("");
       setAuthors("");
       setReportText("");
-      clearFile();
+      setFiles([]);
     }
   };
 
   const canSubmit =
-    title.trim().length > 0 &&
-    phase === null &&
-    (source === "pdf" ? file !== null : reportText.trim().length > 0);
+    progress === null &&
+    (source === "pdf"
+      ? files.length > 0
+      : title.trim().length > 0 && reportText.trim().length > 0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Grade a written report</CardTitle>
+        <CardTitle>Grade written reports</CardTitle>
         <CardDescription>
-          Upload the report PDF (or paste its text). The AI reads it against the shared grading
-          instructions and returns a summary, comments, and per-criterion scores with reasons.
+          Upload one or more report PDFs (or paste one report&apos;s text). Each PDF becomes its
+          own grading job: the AI reads it against the shared grading instructions and returns a
+          summary, comments, and per-criterion scores with reasons.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="report-title">
-              Report title <span className="text-red-500">*</span>
+              Report title {source === "text" ? <span className="text-red-500">*</span> : null}
             </Label>
             <Input
               id="report-title"
               maxLength={200}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Deriving Coulomb's Law from Maxwell's Equations"
+              placeholder={
+                source === "pdf"
+                  ? "Optional for a single PDF — filenames are used otherwise"
+                  : "e.g. Deriving Coulomb's Law from Maxwell's Equations"
+              }
             />
           </div>
           <div className="space-y-1.5">
@@ -106,7 +135,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
           <div className="flex gap-2">
             {(
               [
-                ["pdf", "Upload PDF"],
+                ["pdf", "Upload PDFs"],
                 ["text", "Paste text"],
               ] as const
             ).map(([value, label]) => (
@@ -124,37 +153,33 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
         </div>
 
         {source === "pdf" ? (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <input
               ref={fileInputRef}
               type="file"
               accept="application/pdf"
+              multiple
               className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => addFiles(e.target.files)}
             />
-            {file ? (
-              <div className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm">
-                <FileText className="h-4 w-4 shrink-0 text-gray-500" />
-                <span className="truncate flex-1">{file.name}</span>
-                <span className="text-xs text-gray-500 shrink-0">{formatBytes(file.size)}</span>
-                <button
-                  type="button"
-                  aria-label="Remove report file"
-                  onClick={clearFile}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <FileText className="mr-1.5 h-4 w-4" />
-                Choose report PDF
-              </Button>
-            )}
+            <ReportBatchFileList
+              files={files}
+              onChangeStudentId={(index, studentId) =>
+                setFiles((prev) =>
+                  prev.map((entry, i) => (i === index ? { ...entry, studentId } : entry))
+                )
+              }
+              onRemove={(index) => setFiles((prev) => prev.filter((_, i) => i !== index))}
+            />
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <FileText className="mr-1.5 h-4 w-4" />
+              {files.length > 0 ? "Add more PDFs" : "Choose report PDFs"}
+            </Button>
             <p className="text-xs text-gray-500">
-              PDF only, up to {formatBytes(REPORT_FILE_MAX_BYTES)}. The file is deleted after
-              grading.
+              PDF only, up to {formatBytes(REPORT_FILE_MAX_BYTES)} each and{" "}
+              {REPORT_BATCH_MAX_FILES} per batch. Files are deleted after grading. Ask students to
+              put their student ID in the filename (e.g. 王小明_113012345_期末報告.pdf) — it is
+              picked up automatically and can be corrected above.
             </p>
           </div>
         ) : (
@@ -194,8 +219,12 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
 
         <div className="flex items-center gap-3">
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {phase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {phase ? PHASE_LABELS[phase] : "Start grading"}
+            {progress ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {progress
+              ? progressLabel(progress)
+              : files.length > 1
+                ? `Start grading ${files.length} reports`
+                : "Start grading"}
           </Button>
         </div>
       </CardContent>

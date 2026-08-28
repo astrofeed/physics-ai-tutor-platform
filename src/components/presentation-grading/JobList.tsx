@@ -11,35 +11,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
-import type { PresentationJobSummary } from "@/lib/presentation-grading";
+import type {
+  PresentationJobDetail,
+  PresentationJobSummary,
+} from "@/lib/presentation-grading";
 import { retryPresentationJob } from "@/hooks/usePresentationGrading";
+import { useCsvExport, useRowSelection } from "@/hooks/useGradingCsvExport";
+import { presentationJobsToCsv } from "@/lib/grading-csv";
 import { STATUS_BADGE_VARIANTS, STATUS_LABELS, formatDuration, formatTimestamp } from "./job-format";
-
-function exportCsv(jobs: PresentationJobSummary[]) {
-  const header = "Topic,Presenters,Track,Condition,Status,Total score,Effort,Duration,Rubric version,Completed at";
-  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const rows = jobs.map((job) =>
-    [
-      escape(job.topic),
-      escape(job.presenters ?? ""),
-      job.track ?? "",
-      job.condition ?? "",
-      STATUS_LABELS[job.status],
-      job.totalScore ?? "",
-      job.reasoningEffort,
-      formatDuration(job.gradingDurationMs),
-      job.rubricVersion ?? "",
-      job.completedAt ?? "",
-    ].join(",")
-  );
-  const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "presentation-grading.csv";
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 function RetryButton({ jobId, onDone }: { jobId: string; onDone: () => void }) {
   const [retrying, setRetrying] = useState(false);
@@ -88,6 +67,14 @@ export function JobList({
   onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {
+  const { selected, toggle, selectAll, clear } = useRowSelection();
+  const { exporting, exportIds } = useCsvExport<PresentationJobDetail>(
+    "/api/presentation-grading/jobs",
+    "presentation-grading.csv",
+    presentationJobsToCsv
+  );
+  const allSelected = jobs.length > 0 && jobs.every((job) => selected.has(job.id));
+
   const searchBox = (
     <div className="relative w-full sm:max-w-xs">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -142,21 +129,46 @@ export function JobList({
         <CardTitle className="text-base">
           Results <span className="text-sm font-normal text-gray-500">({totalCount})</span>
         </CardTitle>
-        <div className="flex w-full flex-1 items-center justify-end gap-2 sm:w-auto">
+        <div className="flex w-full flex-1 flex-wrap items-center justify-end gap-2 sm:w-auto">
           {searchBox}
-          <Button variant="outline" size="sm" onClick={() => exportCsv(jobs)}>
-            <Download className="mr-1.5 h-4 w-4" />
-            Export CSV
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => (allSelected ? clear() : selectAll(jobs.map((job) => job.id)))}
+          >
+            {allSelected ? "Clear selection" : "Select all"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={selected.size === 0 || exporting}
+            onClick={() => void exportIds(Array.from(selected))}
+          >
+            {exporting ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-4 w-4" />
+            )}
+            Export CSV{selected.size > 0 ? ` (${selected.size})` : ""}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ul className="divide-y divide-gray-100 dark:divide-gray-800">
           {jobs.map((job) => (
-            <li key={job.id}>
+            <li key={job.id} className="flex items-center">
+              <label className="flex shrink-0 cursor-pointer items-center self-stretch pl-4 pr-1">
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${job.topic} for CSV export`}
+                  className="h-4 w-4 accent-blue-600"
+                  checked={selected.has(job.id)}
+                  onChange={() => toggle(job.id)}
+                />
+              </label>
               <Link
                 href={`/presentation-grading/${job.id}`}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-sm">
@@ -167,6 +179,7 @@ export function JobList({
                   </p>
                   <p className="text-xs text-gray-500">
                     {[
+                      job.studentIds,
                       job.track ? `Track ${job.track}` : null,
                       job.condition,
                       `effort ${job.reasoningEffort}`,

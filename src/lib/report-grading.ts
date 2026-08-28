@@ -19,6 +19,11 @@ export const REPORT_GRADING_MODEL = "gpt-5.6-luna";
 /** DB-backed hourly cap on new jobs per staff member (guards API spend). */
 export const REPORT_JOBS_PER_HOUR = 60;
 
+export const REPORT_STUDENT_ID_MAX_CHARS = 50;
+
+/** How many report PDFs one batch submission may contain. */
+export const REPORT_BATCH_MAX_FILES = 40;
+
 export type ReportReasoningEffort = (typeof REASONING_EFFORT_OPTIONS)[number];
 
 export type ReportJobStatusValue = "QUEUED" | "GRADING" | "DONE" | "FAILED";
@@ -27,6 +32,7 @@ export interface ReportJobSummary {
   id: string;
   title: string;
   authors: string | null;
+  studentId: string | null;
   status: ReportJobStatusValue;
   error: string | null;
   model: string | null;
@@ -51,8 +57,8 @@ export interface ReportJobDetail extends ReportJobSummary {
  */
 export const ReportCriterionScoreSchema = z.object({
   criterion: z.string(),
-  weightPercent: z.number(),
-  score: z.number(),
+  weightPercent: z.number().min(0).max(100),
+  score: z.number().min(0).max(10),
   reason: z.string(),
 });
 
@@ -67,6 +73,17 @@ export const ReportEvaluationSchema = z.object({
   /** Null on jobs graded before per-criterion scores existed. */
   criterionScores: z.array(ReportCriterionScoreSchema).nullable(),
 });
+
+/**
+ * Pulls a student ID out of an uploaded file's name (students are asked to
+ * put their ID in the filename). Tolerates extra text around it: the longest
+ * run of 5–15 digits wins, e.g. "王小明_113012345_final.pdf" → "113012345".
+ */
+export function studentIdFromFilename(filename: string): string | null {
+  const runs = filename.match(/\d{5,15}/g);
+  if (!runs) return null;
+  return runs.reduce((best, run) => (run.length > best.length ? run : best));
+}
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;
 export type ReportCriterionScore = z.infer<typeof ReportCriterionScoreSchema>;

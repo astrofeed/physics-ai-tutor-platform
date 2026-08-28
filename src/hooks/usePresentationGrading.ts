@@ -210,6 +210,7 @@ async function uploadToBlob(
 export interface NewJobInput {
   topic: string;
   presenters?: string;
+  studentIds?: string;
   track?: "A" | "B";
   condition?: "AI-assisted" | "no-AI";
   /** Exactly one of video / transcript is provided. */
@@ -285,6 +286,7 @@ export function useSubmitPresentationJob(onCreated: () => void) {
           body: JSON.stringify({
             topic: input.topic,
             presenters: input.presenters,
+            studentIds: input.studentIds,
             track: input.track,
             condition: input.condition,
             audioBlobUrl,
@@ -354,7 +356,7 @@ export async function retryPresentationJob(id: string): Promise<void> {
 
 export async function updatePresentationJob(
   id: string,
-  input: { topic?: string; presenters?: string | null }
+  input: { topic?: string; presenters?: string | null; studentIds?: string | null }
 ): Promise<void> {
   const res = await fetch(`/api/presentation-grading/jobs/${id}`, {
     method: "PATCH",

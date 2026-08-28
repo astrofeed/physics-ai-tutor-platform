@@ -57,6 +57,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
           <p className="mt-1 text-sm text-gray-500">
             {[
               job.authors,
+              job.studentId ? `ID ${job.studentId}` : null,
               job.reportFilename,
               job.model,
               `effort ${job.reasoningEffort}`,
@@ -82,6 +83,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
             jobId={job.id}
             title={job.title}
             authors={job.authors}
+            studentId={job.studentId}
             onUpdated={() => void refresh()}
           />
         </div>

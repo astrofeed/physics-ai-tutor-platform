@@ -7,6 +7,7 @@ import {
   updateReportJob,
   deleteReportJob,
 } from "@/lib/services/report-grading-service";
+import { REPORT_STUDENT_ID_MAX_CHARS } from "@/lib/report-grading";
 
 export async function GET(
   _request: Request,
@@ -25,6 +26,7 @@ export async function GET(
 const UpdateJobSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   authors: z.string().max(200).nullable().optional(),
+  studentId: z.string().max(REPORT_STUDENT_ID_MAX_CHARS).nullable().optional(),
 });
 
 export async function PATCH(

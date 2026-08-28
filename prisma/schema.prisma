@@ -102,6 +102,8 @@ model ReportGradingJob {
   title   String
   /// Author names, free text — staff search by this.
   authors String?
+  /// Student ID, usually parsed from the uploaded file's name; used in CSV exports.
+  studentId String?
   status  ReportJobStatus @default(QUEUED)
   error   String?         @db.Text
 
@@ -159,6 +161,8 @@ model PresentationGradingJob {
   topic      String
   /// Presenter names, free text — the TA searches by this right after a talk.
   presenters String?
+  /// Presenter student IDs, free text (comma-separated); used in CSV exports.
+  studentIds String?
   track      String?
   condition String?
   status    PresentationJobStatus @default(QUEUED)

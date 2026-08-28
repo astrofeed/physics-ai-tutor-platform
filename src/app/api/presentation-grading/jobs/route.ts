@@ -10,6 +10,7 @@ import {
 import {
   PRESENTATION_CONDITIONS,
   PRESENTATION_JOBS_PER_HOUR,
+  PRESENTATION_STUDENT_IDS_MAX_CHARS,
   PRESENTATION_TRACKS,
   PRESENTATION_TRANSCRIPT_MAX_CHARS,
   REASONING_EFFORT_OPTIONS,
@@ -18,6 +19,7 @@ import {
 const CreateJobSchema = z.object({
   topic: z.string().min(1).max(200),
   presenters: z.string().max(200).optional(),
+  studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).optional(),
   track: z.enum(PRESENTATION_TRACKS).optional(),
   condition: z.enum(PRESENTATION_CONDITIONS).optional(),
   audioBlobUrl: z.string().url().max(1000).optional(),

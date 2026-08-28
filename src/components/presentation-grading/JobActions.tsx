@@ -35,15 +35,17 @@ interface JobActionsProps {
   jobId: string;
   topic: string;
   presenters: string | null;
+  studentIds: string | null;
   onUpdated: () => void;
 }
 
 /** Edit (topic / presenter names) and delete controls for one grading job. */
-export function JobActions({ jobId, topic, presenters, onUpdated }: JobActionsProps) {
+export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: JobActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [draftTopic, setDraftTopic] = useState(topic);
   const [draftPresenters, setDraftPresenters] = useState(presenters ?? "");
+  const [draftStudentIds, setDraftStudentIds] = useState(studentIds ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -51,6 +53,7 @@ export function JobActions({ jobId, topic, presenters, onUpdated }: JobActionsPr
     if (open) {
       setDraftTopic(topic);
       setDraftPresenters(presenters ?? "");
+      setDraftStudentIds(studentIds ?? "");
     }
     setEditOpen(open);
   };
@@ -66,6 +69,7 @@ export function JobActions({ jobId, topic, presenters, onUpdated }: JobActionsPr
       await updatePresentationJob(jobId, {
         topic: nextTopic,
         presenters: draftPresenters.trim() || null,
+        studentIds: draftStudentIds.trim() || null,
       });
       toast.success("Job updated");
       setEditOpen(false);
@@ -119,6 +123,16 @@ export function JobActions({ jobId, topic, presenters, onUpdated }: JobActionsPr
                 maxLength={200}
                 value={draftPresenters}
                 onChange={(e) => setDraftPresenters(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-student-ids">Student IDs</Label>
+              <Input
+                id="edit-student-ids"
+                maxLength={200}
+                placeholder="comma-separated"
+                value={draftStudentIds}
+                onChange={(e) => setDraftStudentIds(e.target.value)}
               />
             </div>
           </div>

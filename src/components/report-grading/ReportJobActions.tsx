@@ -27,20 +27,29 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { deleteReportJob, updateReportJob } from "@/hooks/useReportGrading";
+import { REPORT_STUDENT_ID_MAX_CHARS } from "@/lib/report-grading";
 
 interface ReportJobActionsProps {
   jobId: string;
   title: string;
   authors: string | null;
+  studentId: string | null;
   onUpdated: () => void;
 }
 
-/** Edit (title / author names) and delete controls for one grading job. */
-export function ReportJobActions({ jobId, title, authors, onUpdated }: ReportJobActionsProps) {
+/** Edit (title / authors / student ID) and delete controls for one grading job. */
+export function ReportJobActions({
+  jobId,
+  title,
+  authors,
+  studentId,
+  onUpdated,
+}: ReportJobActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title);
   const [draftAuthors, setDraftAuthors] = useState(authors ?? "");
+  const [draftStudentId, setDraftStudentId] = useState(studentId ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -48,6 +57,7 @@ export function ReportJobActions({ jobId, title, authors, onUpdated }: ReportJob
     if (open) {
       setDraftTitle(title);
       setDraftAuthors(authors ?? "");
+      setDraftStudentId(studentId ?? "");
     }
     setEditOpen(open);
   };
@@ -63,6 +73,7 @@ export function ReportJobActions({ jobId, title, authors, onUpdated }: ReportJob
       await updateReportJob(jobId, {
         title: nextTitle,
         authors: draftAuthors.trim() || null,
+        studentId: draftStudentId.trim() || null,
       });
       toast.success("Job updated");
       setEditOpen(false);
@@ -116,6 +127,16 @@ export function ReportJobActions({ jobId, title, authors, onUpdated }: ReportJob
                 maxLength={200}
                 value={draftAuthors}
                 onChange={(e) => setDraftAuthors(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-report-student-id">Student ID</Label>
+              <Input
+                id="edit-report-student-id"
+                maxLength={REPORT_STUDENT_ID_MAX_CHARS}
+                placeholder="Used in CSV exports"
+                value={draftStudentId}
+                onChange={(e) => setDraftStudentId(e.target.value)}
               />
             </div>
           </div>

@@ -79,6 +79,7 @@ async function rubricForNewJob(userId: string) {
 export interface CreatePresentationJobInput {
   topic: string;
   presenters?: string;
+  studentIds?: string;
   track?: string;
   condition?: string;
   audioBlobUrl?: string;
@@ -107,6 +108,7 @@ export async function createPresentationJob(
     data: {
       topic: input.topic,
       presenters: input.presenters,
+      studentIds: input.studentIds,
       track: input.track,
       condition: input.condition,
       audioBlobUrl: input.audioBlobUrl,
@@ -141,6 +143,7 @@ function toSummary(
     id: job.id,
     topic: job.topic,
     presenters: job.presenters,
+    studentIds: job.studentIds,
     track: job.track,
     condition: job.condition,
     status: job.status,
@@ -166,6 +169,7 @@ export async function listPresentationJobs(
         OR: [
           { topic: { contains: query, mode: "insensitive" as const } },
           { presenters: { contains: query, mode: "insensitive" as const } },
+          { studentIds: { contains: query, mode: "insensitive" as const } },
         ],
       }
     : undefined;
@@ -431,6 +435,7 @@ export async function processPresentationJob(id: string): Promise<void> {
 export interface UpdatePresentationJobInput {
   topic?: string;
   presenters?: string | null;
+  studentIds?: string | null;
 }
 
 export async function updatePresentationJob(
@@ -447,6 +452,7 @@ export async function updatePresentationJob(
     data: {
       ...(input.topic !== undefined ? { topic: input.topic } : {}),
       ...(input.presenters !== undefined ? { presenters: input.presenters } : {}),
+      ...(input.studentIds !== undefined ? { studentIds: input.studentIds } : {}),
     },
   });
   return true;

@@ -57,6 +57,7 @@ function JobDetailContent({ id }: { id: string }) {
           <p className="mt-1 text-sm text-gray-500">
             {[
               job.presenters,
+              job.studentIds,
               job.track ? `Track ${job.track}` : null,
               job.condition,
               job.model,
@@ -83,6 +84,7 @@ function JobDetailContent({ id }: { id: string }) {
             jobId={job.id}
             topic={job.topic}
             presenters={job.presenters}
+            studentIds={job.studentIds}
             onUpdated={() => void refresh()}
           />
         </div>
