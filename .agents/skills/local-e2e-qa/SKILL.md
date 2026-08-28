@@ -52,7 +52,10 @@ Then reload. Seed extra users/assignments with a throwaway `prXX-seed.ts` at the
 
 Prisma gotchas when writing seeds: the assignment flag is `lockAfterSubmit` (not `allowResubmit`),
 the question field is `questionType` (not `type`), and the multiple-choice enum value is `MC`
-(not `MULTIPLE_CHOICE`).
+(not `MULTIPLE_CHOICE`). Under Prisma 7 a bare `new PrismaClient()` throws
+`PrismaClientInitializationError` — construct it with the pg adapter:
+`new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) })`
+(import `PrismaPg` from `@prisma/adapter-pg`).
 
 ## Quiz autosave / draft behaviour
 
