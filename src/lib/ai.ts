@@ -158,6 +158,19 @@ export function getActiveChatModel(): string {
   return isDeepSeekActive() ? DEEPSEEK_CHAT_MODEL : OPENAI_CHAT_MODEL;
 }
 
+export function isChatProviderConfigured(): boolean {
+  return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY);
+}
+
+/** Appends a rolling summary of aged-out messages to the system prompt. */
+export function appendContextSummary(
+  systemPrompt: string | undefined,
+  summary: string
+): string {
+  const base = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  return `${base}\n\nSummary of the earlier part of this conversation (older messages are not included in your context):\n${summary}`;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -287,13 +300,18 @@ export async function generateConversationTitle(
 }
 
 export async function summarizeConversation(
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string }[],
+  priorSummary?: string
 ): Promise<string | null> {
   const transcript = messages
     .map((m) => `${m.role === "user" ? "Student" : "Tutor"}: ${m.content}`)
     .join("\n\n");
 
-  const summaryPrompt = `Summarize the following physics tutoring conversation so a new tutoring session can continue seamlessly. Capture: the physics topics discussed, key concepts and formulas covered, problems the student worked on and their solutions or progress, and any open questions or misunderstandings. Use the same language as the conversation (Traditional Chinese if the conversation is in Chinese). Keep it under 500 words. Use LaTeX with $...$ / $$...$$ for math. Reply with ONLY the summary.\n\n${transcript}`;
+  const instructions = `Summarize the following physics tutoring conversation so a new tutoring session can continue seamlessly. Capture: the physics topics discussed, key concepts and formulas covered, problems the student worked on and their solutions or progress, and any open questions or misunderstandings. Use the same language as the conversation (Traditional Chinese if the conversation is in Chinese). Keep it under 500 words. Use LaTeX with $...$ / $$...$$ for math. Reply with ONLY the summary.`;
+
+  const summaryPrompt = priorSummary
+    ? `${instructions}\n\nMerge the existing summary of earlier messages with the new messages into one updated summary.\n\nExisting summary:\n${priorSummary}\n\nNew messages:\n${transcript}`
+    : `${instructions}\n\n${transcript}`;
 
   if (isDeepSeekActive()) {
     const response = await getDeepSeek().chat.completions.create({

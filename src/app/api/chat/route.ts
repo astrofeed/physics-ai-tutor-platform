@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, type ChatMessage } from "@/lib/ai";
+import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, appendContextSummary, isChatProviderConfigured, type ChatMessage } from "@/lib/ai";
+import { refreshContextSummary, CONTEXT_WINDOW_MESSAGES } from "@/lib/services/conversation-summary-service";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { checkContentFlags, handleContentFlag, trackMessageVolume, trackRateLimitAbuse } from "@/lib/abuse-detection";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
@@ -166,11 +167,12 @@ export async function POST(req: Request) {
     checkAndBanSpammer({ userId, source: "chat" }).catch((err) => console.error("[spam] Failed to check spammer:", err));
     trackMessageVolume(userId, userName).catch((err) => console.error("[abuse] Failed to track message volume:", err));
 
-    // Load last 50 messages for AI context (avoids unbounded query + token limits)
+    // Load the recent-message window for AI context (avoids unbounded query +
+    // token limits); older messages are covered by the rolling contextSummary.
     const recentMessages = await prisma.message.findMany({
       where: { conversationId: convId },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: CONTEXT_WINDOW_MESSAGES,
       include: {
         attachments: { select: { filename: true, extractedText: true, truncated: true } },
       },
@@ -209,6 +211,16 @@ export async function POST(req: Request) {
 
     if (!systemPrompt) {
       systemPrompt = mode === "socratic" ? SOCRATIC_SYSTEM_PROMPT : (aiConfig?.systemPrompt || undefined);
+    }
+
+    if (conversationId) {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: convId },
+        select: { contextSummary: true },
+      });
+      if (conversation?.contextSummary) {
+        systemPrompt = appendContextSummary(systemPrompt, conversation.contextSummary);
+      }
     }
 
     // Stream response via SSE
@@ -330,6 +342,21 @@ export async function POST(req: Request) {
               userId,
               conversationId: convId,
               error: titleError instanceof Error ? titleError.message : String(titleError),
+            });
+          }
+        }
+
+        // Refresh the rolling summary of aged-out messages before closing the
+        // stream, so serverless runtimes don't kill the work.
+        if (fullContent && isChatProviderConfigured()) {
+          try {
+            await refreshContextSummary(convId);
+          } catch (summaryError) {
+            logger.warn("Failed to refresh conversation context summary", {
+              route: "/api/chat",
+              userId,
+              conversationId: convId,
+              error: summaryError instanceof Error ? summaryError.message : String(summaryError),
             });
           }
         }
