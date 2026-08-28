@@ -1204,7 +1204,7 @@ Next.js 14 app with Prisma (PostgreSQL), NextAuth credentials + Google OAuth, Op
 - **Auth**: NextAuth v5 (credentials + Google)
 - **AI**: chat runs on DeepSeek (`DEEPSEEK_CHAT_MODEL = "deepseek-v4-flash"`) when `DEEPSEEK_API_KEY` is set, otherwise on OpenAI (`OPENAI_CHAT_MODEL = "gpt-5.6-luna"`); see `getActiveChatModel()` in `src/lib/ai.ts`. Anthropic code paths remain for problem generation/grading fallback but are unused without `ANTHROPIC_API_KEY`
 - **Styling**: Tailwind CSS, Radix UI, shadcn/ui
-- **LaTeX**: `react-markdown`, `remark-math`, `rehype-katex`, `katex`
+- **LaTeX**: `react-markdown`, `remark-math`, `rehype-katex`, `katex`. `normalizeLatex()` in `src/components/ui/markdown-content.tsx` tokenizes display-math delimiters (`$$`, `\[`, `\]`) and pairs each opener with the next closer of either kind, so model output that mixes delimiters (e.g. opens with `$$` but closes with `\]`) cannot shift pairing and swallow surrounding markdown into one giant KaTeX error block
 
 ### AI Client Initialization
 

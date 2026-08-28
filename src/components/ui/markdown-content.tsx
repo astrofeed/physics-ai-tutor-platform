@@ -34,16 +34,39 @@ const RUNNABLE_LANGUAGES = ["python", "javascript", "js", "typescript", "ts"];
 const CODE_BLOCK_BG = "#0a0a0a";
 
 function normalizeLatex(content: string): string {
-  // Convert \[...\] to $$...$$ and \(...\) to $...$
-  content = content.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `\n$$\n${math.trim()}\n$$\n`);
+  // Convert \(...\) inline math to $...$
   content = content.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math}$`);
 
-  // Ensure $$ display math delimiters are on their own lines.
-  // remark-math requires $$ to start at the beginning of a line.
-  // First, handle matched $$...$$ pairs (including multi-line).
-  content = content.replace(/\$\$([\s\S]*?)\$\$/g, (_match, math) => {
-    return `\n$$\n${math.trim()}\n$$\n`;
-  });
+  // Display math may be delimited by $$ or \[ / \], and models sometimes mix
+  // them (e.g. open with $$ but close with \]). Tokenize on all display
+  // delimiters and pair each opener with the next closer of either kind, so a
+  // mismatched pair can't shift later pairing and swallow surrounding text.
+  // remark-math also requires $$ to start at the beginning of a line, so each
+  // block is emitted with its delimiters on their own lines.
+  const parts = content.split(/(\$\$|\\\[|\\\])/);
+  let result = "";
+  let mathBuf: string | null = null;
+  for (const part of parts) {
+    if (mathBuf === null) {
+      if (part === "$$" || part === "\\[") {
+        mathBuf = "";
+      } else if (part !== "\\]") {
+        result += part;
+      }
+    } else {
+      if (part === "$$" || part === "\\]") {
+        result += `\n$$\n${mathBuf.trim()}\n$$\n`;
+        mathBuf = null;
+      } else if (part !== "\\[") {
+        mathBuf += part;
+      }
+    }
+  }
+  if (mathBuf !== null) {
+    // Unclosed block (e.g. mid-stream): render what we have so far.
+    result += `\n$$\n${mathBuf.trim()}\n$$\n`;
+  }
+  content = result;
 
   // Clean up excessive blank lines created by the replacements
   content = content.replace(/\n{3,}/g, "\n\n");
