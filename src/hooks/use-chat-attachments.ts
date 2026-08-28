@@ -26,6 +26,21 @@ export interface UploadedAttachments {
   documents: DocumentAttachment[];
 }
 
+/**
+ * Turns a Blob client error into something a student can act on. The client
+ * wraps the token route's message (e.g. an email-verification refusal) in
+ * transport noise like "Vercel Blob: Failed to retrieve the client token.
+ * Status: 403, message: ..."; the part after "message:" is ours.
+ */
+function uploadFailureDetail(rawMessage: string): string {
+  const serverMessage = rawMessage.match(/message: (.+)$/)?.[1]?.trim();
+  if (serverMessage && serverMessage !== "No token found") return serverMessage;
+  if (rawMessage.includes("No token found")) {
+    return "File storage is not configured on this server.";
+  }
+  return "Please try again.";
+}
+
 function readPreview(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -157,8 +172,10 @@ export function useChatAttachments() {
             sizeBytes: file.size,
           });
         }
-      } catch {
-        setError(`Failed to upload "${file.name}". Please try again.`);
+      } catch (err) {
+        console.error(`Chat attachment upload failed for "${file.name}":`, err);
+        const detail = err instanceof Error && err.message ? ` ${uploadFailureDetail(err.message)}` : "";
+        setError(`Failed to upload "${file.name}".${detail}`);
         return null;
       }
     }
