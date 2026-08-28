@@ -46,9 +46,16 @@ export interface ReportJobDetail extends ReportJobSummary {
 
 /**
  * Structured result the grading model must return (enforced with OpenAI
- * structured outputs). Deliberately has no scores: the tool produces a
- * summary, evidence-referenced comments, and questions for the author.
+ * structured outputs): a summary, evidence-referenced comments, and a score
+ * with its reason for each rubric criterion.
  */
+export const ReportCriterionScoreSchema = z.object({
+  criterion: z.string(),
+  weightPercent: z.number(),
+  score: z.number(),
+  reason: z.string(),
+});
+
 export const ReportEvaluationSchema = z.object({
   summary: z.string(),
   comments: z.array(
@@ -57,21 +64,23 @@ export const ReportEvaluationSchema = z.object({
       comment: z.string(),
     })
   ),
-  questions: z.array(
-    z.object({
-      question: z.string(),
-      reason: z.string(),
-    })
-  ),
+  /** Null on jobs graded before per-criterion scores existed. */
+  criterionScores: z.array(ReportCriterionScoreSchema).nullable(),
 });
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;
+export type ReportCriterionScore = z.infer<typeof ReportCriterionScoreSchema>;
 
-/** Parses a stored evaluation; null for bad JSON. */
+/** Parses a stored evaluation; null for bad JSON. Tolerates older jobs
+ * graded before per-criterion scores existed. */
 export function parseReportEvaluation(json: string | null): ReportEvaluation | null {
   if (!json) return null;
   try {
-    const result = ReportEvaluationSchema.safeParse(JSON.parse(json));
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === "object" && !("criterionScores" in parsed)) {
+      (parsed as Record<string, unknown>).criterionScores = null;
+    }
+    const result = ReportEvaluationSchema.safeParse(parsed);
     return result.success ? result.data : null;
   } catch {
     return null;

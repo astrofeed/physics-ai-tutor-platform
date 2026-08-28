@@ -25,8 +25,10 @@ export function reportEvaluationToText(e: ReportEvaluation): string {
   const comments = e.comments
     .map((c, i) => `${i + 1}. [${c.reference}] ${c.comment}`)
     .join("\n");
-  const questions = e.questions
-    .map((q, i) => `${i + 1}. ${q.question}\n   Why: ${q.reason}`)
+  const text = `## Summary\n${e.summary}\n\n## Comments\n${comments}`;
+  if (!e.criterionScores) return text;
+  const scores = e.criterionScores
+    .map((s) => `- ${s.criterion} (${s.weightPercent}%): ${s.score}/10\n  ${s.reason}`)
     .join("\n");
-  return `## Summary\n${e.summary}\n\n## Comments\n${comments}\n\n## Questions for the author\n${questions}`;
+  return `${text}\n\n## Criterion scores\n${scores}`;
 }

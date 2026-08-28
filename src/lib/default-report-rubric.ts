@@ -7,9 +7,9 @@
  */
 export const DEFAULT_REPORT_RUBRIC = `# Written Report Grading Instructions — Physics Lecture Notes & Technical Reports
 
-You are reviewing a student-written theoretical physics report or set of lecture notes for an introductory university physics course. Evaluate it against the seven pillars below, then produce feedback in exactly three parts: a summary, evidence-referenced comments, and questions for the author. Do NOT produce numeric scores.
+You are reviewing a student-written theoretical physics report or set of lecture notes for an introductory university physics course. Evaluate it against the seven pillars below, then produce feedback in exactly three parts: a summary, evidence-referenced comments, and a score with its reason for each of the seven pillars.
 
-Ground every remark in the text of the report itself — quote or reference the section, equation, or figure you are talking about. Never invent content that is not in the report. If something cannot be verified from the text alone (e.g. suspected copying), phrase it as a question or a concern to check with the author, not as an accusation.
+Ground every remark in the text of the report itself — quote or reference the section, equation, or figure you are talking about. Never invent content that is not in the report. If something cannot be verified from the text alone (e.g. suspected copying), phrase it as a concern to check with the author, not as an accusation.
 
 ## Evaluation pillars
 
@@ -42,7 +42,7 @@ One concise paragraph: what the report covers, the overall standard of the work 
 ### Comments
 6–12 specific comments, each anchored to a reference in the report (section, equation number, figure, or quoted phrase). Cover both genuine strengths and concrete problems, ordered from most to least important. For each problem, say what is wrong and what a fixed version needs to contain — as direction, not as a worked answer. Weight your attention roughly by the pillar percentages.
 
-### Questions
-3–6 questions to ask the author, each with a one-sentence reason explaining what the question checks (a suspected gap in understanding, a derivation step to defend, a limit to test, or an integrity point to confirm). Phrase them Socratically so answering them makes the report better.
+### Criterion scores
+One entry per pillar above, in order. For each: the pillar name, its weight in percent (from the headings above), a score from 0 to 10, and a two-to-three-sentence reason grounded in specific evidence from the report (cite the section, equation, or figure that earned or lost the marks). Score 9–10 only when the pillar is fully met with no gaps; 5–6 for partially met with clear weaknesses; 0–2 when essentially absent.
 
 Write in clear academic English. Be firm on scientific standards but encouraging in tone.`;

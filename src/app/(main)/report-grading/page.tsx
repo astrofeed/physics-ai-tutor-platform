@@ -24,7 +24,7 @@ function ReportGradingContent() {
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           A draft review of a written report or lecture notes — a summary, evidence-referenced
-          comments, and questions for the author. No scores; the final assessment is always yours.
+          comments, and a scored breakdown of each rubric criterion with its reason.
         </p>
       </div>
 

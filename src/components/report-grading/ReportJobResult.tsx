@@ -81,23 +81,31 @@ export function ReportJobResult({ job }: { job: ReportJobDetail }) {
           )}
         </Section>
 
-        <Section title="Questions for the author">
-          {evaluation.questions.length === 0 ? (
-            <p className="text-sm text-gray-500">No questions.</p>
-          ) : (
+        {evaluation.criterionScores ? (
+          <Section title="Criterion scores">
             <ol className="space-y-3">
-              {evaluation.questions.map((question, i) => (
-                <li key={i} className="text-sm space-y-1">
-                  <MarkdownContent
-                    content={`${i + 1}. ${question.question}`}
-                    className="text-sm"
-                  />
-                  <p className="text-gray-500">Why: {question.reason}</p>
+              {evaluation.criterionScores.map((entry, i) => (
+                <li
+                  key={i}
+                  className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-sm space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                      {entry.criterion}
+                      <span className="ml-1.5 text-xs font-normal text-gray-500">
+                        ({entry.weightPercent}%)
+                      </span>
+                    </p>
+                    <span className="shrink-0 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {entry.score}/10
+                    </span>
+                  </div>
+                  <MarkdownContent content={entry.reason} className="text-sm" />
                 </li>
               ))}
             </ol>
-          )}
-        </Section>
+          </Section>
+        ) : null}
       </CardContent>
     </Card>
   );

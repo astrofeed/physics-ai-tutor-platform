@@ -72,7 +72,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
         <CardTitle>Grade a written report</CardTitle>
         <CardDescription>
           Upload the report PDF (or paste its text). The AI reads it against the shared grading
-          instructions and returns a summary, comments, and questions for the author — no scores.
+          instructions and returns a summary, comments, and per-criterion scores with reasons.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
