@@ -81,7 +81,6 @@ export interface CreatePresentationJobInput {
   presenters?: string;
   studentIds?: string;
   track?: string;
-  condition?: string;
   audioBlobUrl?: string;
   /** A transcript the TA pasted directly, skipping transcription. */
   transcript?: string;
@@ -110,7 +109,6 @@ export async function createPresentationJob(
       presenters: input.presenters,
       studentIds: input.studentIds,
       track: input.track,
-      condition: input.condition,
       audioBlobUrl: input.audioBlobUrl,
       transcript: input.transcript,
       slidesBlobUrl: input.slidesBlobUrl,
@@ -145,7 +143,6 @@ function toSummary(
     presenters: job.presenters,
     studentIds: job.studentIds,
     track: job.track,
-    condition: job.condition,
     status: job.status,
     error: job.error,
     totalScore: job.totalScore === null ? null : Number(job.totalScore),
@@ -301,7 +298,6 @@ function buildGradingInput(
     `Student / Question Bank problem: ${job.topic}`,
     `Presenter: ${job.presenters ?? "unknown"}`,
     `Track: ${job.track ? `Track ${job.track}` : "unknown"}`,
-    ...(job.condition ? [`Preparation condition: ${job.condition}`] : []),
   ].join("\n");
 
   const sanitizedTranscript = transcript.replace(/<\/transcript>/gi, "</ transcript>");

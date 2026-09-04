@@ -181,7 +181,6 @@ export function JobList({
                     {[
                       job.studentIds,
                       job.track ? `Track ${job.track}` : null,
-                      job.condition,
                       `effort ${job.reasoningEffort}`,
                       job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,
                       formatTimestamp(job.createdAt),

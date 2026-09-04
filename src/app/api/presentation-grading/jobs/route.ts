@@ -8,7 +8,6 @@ import {
   listPresentationJobs,
 } from "@/lib/services/presentation-grading-service";
 import {
-  PRESENTATION_CONDITIONS,
   PRESENTATION_JOBS_PER_HOUR,
   PRESENTATION_STUDENT_IDS_MAX_CHARS,
   PRESENTATION_TRACKS,
@@ -21,7 +20,6 @@ const CreateJobSchema = z.object({
   presenters: z.string().max(200).optional(),
   studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).optional(),
   track: z.enum(PRESENTATION_TRACKS).optional(),
-  condition: z.enum(PRESENTATION_CONDITIONS).optional(),
   audioBlobUrl: z.string().url().max(1000).optional(),
   transcript: z.string().min(1).max(PRESENTATION_TRANSCRIPT_MAX_CHARS).optional(),
   slidesBlobUrl: z.string().url().max(1000).optional(),
