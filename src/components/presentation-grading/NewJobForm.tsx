@@ -141,18 +141,18 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
         <CardTitle>New grading job</CardTitle>
         <CardDescription>
           The audio is extracted in your browser — the video itself is never uploaded. You can
-          submit several groups back to back; jobs run in the background.
+          submit several students back to back; jobs run in the background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="job-topic">
-              Group / topic <span className="text-red-500">*</span>
+              Question Bank problem / topic <span className="text-red-500">*</span>
             </Label>
             <Input
               id="job-topic"
-              placeholder="e.g. Group 42 — Projectile motion with drag"
+              placeholder="e.g. QB-12 — Induced emf in a rotating loop"
               maxLength={200}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
@@ -160,11 +160,11 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="job-presenters">
-              Presenter names <span className="text-red-500">*</span>
+              Presenter name <span className="text-red-500">*</span>
             </Label>
             <Input
               id="job-presenters"
-              placeholder="e.g. 王小明, 陳大文"
+              placeholder="e.g. 王小明"
               maxLength={200}
               value={presenters}
               onChange={(e) => setPresenters(e.target.value)}
@@ -176,7 +176,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
           <Label htmlFor="job-student-ids">Student IDs</Label>
           <Input
             id="job-student-ids"
-            placeholder="e.g. 113012345, 113054321 — comma-separated, used in CSV exports"
+            placeholder="e.g. 113012345 — used in CSV exports"
             maxLength={200}
             value={studentIds}
             onChange={(e) => setStudentIds(e.target.value)}

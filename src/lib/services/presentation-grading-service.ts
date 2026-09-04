@@ -298,17 +298,16 @@ function buildGradingInput(
   slides: SlidesInput
 ) {
   const metadata = [
-    `Group number / topic: ${job.topic}`,
-    `Presenters: ${job.presenters ?? "unknown"}`,
-    `Project track: ${job.track ? `Track ${job.track}` : "unknown"}`,
-    `Preparation condition: ${job.condition ?? "unknown"}`,
-    "Number of members who spoke: unknown",
+    `Student / Question Bank problem: ${job.topic}`,
+    `Presenter: ${job.presenters ?? "unknown"}`,
+    `Track: ${job.track ? `Track ${job.track}` : "unknown"}`,
+    ...(job.condition ? [`Preparation condition: ${job.condition}`] : []),
   ].join("\n");
 
   const sanitizedTranscript = transcript.replace(/<\/transcript>/gi, "</ transcript>");
   const textParts = [
     rubricContent,
-    `## GROUP INFORMATION\n${metadata}`,
+    `## STUDENT INFORMATION\n${metadata}`,
     `<transcript>\n${sanitizedTranscript}\n</transcript>`,
   ];
   if (slides.text) {
