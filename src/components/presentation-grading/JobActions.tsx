@@ -61,7 +61,7 @@ export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: 
   const handleSave = async () => {
     const nextTopic = draftTopic.trim();
     if (!nextTopic) {
-      toast.error("Group / topic cannot be empty");
+      toast.error("Problem / topic cannot be empty");
       return;
     }
     setSaving(true);
@@ -108,7 +108,7 @@ export function JobActions({ jobId, topic, presenters, studentIds, onUpdated }: 
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-topic">Group / topic</Label>
+              <Label htmlFor="edit-topic">Question Bank problem / topic</Label>
               <Input
                 id="edit-topic"
                 maxLength={200}

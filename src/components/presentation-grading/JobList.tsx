@@ -81,9 +81,9 @@ export function JobList({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search presenter or group…"
+        placeholder="Search presenter, student ID or topic…"
         className="pl-8 pr-8"
-        aria-label="Search by presenter name or group/topic"
+        aria-label="Search by presenter name, student ID or problem/topic"
       />
       {search ? (
         <button
@@ -115,7 +115,7 @@ export function JobList({
           title={search ? "No matching results" : "No grading jobs yet"}
           description={
             search
-              ? "Try a different presenter name or group/topic."
+              ? "Try a different presenter name, student ID or topic."
               : "Submit a presentation above — results will appear here."
           }
         />
