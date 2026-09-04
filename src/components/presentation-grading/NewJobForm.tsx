@@ -101,7 +101,6 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [presenters, setPresenters] = useState("");
   const [studentIds, setStudentIds] = useState("");
   const [track, setTrack] = useState<"A" | "B" | "unknown">("unknown");
-  const [condition, setCondition] = useState<"AI-assisted" | "no-AI" | "unknown">("unknown");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
   const [source, setSource] = useState<"video" | "transcript">("video");
   const [video, setVideo] = useState<File | null>(null);
@@ -119,7 +118,6 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       presenters: presenters.trim(),
       studentIds: studentIds.trim() || undefined,
       track: track === "unknown" ? undefined : track,
-      condition: condition === "unknown" ? undefined : condition,
       video: source === "video" ? video : null,
       transcript: source === "transcript" ? transcript.trim() : null,
       slides,
@@ -183,7 +181,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Track</Label>
             <Select value={track} onValueChange={(v) => setTrack(v as typeof track)}>
@@ -194,19 +192,6 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
                 <SelectItem value="unknown">Unknown</SelectItem>
                 <SelectItem value="A">Track A — One Equation, One Model</SelectItem>
                 <SelectItem value="B">Track B — Counterfactual Physics Lab</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Condition</Label>
-            <Select value={condition} onValueChange={(v) => setCondition(v as typeof condition)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unknown">Unknown</SelectItem>
-                <SelectItem value="AI-assisted">AI-assisted</SelectItem>
-                <SelectItem value="no-AI">No-AI</SelectItem>
               </SelectContent>
             </Select>
           </div>

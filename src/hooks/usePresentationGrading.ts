@@ -212,7 +212,6 @@ export interface NewJobInput {
   presenters?: string;
   studentIds?: string;
   track?: "A" | "B";
-  condition?: "AI-assisted" | "no-AI";
   /** Exactly one of video / transcript is provided. */
   video: File | null;
   transcript: string | null;
@@ -288,7 +287,6 @@ export function useSubmitPresentationJob(onCreated: () => void) {
             presenters: input.presenters,
             studentIds: input.studentIds,
             track: input.track,
-            condition: input.condition,
             audioBlobUrl,
             transcript: input.transcript ?? undefined,
             slidesBlobUrl,

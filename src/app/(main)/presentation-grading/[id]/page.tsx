@@ -59,7 +59,6 @@ function JobDetailContent({ id }: { id: string }) {
               job.presenters,
               job.studentIds,
               job.track ? `Track ${job.track}` : null,
-              job.condition,
               job.model,
               `effort ${job.reasoningEffort}`,
               job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,

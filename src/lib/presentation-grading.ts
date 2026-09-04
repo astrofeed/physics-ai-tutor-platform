@@ -33,7 +33,6 @@ export const REASONING_EFFORT_OPTIONS = ["high", "xhigh"] as const;
 export type PresentationReasoningEffort = (typeof REASONING_EFFORT_OPTIONS)[number];
 
 export const PRESENTATION_TRACKS = ["A", "B"] as const;
-export const PRESENTATION_CONDITIONS = ["AI-assisted", "no-AI"] as const;
 
 /** DB-backed hourly cap on new jobs per staff member (guards API spend). */
 export const PRESENTATION_JOBS_PER_HOUR = 60;
@@ -56,7 +55,6 @@ export interface PresentationJobSummary {
   presenters: string | null;
   studentIds: string | null;
   track: string | null;
-  condition: string | null;
   status: PresentationJobStatusValue;
   error: string | null;
   totalScore: number | null;
