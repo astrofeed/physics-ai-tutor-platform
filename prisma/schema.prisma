@@ -249,10 +249,14 @@ model VerificationToken {
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  userId    String
-  folderId  String?
-  title     String    @default("New Chat")
+  id                  String    @id @default(cuid())
+  userId              String
+  folderId            String?
+  title               String    @default("New Chat")
+  // Rolling summary of messages that have aged out of the AI context window,
+  // and how many of the oldest messages it covers.
+  contextSummary      String?   @db.Text
+  contextSummaryCount Int       @default(0)
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
