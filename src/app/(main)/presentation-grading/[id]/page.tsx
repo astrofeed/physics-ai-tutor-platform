@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { JobActions } from "@/components/presentation-grading/JobActions";
-import { JobResult } from "@/components/presentation-grading/JobResult";
+import { PresentationGradedView } from "@/components/presentation-grading/PresentationGradedView";
 import {
   STATUS_BADGE_VARIANTS,
   STATUS_LABELS,
@@ -105,7 +105,9 @@ function JobDetailContent({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {job.status === "DONE" ? <JobResult job={job} /> : null}
+      {job.status === "DONE" ? (
+        <PresentationGradedView job={job} onChanged={() => void refresh()} />
+      ) : null}
     </div>
   );
 }
