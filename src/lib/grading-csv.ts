@@ -1,7 +1,9 @@
 /**
  * CSV export for the grading tools. Builds spreadsheet-friendly CSVs from
  * graded jobs: report jobs export per-criterion scores/reasons, presentation
- * jobs export per-category reference scores only (no questions).
+ * jobs export per-category reference scores only (no questions). Every row
+ * pairs the AI score with the staff score (when entered) and records whether
+ * the staff graded before opening the AI result.
  */
 
 import {
@@ -12,6 +14,7 @@ import {
   parseEvaluation,
   type PresentationJobDetail,
 } from "@/lib/presentation-grading";
+import { gradedBlind, weightedAverage, type HumanGrading } from "@/lib/human-grading";
 
 type CsvValue = string | number | null | undefined;
 
@@ -25,6 +28,27 @@ function toCsv(rows: CsvValue[][]): string {
   return "\uFEFF" + rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
 }
 
+const HUMAN_AUDIT_HEADER: CsvValue[] = [
+  "Human graded at",
+  "Human grader",
+  "AI revealed at",
+  "Human graded blind",
+];
+
+function humanAuditCells(human: HumanGrading): CsvValue[] {
+  const blind = gradedBlind(human);
+  return [
+    human.gradedAt ?? "",
+    human.gradedByName ?? "",
+    human.aiRevealedAt ?? "",
+    blind === null ? "" : blind ? "yes" : "no",
+  ];
+}
+
+function humanScoresByName(human: HumanGrading): Map<string, number> {
+  return new Map(human.scores.map((entry) => [entry.name, entry.score]));
+}
+
 export function downloadCsv(filename: string, content: string): void {
   const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -36,9 +60,9 @@ export function downloadCsv(filename: string, content: string): void {
 }
 
 /**
- * One row per report job: student ID, title, per-criterion score + reason
- * (columns follow the first graded job's rubric order), weighted total,
- * and the AI summary. Ungraded/legacy jobs get blank score cells.
+ * One row per report job: student ID, title, per-criterion AI score, human
+ * score + AI reason (columns follow the first graded job's rubric order),
+ * weighted totals, and the AI summary. Ungraded/legacy jobs get blank cells.
  */
 export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
   const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson));
@@ -60,21 +84,28 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     "Authors",
     "Status",
     ...criteria.flatMap(({ criterion, weightPercent }) => [
-      `${criterion} (${weightPercent}%) score`,
-      `${criterion} reason`,
+      `${criterion} (${weightPercent}%) AI score`,
+      `${criterion} (${weightPercent}%) human score`,
+      `${criterion} AI reason`,
     ]),
-    "Weighted total (0-10)",
+    "AI weighted total (0-10)",
+    "Human weighted total (0-10)",
+    ...HUMAN_AUDIT_HEADER,
     "Summary",
   ];
 
   const rows = jobs.map((job, i) => {
     const scores = evaluations[i]?.criterionScores ?? null;
     const byCriterion = new Map(scores?.map((s) => [s.criterion, s]) ?? []);
-    const weightSum = scores?.reduce((sum, s) => sum + s.weightPercent, 0) ?? 0;
-    const weightedTotal =
-      scores && weightSum > 0
-        ? scores.reduce((sum, s) => sum + s.score * s.weightPercent, 0) / weightSum
-        : null;
+    const humanByCriterion = humanScoresByName(job.human);
+    const weightOf = (criterion: string) => byCriterion.get(criterion)?.weightPercent;
+    const aiTotal = scores
+      ? weightedAverage(
+          scores.map((s) => ({ name: s.criterion, score: s.score })),
+          weightOf
+        )
+      : null;
+    const humanTotal = weightedAverage(job.human.scores, weightOf);
     return [
       job.studentId,
       job.title,
@@ -82,9 +113,11 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       job.status,
       ...criteria.flatMap(({ criterion }) => {
         const score = byCriterion.get(criterion);
-        return [score?.score ?? "", score?.reason ?? ""];
+        return [score?.score ?? "", humanByCriterion.get(criterion) ?? "", score?.reason ?? ""];
       }),
-      weightedTotal === null ? "" : weightedTotal.toFixed(2),
+      aiTotal === null ? "" : aiTotal.toFixed(2),
+      humanTotal === null ? "" : humanTotal.toFixed(2),
+      ...humanAuditCells(job.human),
       evaluations[i]?.summary ?? "",
     ];
   });
@@ -93,9 +126,9 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
 }
 
 /**
- * One row per presentation job: identifying fields plus the reference score
- * of every scorecard category and the total — no questions or comments.
- * Category columns follow the first graded job's scorecard order.
+ * One row per presentation job: identifying fields plus the AI and human
+ * score of every scorecard category and the totals — no questions or
+ * comments. Category columns follow the first graded job's scorecard order.
  */
 export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
   const evaluations = jobs.map((job) => parseEvaluation(job.summaryJson));
@@ -117,22 +150,37 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
     "Student IDs",
     "Track",
     "Status",
-    ...categories.map(({ category, maxPoints }) => `${category} (/${maxPoints})`),
-    "Total score (/100)",
+    ...categories.flatMap(({ category, maxPoints }) => [
+      `${category} (/${maxPoints}) AI`,
+      `${category} (/${maxPoints}) human`,
+    ]),
+    "AI total (/100)",
+    "Human total (/100)",
+    ...HUMAN_AUDIT_HEADER,
   ];
 
   const rows = jobs.map((job, i) => {
     const byCategory = new Map(
       evaluations[i]?.scorecard.map((entry) => [entry.category, entry]) ?? []
     );
+    const humanByCategory = humanScoresByName(job.human);
+    const humanTotal =
+      job.human.scores.length > 0
+        ? job.human.scores.reduce((sum, entry) => sum + entry.score, 0)
+        : null;
     return [
       job.topic,
       job.presenters,
       job.studentIds,
       job.track,
       job.status,
-      ...categories.map(({ category }) => byCategory.get(category)?.awardedPoints ?? ""),
+      ...categories.flatMap(({ category }) => [
+        byCategory.get(category)?.awardedPoints ?? "",
+        humanByCategory.get(category) ?? "",
+      ]),
       job.totalScore ?? "",
+      humanTotal ?? "",
+      ...humanAuditCells(job.human),
     ];
   });
 

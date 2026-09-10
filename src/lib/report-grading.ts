@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import type { HumanGrading } from "@/lib/human-grading";
 
 export const REASONING_EFFORT_OPTIONS = ["high", "xhigh"] as const;
 
@@ -48,6 +49,7 @@ export interface ReportJobDetail extends ReportJobSummary {
   reportText: string | null;
   reportFilename: string | null;
   resultJson: string | null;
+  human: HumanGrading;
 }
 
 /**
@@ -55,10 +57,12 @@ export interface ReportJobDetail extends ReportJobSummary {
  * structured outputs): a summary, evidence-referenced comments, and a score
  * with its reason for each rubric criterion.
  */
+export const REPORT_CRITERION_MAX_SCORE = 10;
+
 export const ReportCriterionScoreSchema = z.object({
   criterion: z.string(),
   weightPercent: z.number().min(0).max(100),
-  score: z.number().min(0).max(10),
+  score: z.number().min(0).max(REPORT_CRITERION_MAX_SCORE),
   reason: z.string(),
 });
 

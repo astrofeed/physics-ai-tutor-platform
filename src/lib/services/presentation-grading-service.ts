@@ -18,6 +18,7 @@ import {
 } from "@/lib/presentation-grading";
 import { extractPptxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
+import { toHumanGrading } from "@/lib/services/human-grading-service";
 
 const MAX_SLIDES_TEXT_CHARS = 60_000;
 
@@ -192,7 +193,11 @@ export async function getPresentationJob(
 ): Promise<PresentationJobDetail | null> {
   const job = await prisma.presentationGradingJob.findUnique({
     where: { id },
-    include: { createdBy: { select: { name: true } } },
+    include: {
+      createdBy: { select: { name: true } },
+      humanGradedBy: { select: { name: true } },
+      humanScores: { select: { category: true, score: true } },
+    },
   });
   if (!job) return null;
   return {
@@ -203,6 +208,10 @@ export async function getPresentationJob(
     partIOutput: job.partIOutput,
     partIIOutput: job.partIIOutput,
     summaryJson: job.summaryJson,
+    human: toHumanGrading(
+      job,
+      job.humanScores.map((row) => ({ name: row.category, score: row.score }))
+    ),
   };
 }
 

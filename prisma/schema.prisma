@@ -74,6 +74,8 @@ model User {
   presentationGradingJobs PresentationGradingJob[] @relation("PresentationJobCreatedBy")
   reportRubrics    ReportRubric[]     @relation("ReportRubricUpdatedBy")
   reportGradingJobs ReportGradingJob[] @relation("ReportJobCreatedBy")
+  humanGradedReportJobs       ReportGradingJob[]       @relation("ReportJobHumanGradedBy")
+  humanGradedPresentationJobs PresentationGradingJob[] @relation("PresentationJobHumanGradedBy")
 }
 
 enum ReportJobStatus {
@@ -126,12 +128,33 @@ model ReportGradingJob {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
-  createdBy User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
-  rubric    ReportRubric @relation(fields: [rubricId], references: [id])
+  /// When staff first opened the AI review; compared with humanGradedAt to
+  /// tell blind human grades from ones entered after seeing the AI's.
+  aiRevealedAt    DateTime?
+  humanGradedAt   DateTime?
+  humanGradedById String?
+
+  createdBy     User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
+  humanGradedBy User?        @relation("ReportJobHumanGradedBy", fields: [humanGradedById], references: [id])
+  rubric        ReportRubric @relation(fields: [rubricId], references: [id])
+  humanScores   ReportHumanScore[]
 
   @@index([rubricId])
   @@index([status, createdAt])
   @@index([createdById, createdAt])
+}
+
+/// A TA's/professor's own score for one rubric criterion of a report, kept
+/// beside the AI's so the two can be compared at the end of the term.
+model ReportHumanScore {
+  id        String  @id @default(cuid())
+  jobId     String
+  criterion String
+  score     Decimal @db.Decimal(10, 2)
+
+  job ReportGradingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, criterion])
 }
 
 enum PresentationJobStatus {
@@ -192,12 +215,30 @@ model PresentationGradingJob {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
-  createdBy User               @relation("PresentationJobCreatedBy", fields: [createdById], references: [id])
-  rubric    PresentationRubric @relation(fields: [rubricId], references: [id])
+  aiRevealedAt    DateTime?
+  humanGradedAt   DateTime?
+  humanGradedById String?
+
+  createdBy     User               @relation("PresentationJobCreatedBy", fields: [createdById], references: [id])
+  humanGradedBy User?              @relation("PresentationJobHumanGradedBy", fields: [humanGradedById], references: [id])
+  rubric        PresentationRubric @relation(fields: [rubricId], references: [id])
+  humanScores   PresentationHumanScore[]
 
   @@index([rubricId])
   @@index([status, createdAt])
   @@index([createdById, createdAt])
+}
+
+/// Staff score for one scorecard category of a presentation (see ReportHumanScore).
+model PresentationHumanScore {
+  id       String  @id @default(cuid())
+  jobId    String
+  category String
+  score    Decimal @db.Decimal(10, 2)
+
+  job PresentationGradingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, category])
 }
 
 model Account {

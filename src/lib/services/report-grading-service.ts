@@ -15,6 +15,7 @@ import {
   type ReportReasoningEffort,
 } from "@/lib/report-grading";
 import { logger } from "@/lib/logger";
+import { toHumanGrading } from "@/lib/services/human-grading-service";
 
 let openaiClient: OpenAI | null = null;
 
@@ -167,7 +168,11 @@ export async function listReportJobs(page: number, pageSize: number, query?: str
 export async function getReportJob(id: string): Promise<ReportJobDetail | null> {
   const job = await prisma.reportGradingJob.findUnique({
     where: { id },
-    include: { createdBy: { select: { name: true } } },
+    include: {
+      createdBy: { select: { name: true } },
+      humanGradedBy: { select: { name: true } },
+      humanScores: { select: { criterion: true, score: true } },
+    },
   });
   if (!job) return null;
   return {
@@ -175,6 +180,10 @@ export async function getReportJob(id: string): Promise<ReportJobDetail | null> 
     reportText: job.reportText,
     reportFilename: job.reportFilename,
     resultJson: job.resultJson,
+    human: toHumanGrading(
+      job,
+      job.humanScores.map((row) => ({ name: row.criterion, score: row.score }))
+    ),
   };
 }
 
