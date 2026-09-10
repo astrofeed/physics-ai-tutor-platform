@@ -1,10 +1,14 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import {
+  DOCX_MIME_TYPE,
   MAX_EXTRACTED_CHARS,
   MAX_PDF_PAGES,
   PDF_MIME_TYPE,
+  PPTX_MIME_TYPE,
+  XLSX_MIME_TYPE,
   classifyAttachment,
 } from "@/lib/chat-attachments";
+import { extractDocxText, extractPptxText, extractXlsxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
 
 export interface DocumentSource {
@@ -62,10 +66,18 @@ export async function extractDocumentText(
       throw new Error(`Stored file is ${buffer.byteLength} bytes, over the limit`);
     }
 
-    if (spec.mimeType === PDF_MIME_TYPE) {
-      return await extractPdf(buffer);
+    switch (spec.mimeType) {
+      case PDF_MIME_TYPE:
+        return await extractPdf(buffer);
+      case PPTX_MIME_TYPE:
+        return truncate(await extractPptxText(buffer));
+      case DOCX_MIME_TYPE:
+        return truncate(await extractDocxText(buffer));
+      case XLSX_MIME_TYPE:
+        return truncate(await extractXlsxText(buffer));
+      default:
+        return truncate(new TextDecoder().decode(buffer));
     }
-    return truncate(new TextDecoder().decode(buffer));
   } catch (error) {
     logger.error("Document extraction failed", {
       filename: source.filename,

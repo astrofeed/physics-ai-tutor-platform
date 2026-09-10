@@ -10,7 +10,9 @@
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+/** PDF and Office files (PPTX, DOCX, XLSX). */
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+/** Plain text, Markdown and CSV. */
 export const MAX_TEXT_BYTES = 1 * 1024 * 1024;
 
 export const MAX_IMAGES_PER_HOUR = 60;
@@ -23,14 +25,30 @@ export const MAX_PDF_PAGES = 30;
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 export const PDF_MIME_TYPE = "application/pdf";
-export const TEXT_MIME_TYPES = ["text/markdown", "text/x-markdown", "text/plain"] as const;
+export const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+export const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const OFFICE_MIME_TYPES = [PPTX_MIME_TYPE, DOCX_MIME_TYPE, XLSX_MIME_TYPE] as const;
+export const TEXT_MIME_TYPES = ["text/markdown", "text/x-markdown", "text/plain", "text/csv"] as const;
 
-export const DOCUMENT_MIME_TYPES = [PDF_MIME_TYPE, ...TEXT_MIME_TYPES] as const;
+export const DOCUMENT_MIME_TYPES = [PDF_MIME_TYPE, ...OFFICE_MIME_TYPES, ...TEXT_MIME_TYPES] as const;
 export const ATTACHMENT_MIME_TYPES = [...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES] as const;
 
-/** `accept` attribute for the file picker. Markdown often arrives with an empty
- * or wrong MIME type, so extensions are listed alongside the MIME types. */
-export const ATTACHMENT_ACCEPT = [...ATTACHMENT_MIME_TYPES, ".md", ".markdown", ".txt"].join(",");
+/** Shown wherever the user is told what they can attach. */
+export const SUPPORTED_ATTACHMENTS_LABEL = "image, PDF, PPTX, DOCX, XLSX, CSV, .md or .txt";
+
+/** `accept` attribute for the file picker. Markdown and CSV often arrive with an
+ * empty or wrong MIME type, so extensions are listed alongside the MIME types. */
+export const ATTACHMENT_ACCEPT = [
+  ...ATTACHMENT_MIME_TYPES,
+  ".md",
+  ".markdown",
+  ".txt",
+  ".csv",
+  ".pptx",
+  ".docx",
+  ".xlsx",
+].join(",");
 
 export type AttachmentKind = "image" | "document";
 
@@ -44,12 +62,21 @@ const EXTENSION_MIME_TYPES: Record<string, string> = {
   md: "text/markdown",
   markdown: "text/markdown",
   txt: "text/plain",
+  csv: "text/csv",
   pdf: PDF_MIME_TYPE,
+  pptx: PPTX_MIME_TYPE,
+  docx: DOCX_MIME_TYPE,
+  xlsx: XLSX_MIME_TYPE,
 };
 
+/** Browsers report Office files inconsistently (or as `application/zip`), so the
+ * extension wins for them. */
+const EXTENSION_OVERRIDES_MIME = new Set(["pptx", "docx", "xlsx", "csv"]);
+
 function mimeTypeFor(filename: string, declaredType: string): string | null {
-  if ((ATTACHMENT_MIME_TYPES as readonly string[]).includes(declaredType)) return declaredType;
   const extension = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (EXTENSION_OVERRIDES_MIME.has(extension)) return EXTENSION_MIME_TYPES[extension];
+  if ((ATTACHMENT_MIME_TYPES as readonly string[]).includes(declaredType)) return declaredType;
   return EXTENSION_MIME_TYPES[extension] ?? null;
 }
 
@@ -61,8 +88,8 @@ export function classifyAttachment(filename: string, declaredType: string): Atta
   if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType)) {
     return { kind: "image", mimeType, maxBytes: MAX_IMAGE_BYTES };
   }
-  if (mimeType === PDF_MIME_TYPE) {
-    return { kind: "document", mimeType, maxBytes: MAX_PDF_BYTES };
+  if (mimeType === PDF_MIME_TYPE || (OFFICE_MIME_TYPES as readonly string[]).includes(mimeType)) {
+    return { kind: "document", mimeType, maxBytes: MAX_DOCUMENT_BYTES };
   }
   return { kind: "document", mimeType, maxBytes: MAX_TEXT_BYTES };
 }
@@ -82,7 +109,10 @@ export function isImageMimeType(mimeType: string): boolean {
   return (IMAGE_MIME_TYPES as readonly string[]).includes(mimeType);
 }
 
+/** Rounds up to one decimal so a file just over a limit never prints as the
+ * same number as the limit ("1.1 MB" vs "1 MB", never "1 MB" vs "1 MB"). */
 export function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
-  return mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (mb >= 1) return `${Math.ceil(mb * 10) / 10} MB`;
+  return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
 }

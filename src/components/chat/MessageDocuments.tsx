@@ -2,7 +2,7 @@ import { FileText } from "lucide-react";
 import { formatBytes } from "@/lib/chat-attachments";
 import type { DocumentAttachment } from "@/components/chat/types";
 
-/** Chips for the PDF / Markdown / text files attached to a message. */
+/** Chips for the document files (PDF, Office, text) attached to a message. */
 export function MessageDocuments({ documents }: { documents: DocumentAttachment[] }) {
   if (!documents.length) return null;
 
