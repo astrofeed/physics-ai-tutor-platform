@@ -38,6 +38,29 @@ PRIVATE_UPLOADS_DIR=/home/ubuntu/prXX-uploads PORT=3900 npm run dev
 `BLOB_READ_WRITE_TOKEN` must be **unset**, otherwise uploads go to Vercel Blob. Uploaded files are
 always served through `/api/files/<id>?name=<filename>`, which authorizes every read.
 
+Chat attachments (`/api/upload/client`) and presentation-grading slide uploads have **no** local
+fallback — they are Blob client uploads. Two things follow:
+
+- With the token unset, `@vercel/blob`'s `handleUpload` throws "No token found" **before** it calls
+  `onBeforeGenerateToken`, so the route's own file-type / size / quota checks never run. To exercise
+  those checks without a real store, start the server with a syntactically valid dummy token such as
+  `BLOB_READ_WRITE_TOKEN=vercel_blob_rw_E2EDUMMYSTORE_e2edummysecret0000000000` — token generation
+  is a local HMAC (no network), so accepted files get a 200 + client token and rejected ones get the
+  route's 400 message. The subsequent browser PUT to Blob will fail, which is fine for classification
+  tests. Probe the route from the page (same-origin, e2e cookie) by POSTing
+  `{type:'blob.generate-client-token', payload:{pathname, callbackUrl, multipart:false, clientPayload:JSON.stringify({filename, contentType, sizeBytes})}}`.
+- To get a sent message with an attachment all the way into the transcript, temporarily replace the
+  `upload()` call in `src/hooks/use-chat-attachments.ts` with a fake `https://…blob.vercel-storage.com/<name>`
+  URL (revert afterwards and disclose it). Server-side text extraction of that URL will fail with a
+  404 — evidence extraction separately with a `npx tsx` script against `src/lib/services/*-extraction.ts`.
+
+Real drag/drop onto the chat needs `File` objects with real bytes: serve the fixture dir with a tiny
+CORS-enabled `python3 -m http.server`-style script on another port, `fetch()` the bytes in the page,
+build `new File([blob], name, {type})`, and dispatch `dragenter`/`dragover`/`drop` `DragEvent`s with a
+`DataTransfer` on an element *inside* the chat column (e.g. the message textarea). Always dispatch
+`dragleave` or `drop` afterwards, otherwise the overlay stays up. Chrome's minimum window width is
+~530px, so 375px checks need DevTools device mode (F12 → Ctrl+Shift+M, type 375 in the width box).
+
 ## Identity switching
 
 `E2E_TEST_MODE=true` bypasses NextAuth and reads the **`e2e-test-user-email` cookie**. Switch users
@@ -169,9 +192,39 @@ the question field is `questionType` (not `type`), and the multiple-choice enum 
 - Synthetic drag/drop must be dispatched on an element *inside* the chat column div (e.g. the
   message textarea), not on `<main>` — the drop handlers live on the chat column.
 
+## Proving what the model receives (no real key): mock OpenAI
+
+The openai-node SDK honours `OPENAI_BASE_URL`, so the whole chat path can run against a local mock
+and every outbound request body can be inspected (needed to verify prompt/attachment construction
+such as `input_file` / `input_image` / `<document>` blocks — the DB only stores plain text).
+
+- Run a tiny HTTP server on `127.0.0.1:<port>` that accepts `POST /v1/responses`, saves the JSON
+  body to a file, and replies:
+  - `stream: true` → SSE with `event:`/`data:` lines: `response.created`, N×
+    `response.output_text.delta` (`{"type","delta","item_id","output_index","content_index"}`),
+    then `response.completed`. The chat route only consumes `response.output_text.delta`,
+    `response.reasoning_summary_text.delta` and `response.output_text.annotation.added`.
+  - `stream` absent (title generation, summaries) → JSON with `output_text` and an
+    `output[].content[].text` message.
+- Start the app with `env -u DEEPSEEK_API_KEY -u GP2_OPENAI_API_KEY OPENAI_API_KEY=sk-dummy
+  OPENAI_BASE_URL=http://127.0.0.1:<port>/v1 …`. The session environment exports real provider
+  keys — if `DEEPSEEK_API_KEY` is set, chat silently routes to DeepSeek (hard-coded base URL, not
+  mockable) and the mock never sees a request.
+- Document attachments are fetched server-side and must pass `isUploadedBlobUrl` (https
+  `*.blob.vercel-storage.com`). To exercise real extraction without Blob: serve fixtures from a
+  local CORS server, stub `upload()` in `use-chat-attachments.ts` to return
+  `http://127.0.0.1:<fixture-port>/<name>`, and temporarily let `isUploadedBlobUrl` accept that
+  origin. Mark both edits `E2E-TEST-STUB` and `git checkout` them at teardown.
+- Trim base64 before reporting (`data:application/pdf;base64,` payloads are ~23k chars for a 17 KB
+  PDF); a regex on `(data:[^;]+;base64,)([A-Za-z0-9+/=]{40})[A-Za-z0-9+/=]*` works.
+- pdfjs logs `Warning: UnknownErrorException: Ensure that the standardFontDataUrl API parameter is
+  provided.` on every PDF extraction; it is benign (extraction still succeeds).
+
 ## Teardown
 
 ```bash
+# NOTE: `pkill -f "next dev"` also matches the shell running it when issued through the exec tool
+# (the pattern is in the command line) — run pkill in its own call, then continue in a fresh call.
 pkill -f "next dev"; pkill -f "next-server"; sleep 4
 ss -ltn | grep 3900 || echo PORT_CLOSED
 docker exec physics-ai-tutor-platform-db-1 psql -U postgres -d postgres -c "DROP DATABASE IF EXISTS $DB;"
