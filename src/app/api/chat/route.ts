@@ -7,7 +7,7 @@ import { checkContentFlags, handleContentFlag, trackMessageVolume, trackRateLimi
 import { checkAndBanSpammer } from "@/lib/spam-guard";
 import { extractDocumentText } from "@/lib/services/document-extraction";
 import { withAttachmentText } from "@/lib/services/chat-context";
-import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_PDF_BYTES, isUploadedBlobUrl } from "@/lib/chat-attachments";
+import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_DOCUMENT_BYTES, isUploadedBlobUrl } from "@/lib/chat-attachments";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
@@ -15,7 +15,7 @@ const DocumentSchema = z.object({
   url: z.string().url(),
   filename: z.string().min(1).max(300),
   mimeType: z.string().min(1).max(200),
-  sizeBytes: z.number().int().positive().max(MAX_PDF_BYTES),
+  sizeBytes: z.number().int().positive().max(MAX_DOCUMENT_BYTES),
 });
 
 const ChatInputSchema = z

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Paperclip } from "lucide-react";
+import { SUPPORTED_ATTACHMENTS_LABEL } from "@/lib/chat-attachments";
 
 /** Full-container overlay shown while files are dragged over the chat. */
 export function FileDropOverlay({ visible }: { visible: boolean }) {
@@ -14,7 +15,7 @@ export function FileDropOverlay({ visible }: { visible: boolean }) {
           Drop files to attach
         </p>
         <p className="text-xs text-blue-500 dark:text-blue-400">
-          Images, PDF, .md, or .txt
+          {SUPPORTED_ATTACHMENTS_LABEL}
         </p>
       </div>
     </div>

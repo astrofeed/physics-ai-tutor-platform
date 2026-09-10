@@ -1,6 +1,5 @@
 import OpenAI, { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
-import JSZip from "jszip";
 import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { isUploadedBlobUrl } from "@/lib/chat-attachments";
@@ -17,6 +16,7 @@ import {
   type PresentationJobSummary,
   type PresentationReasoningEffort,
 } from "@/lib/presentation-grading";
+import { extractPptxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
 
 const MAX_SLIDES_TEXT_CHARS = 60_000;
@@ -230,24 +230,6 @@ async function transcribeAudio(url: string): Promise<string> {
   return transcription.text;
 }
 
-/** Pulls the visible text out of every slide of a PPTX (a zip of XML files). */
-async function extractPptxText(buffer: ArrayBuffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
-  const slideNames = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numberOf = (n: string) => parseInt(n.match(/slide(\d+)\.xml$/)?.[1] ?? "0", 10);
-      return numberOf(a) - numberOf(b);
-    });
-  const pages: string[] = [];
-  for (let index = 0; index < slideNames.length; index++) {
-    const xml = await zip.files[slideNames[index]].async("string");
-    const texts = Array.from(xml.matchAll(/<a:t>([^<]*)<\/a:t>/g), (m) => m[1]);
-    pages.push(`[slide ${index + 1}]\n${texts.join("\n")}`);
-  }
-  return pages.join("\n\n").slice(0, MAX_SLIDES_TEXT_CHARS);
-}
-
 interface SlidesInput {
   text: string | null;
   pdf: { filename: string; base64: string } | null;
@@ -258,7 +240,7 @@ async function loadSlides(job: JobRecord): Promise<SlidesInput> {
   const buffer = await downloadBlob(job.slidesBlobUrl, PRESENTATION_SLIDES_MAX_BYTES);
   const filename = job.slidesFilename ?? "slides.pdf";
   if (filename.toLowerCase().endsWith(".pptx")) {
-    return { text: await extractPptxText(buffer), pdf: null };
+    return { text: (await extractPptxText(buffer)).slice(0, MAX_SLIDES_TEXT_CHARS), pdf: null };
   }
   // PDFs go to the model as files so it also sees diagrams and figures.
   return {

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   ATTACHMENT_ACCEPT,
   MAX_ATTACHMENTS_PER_MESSAGE,
+  SUPPORTED_ATTACHMENTS_LABEL,
   formatBytes,
 } from "@/lib/chat-attachments";
 import type { PendingAttachment } from "@/hooks/use-chat-attachments";
@@ -138,14 +139,14 @@ export function ChatInput({
                 e.target.value = "";
               }}
               className="hidden"
-              aria-label="Upload image, PDF, or Markdown file"
+              aria-label={`Upload an ${SUPPORTED_ATTACHMENTS_LABEL} file`}
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               aria-label="Attach a file"
-              title="Attach an image, PDF, .md, or .txt file"
+              title={`Attach an ${SUPPORTED_ATTACHMENTS_LABEL} file`}
             >
               <Paperclip className="h-4 w-4" />
             </button>

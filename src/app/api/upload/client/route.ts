@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getEffectiveSession } from "@/lib/impersonate";
 import { prisma } from "@/lib/prisma";
-import { classifyAttachment, formatBytes } from "@/lib/chat-attachments";
+import { SUPPORTED_ATTACHMENTS_LABEL, classifyAttachment, formatBytes } from "@/lib/chat-attachments";
 import { checkUploadQuota, recordUpload } from "@/lib/services/upload-quota";
 import { BANNED_MESSAGE, DELETED_MESSAGE } from "@/lib/api-auth";
 import { logger } from "@/lib/logger";
@@ -72,7 +72,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         const spec = classifyAttachment(filename || pathname, contentType);
         if (!spec) {
-          throw new Error("Unsupported file type. Allowed: JPEG, PNG, GIF, WebP, PDF, Markdown, plain text");
+          throw new Error(`Unsupported file type. Allowed: ${SUPPORTED_ATTACHMENTS_LABEL}`);
         }
         if (sizeBytes > spec.maxBytes) {
           throw new Error(`"${filename}" exceeds the ${formatBytes(spec.maxBytes)} limit for this file type`);

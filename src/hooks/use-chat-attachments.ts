@@ -7,6 +7,7 @@ import {
   MAX_DOCUMENTS_PER_DAY,
   MAX_DOCUMENT_BYTES_PER_DAY,
   MAX_IMAGES_PER_HOUR,
+  SUPPORTED_ATTACHMENTS_LABEL,
   classifyAttachment,
   formatBytes,
   type AttachmentKind,
@@ -103,7 +104,7 @@ export function useChatAttachments() {
       for (const file of files) {
         const spec = classifyAttachment(file.name, file.type);
         if (!spec) {
-          setError(`"${file.name}" is not a supported file. Use an image, PDF, .md, or .txt file.`);
+          setError(`"${file.name}" is not a supported file. Use an ${SUPPORTED_ATTACHMENTS_LABEL} file.`);
           return;
         }
         if (file.size > spec.maxBytes) {
