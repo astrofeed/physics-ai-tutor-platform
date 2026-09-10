@@ -109,7 +109,10 @@ export function isImageMimeType(mimeType: string): boolean {
   return (IMAGE_MIME_TYPES as readonly string[]).includes(mimeType);
 }
 
+/** Rounds up to one decimal so a file just over a limit never prints as the
+ * same number as the limit ("1.1 MB" vs "1 MB", never "1 MB" vs "1 MB"). */
 export function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
-  return mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (mb >= 1) return `${Math.ceil(mb * 10) / 10} MB`;
+  return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
 }
