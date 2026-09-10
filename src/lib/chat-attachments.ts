@@ -19,9 +19,19 @@ export const MAX_IMAGES_PER_HOUR = 60;
 export const MAX_DOCUMENTS_PER_DAY = 30;
 export const MAX_DOCUMENT_BYTES_PER_DAY = 150 * 1024 * 1024;
 
-/** Text handed to the model per document, and pages read from a PDF. */
-export const MAX_EXTRACTED_CHARS = 30_000;
-export const MAX_PDF_PAGES = 30;
+/** Text handed to the model per document on the turn it is attached, and pages
+ * read from a PDF. */
+export const MAX_EXTRACTED_CHARS = 120_000;
+export const MAX_PDF_PAGES = 100;
+/** Documents from earlier turns are replayed in abbreviated form so a long
+ * conversation full of files stays inside the model's context window. */
+export const MAX_HISTORY_ATTACHMENT_CHARS = 30_000;
+
+/** PDFs attached on the current turn are also shown to the model as files so it
+ * sees figures and handwriting. OpenAI accepts at most ~32 MB and 100 pages of
+ * files per request; anything past these budgets falls back to text only. */
+export const MAX_NATIVE_PDF_BYTES_PER_REQUEST = 30 * 1024 * 1024;
+export const MAX_NATIVE_PDF_PAGES_PER_REQUEST = 100;
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 export const PDF_MIME_TYPE = "application/pdf";
