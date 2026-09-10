@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
-import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, appendContextSummary, isChatProviderConfigured, type ChatMessage } from "@/lib/ai";
+import { streamChat, SOCRATIC_SYSTEM_PROMPT, EXAM_MODE_SYSTEM_PROMPT, getActiveChatModel, generateConversationTitle, appendContextSummary, isChatProviderConfigured, isDeepSeekActive, type ChatMessage } from "@/lib/ai";
 import { refreshContextSummary, CONTEXT_WINDOW_MESSAGES } from "@/lib/services/conversation-summary-service";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { checkContentFlags, handleContentFlag, trackMessageVolume, trackRateLimitAbuse } from "@/lib/abuse-detection";
 import { checkAndBanSpammer } from "@/lib/spam-guard";
-import { extractDocumentText } from "@/lib/services/document-extraction";
-import { withAttachmentText } from "@/lib/services/chat-context";
+import { loadDocument } from "@/lib/services/document-extraction";
+import { historyAttachmentText, planCurrentTurn, withAttachmentText } from "@/lib/services/chat-context";
 import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_DOCUMENT_BYTES, isUploadedBlobUrl } from "@/lib/chat-attachments";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
@@ -134,31 +134,39 @@ export async function POST(req: Request) {
       convId = conversation.id;
     }
 
-    // Documents are turned into text here so every provider can use them,
-    // including ones without document or vision support.
-    const extractedDocuments = await Promise.all(
+    // Every document is turned into text so any provider (and every later
+    // turn) can use it; PDFs additionally keep their bytes for this turn only,
+    // so the model can see figures and handwriting the text misses.
+    const loadedDocuments = await Promise.all(
       attachedDocuments.map(async (doc) => {
-        const extracted = await extractDocumentText(doc);
+        const loaded = await loadDocument(doc);
         return {
-          url: doc.url,
           filename: doc.filename,
-          mimeType: doc.mimeType,
-          sizeBytes: doc.sizeBytes,
-          extractedText: extracted?.text ?? null,
-          truncated: extracted?.truncated ?? false,
+          extractedText: loaded?.text ?? null,
+          truncated: loaded?.truncated ?? false,
+          pdf: loaded?.pdf ?? null,
         };
       })
     );
 
-    await prisma.message.create({
+    const userMessage = await prisma.message.create({
       data: {
         conversationId: convId,
         role: "user",
         content: message,
         imageUrls: imageUrls || [],
         mode: mode || "normal",
-        attachments: extractedDocuments.length
-          ? { create: extractedDocuments }
+        attachments: attachedDocuments.length
+          ? {
+              create: attachedDocuments.map((doc, i) => ({
+                url: doc.url,
+                filename: doc.filename,
+                mimeType: doc.mimeType,
+                sizeBytes: doc.sizeBytes,
+                extractedText: loadedDocuments[i].extractedText,
+                truncated: loadedDocuments[i].truncated,
+              })),
+            }
           : undefined,
       },
     });
@@ -179,10 +187,15 @@ export async function POST(req: Request) {
     });
     const previousMessages = recentMessages.reverse();
 
+    const currentTurn = planCurrentTurn(loadedDocuments, !isDeepSeekActive());
     const chatMessages: ChatMessage[] = previousMessages.map((m) => ({
       role: m.role as "user" | "assistant",
-      content: withAttachmentText(m.content, m.attachments),
+      content:
+        m.id === userMessage.id
+          ? withAttachmentText(m.content, currentTurn.inline)
+          : historyAttachmentText(m.content, m.attachments),
       imageUrls: m.imageUrls.length ? m.imageUrls : undefined,
+      files: m.id === userMessage.id && currentTurn.files.length ? currentTurn.files : undefined,
     }));
 
     const aiConfig = await prisma.aIConfig.findFirst({

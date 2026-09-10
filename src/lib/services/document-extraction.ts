@@ -23,6 +23,17 @@ export interface ExtractedDocument {
   truncated: boolean;
 }
 
+export interface NativePdf {
+  base64: string;
+  pageCount: number;
+  sizeBytes: number;
+}
+
+export interface LoadedDocument extends ExtractedDocument {
+  /** Present for PDFs so the model can also be shown the pages themselves. */
+  pdf: NativePdf | null;
+}
+
 function truncate(text: string): ExtractedDocument {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   if (normalized.length <= MAX_EXTRACTED_CHARS) {
@@ -31,7 +42,10 @@ function truncate(text: string): ExtractedDocument {
   return { text: normalized.slice(0, MAX_EXTRACTED_CHARS), truncated: true };
 }
 
-async function extractPdf(buffer: ArrayBuffer): Promise<ExtractedDocument> {
+async function extractPdf(buffer: ArrayBuffer): Promise<LoadedDocument> {
+  // Encode first: the parser takes ownership of the bytes and detaches the buffer.
+  const base64 = Buffer.from(buffer).toString("base64");
+  const sizeBytes = buffer.byteLength;
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
   const { text } = await extractText(pdf, { mergePages: false });
   const pages = Array.isArray(text) ? text : [text];
@@ -39,17 +53,24 @@ async function extractPdf(buffer: ArrayBuffer): Promise<ExtractedDocument> {
   const extracted = truncate(
     readPages.map((page, index) => `[page ${index + 1}]\n${page}`).join("\n\n")
   );
-  return { ...extracted, truncated: extracted.truncated || pages.length > MAX_PDF_PAGES };
+  return {
+    ...extracted,
+    truncated: extracted.truncated || pages.length > MAX_PDF_PAGES,
+    pdf: { base64, pageCount: pages.length, sizeBytes },
+  };
+}
+
+function textOnly(extracted: ExtractedDocument): LoadedDocument {
+  return { ...extracted, pdf: null };
 }
 
 /**
  * Downloads an uploaded document and returns the text handed to the model.
  * Extraction happens server-side so the feature works on any provider,
- * including ones without document or vision support.
+ * including ones without document or vision support; PDFs additionally keep
+ * their bytes so providers that read files can see figures and handwriting.
  */
-export async function extractDocumentText(
-  source: DocumentSource
-): Promise<ExtractedDocument | null> {
+export async function loadDocument(source: DocumentSource): Promise<LoadedDocument | null> {
   const spec = classifyAttachment(source.filename, source.mimeType);
   if (!spec || spec.kind !== "document") return null;
 
@@ -70,13 +91,13 @@ export async function extractDocumentText(
       case PDF_MIME_TYPE:
         return await extractPdf(buffer);
       case PPTX_MIME_TYPE:
-        return truncate(await extractPptxText(buffer));
+        return textOnly(truncate(await extractPptxText(buffer)));
       case DOCX_MIME_TYPE:
-        return truncate(await extractDocxText(buffer));
+        return textOnly(truncate(await extractDocxText(buffer)));
       case XLSX_MIME_TYPE:
-        return truncate(await extractXlsxText(buffer));
+        return textOnly(truncate(await extractXlsxText(buffer)));
       default:
-        return truncate(new TextDecoder().decode(buffer));
+        return textOnly(truncate(new TextDecoder().decode(buffer)));
     }
   } catch (error) {
     logger.error("Document extraction failed", {

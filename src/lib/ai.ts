@@ -171,10 +171,18 @@ export function appendContextSummary(
   return `${base}\n\nSummary of the earlier part of this conversation (older messages are not included in your context):\n${summary}`;
 }
 
+/** A document handed to the model as a file rather than as extracted text. */
+export interface ChatFile {
+  filename: string;
+  mimeType: string;
+  base64: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   imageUrls?: string[];
+  files?: ChatFile[];
 }
 
 export async function streamChat(
@@ -206,14 +214,19 @@ async function streamOpenAI(
   ];
 
   for (const msg of messages) {
-    if (msg.imageUrls?.length && msg.role === "user") {
+    if ((msg.imageUrls?.length || msg.files?.length) && msg.role === "user") {
       input.push({
         role: "user",
         content: [
           { type: "input_text", text: msg.content },
-          ...msg.imageUrls.map((url) => ({
+          ...(msg.imageUrls ?? []).map((url) => ({
             type: "input_image",
             image_url: url,
+          })),
+          ...(msg.files ?? []).map((file) => ({
+            type: "input_file",
+            filename: file.filename,
+            file_data: `data:${file.mimeType};base64,${file.base64}`,
           })),
         ],
       });
