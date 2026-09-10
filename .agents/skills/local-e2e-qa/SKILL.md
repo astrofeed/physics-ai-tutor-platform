@@ -192,9 +192,39 @@ the question field is `questionType` (not `type`), and the multiple-choice enum 
 - Synthetic drag/drop must be dispatched on an element *inside* the chat column div (e.g. the
   message textarea), not on `<main>` — the drop handlers live on the chat column.
 
+## Proving what the model receives (no real key): mock OpenAI
+
+The openai-node SDK honours `OPENAI_BASE_URL`, so the whole chat path can run against a local mock
+and every outbound request body can be inspected (needed to verify prompt/attachment construction
+such as `input_file` / `input_image` / `<document>` blocks — the DB only stores plain text).
+
+- Run a tiny HTTP server on `127.0.0.1:<port>` that accepts `POST /v1/responses`, saves the JSON
+  body to a file, and replies:
+  - `stream: true` → SSE with `event:`/`data:` lines: `response.created`, N×
+    `response.output_text.delta` (`{"type","delta","item_id","output_index","content_index"}`),
+    then `response.completed`. The chat route only consumes `response.output_text.delta`,
+    `response.reasoning_summary_text.delta` and `response.output_text.annotation.added`.
+  - `stream` absent (title generation, summaries) → JSON with `output_text` and an
+    `output[].content[].text` message.
+- Start the app with `env -u DEEPSEEK_API_KEY -u GP2_OPENAI_API_KEY OPENAI_API_KEY=sk-dummy
+  OPENAI_BASE_URL=http://127.0.0.1:<port>/v1 …`. The session environment exports real provider
+  keys — if `DEEPSEEK_API_KEY` is set, chat silently routes to DeepSeek (hard-coded base URL, not
+  mockable) and the mock never sees a request.
+- Document attachments are fetched server-side and must pass `isUploadedBlobUrl` (https
+  `*.blob.vercel-storage.com`). To exercise real extraction without Blob: serve fixtures from a
+  local CORS server, stub `upload()` in `use-chat-attachments.ts` to return
+  `http://127.0.0.1:<fixture-port>/<name>`, and temporarily let `isUploadedBlobUrl` accept that
+  origin. Mark both edits `E2E-TEST-STUB` and `git checkout` them at teardown.
+- Trim base64 before reporting (`data:application/pdf;base64,` payloads are ~23k chars for a 17 KB
+  PDF); a regex on `(data:[^;]+;base64,)([A-Za-z0-9+/=]{40})[A-Za-z0-9+/=]*` works.
+- pdfjs logs `Warning: UnknownErrorException: Ensure that the standardFontDataUrl API parameter is
+  provided.` on every PDF extraction; it is benign (extraction still succeeds).
+
 ## Teardown
 
 ```bash
+# NOTE: `pkill -f "next dev"` also matches the shell running it when issued through the exec tool
+# (the pattern is in the command line) — run pkill in its own call, then continue in a fresh call.
 pkill -f "next dev"; pkill -f "next-server"; sleep 4
 ss -ltn | grep 3900 || echo PORT_CLOSED
 docker exec physics-ai-tutor-platform-db-1 psql -U postgres -d postgres -c "DROP DATABASE IF EXISTS $DB;"
