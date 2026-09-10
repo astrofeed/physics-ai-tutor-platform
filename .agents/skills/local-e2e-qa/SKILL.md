@@ -35,6 +35,10 @@ E2E_TEST_MODE=true E2E_TEST_SECRET=e2e-secret \
 PRIVATE_UPLOADS_DIR=/home/ubuntu/prXX-uploads PORT=3900 npm run dev
 ```
 
+In a git worktree whose `node_modules` is a symlink to the main checkout, Turbopack fails with
+"Next.js package not found" — start with `npx next dev -p <port>` (webpack) instead of `npm run dev`,
+and run `npx prisma generate` in the worktree first so the shared client matches its schema.
+
 `BLOB_READ_WRITE_TOKEN` must be **unset**, otherwise uploads go to Vercel Blob. Uploaded files are
 always served through `/api/files/<id>?name=<filename>`, which authorizes every read.
 

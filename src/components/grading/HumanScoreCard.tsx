@@ -95,9 +95,11 @@ export function HumanScoreCard({ items, human, saving, onSave }: Props) {
         {editing ? (
           <form onSubmit={submit} className="space-y-3">
             <p className="text-sm text-gray-500">
-              {aiRevealed
-                ? "You have already opened the AI result; these scores will be recorded as AI-informed."
-                : "Enter your scores first. The AI result opens once they are saved, so your grade stays independent."}
+              {human.scores.length > 0
+                ? "Editing keeps the time of your first grade, so whether it counts as blind or AI-informed does not change."
+                : aiRevealed
+                  ? "You have already opened the AI result; these scores will be recorded as AI-informed."
+                  : "Enter your scores first. The AI result opens once they are saved, so your grade stays independent."}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {items.map((item) => {
