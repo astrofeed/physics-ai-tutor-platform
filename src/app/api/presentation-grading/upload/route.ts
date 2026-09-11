@@ -80,6 +80,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         return {
           allowedContentTypes: [payload.contentType],
           maximumSizeInBytes: payload.sizeBytes,
+          addRandomSuffix: true,
         };
       },
       onUploadCompleted: async () => {
