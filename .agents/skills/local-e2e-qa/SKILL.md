@@ -224,6 +224,32 @@ such as `input_file` / `input_image` / `<document>` blocks — the DB only store
 - pdfjs logs `Warning: UnknownErrorException: Ensure that the standardFontDataUrl API parameter is
   provided.` on every PDF extraction; it is benign (extraction still succeeds).
 
+## Verifying real Vercel Blob behaviour (preview deployment, no local stub)
+
+Blob-storage bugs (e.g. pathname collisions, token options such as `addRandomSuffix`) cannot be
+proven with the local `BLOB_READ_WRITE_TOKEN`-less fallback — test against the branch's Vercel
+PREVIEW deployment instead, which shares production's DB and Blob store.
+
+- Find the preview: `curl -s "https://api.vercel.com/v6/deployments?projectId=physics-ai-tutor-platform&limit=5&target=preview" -H "Authorization: Bearer $VERCEL_TOKEN"`
+  (bind `VERCEL_TOKEN` via the exec `env` param; never print it). Check `meta.githubCommitRef` /
+  `githubCommitSha` and `readyState == READY`, then poll `/login` for 200.
+- Previews are public; credentials login with a verified account stays on the preview host even
+  though `NEXTAUTH_URL` points at production (the session cookie is per-host).
+- The browser Blob PUT goes to `https://vercel.com/api/blob/?pathname=<name>` (NOT
+  `blob.vercel-storage.com`) — filter network capture on `vercel.com/api/blob` or `/api/blob`.
+  Attach a CDP `Network.requestWillBeSent`/`responseReceived` listener to the existing Chrome
+  page (`http://localhost:29229/json`) *before* the first upload; anything before attach is lost.
+- Easiest proof of stored URLs: read transcript chip hrefs after sending —
+  `[...document.querySelectorAll('main a[href*="blob.vercel-storage.com"], main img[src*="blob.vercel-storage.com"]')]`.
+  With `addRandomSuffix` the pathname is `<stem>-<30 random chars>.<ext>`.
+- `/api/chat/conversations` returns HTML, not JSON — don't try to list attachments via it.
+- Chat uploads count against `/api/upload/quota` (60 images/h, 30 documents/day, 150 MiB/day)
+  on the shared prod DB; a 14-upload suite uses 12 of the daily document quota, so budget it.
+- Sidebar "Delete conversation" needs the second confirming click within **3 s** or the state
+  resets; deleting the active conversation collapses the list panel (reopen via "Open conversation list").
+- Cleanup: delete only conversations you created (timestamps in the sidebar) — the shared DB
+  also holds other testers' probe conversations.
+
 ## Teardown
 
 ```bash
