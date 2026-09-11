@@ -200,7 +200,8 @@ export function useChatAttachments() {
       } catch (err) {
         console.error(`Chat attachment upload failed for "${file.name}":`, err);
         const refusal = await fetchUploadRefusal(file, mimeType);
-        setError(`Failed to upload "${file.name}". ${refusal ?? "Please try again."}`);
+        const blobMessage = err instanceof Error ? err.message.replace(/^Vercel Blob: /, "") : null;
+        setError(`Failed to upload "${file.name}". ${refusal ?? blobMessage ?? "Please try again."}`);
         return null;
       }
     }

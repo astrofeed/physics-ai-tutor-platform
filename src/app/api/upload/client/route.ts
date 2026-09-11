@@ -85,6 +85,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         // The declared size is what the quota was charged for, so make it the
         // hard ceiling for the token: a larger file is rejected by Blob itself.
+        // Blob refuses to overwrite an existing pathname, so every upload gets
+        // a random suffix: students reuse filenames like IMG_0001.jpg constantly.
         await recordUpload({
           userId: account.id,
           kind: spec.kind,
@@ -96,6 +98,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         return {
           allowedContentTypes: [spec.mimeType],
           maximumSizeInBytes: sizeBytes,
+          addRandomSuffix: true,
         };
       },
       onUploadCompleted: async () => {
