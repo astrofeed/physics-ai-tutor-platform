@@ -77,7 +77,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
           </p>
           {job.assignedQuestion ? (
             <p className="mt-2 text-sm">
-              <span className="font-medium">Assigned question:</span> {job.assignedQuestion}
+              <span className="font-medium">Report question:</span> {job.assignedQuestion}
             </p>
           ) : null}
         </div>

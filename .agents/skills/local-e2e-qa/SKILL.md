@@ -282,6 +282,41 @@ containers Chrome can't decode (WMV/AVI/MKV). The mock/stub recipe above extends
 - A React "change in the order of Hooks called by RosterCard" console error can appear during a
   Fast Refresh while the lead edits that component (`HotReload` in the stack); it is an HMR
   artifact, not a runtime bug — re-check on the final commit after a full reload before reporting.
+- Resetting the CDP viewport override reliably: `clearDeviceMetricsOverride` alone may leave the
+  tab narrow. Send `clear` → `setDeviceMetricsOverride {width:0,height:0,deviceScaleFactor:0,
+  mobile:false}` → `clear` → `Page.reload` in one session (pattern in
+  `/home/ubuntu/pr90-evidence/cdp_clear.mjs`), and match the target by full URL — with two
+  PhysTutor tabs open, `url.includes("localhost")` may hit the wrong one.
+
+## Report grading (`/report-grading`): batch PDFs / eeClass zips + sheet topic & report question
+
+- Needs migration `20260913000000_report_topic_and_assigned_question` (`PresentationRosterEntry.
+  reportTopic`, `ReportGradingJob.assignedQuestion`) on the scratch DB, plus the roster migration.
+- `useReportGrading.ts` uploads each PDF with `@vercel/blob` client `upload()` to
+  `/api/upload/client`; for a local run swap it for a PUT to a capture server and let
+  `isUploadedBlobUrl` in `src/lib/chat-attachments.ts` accept that origin (mark both edits
+  `E2E-TEST-STUB` and `git checkout` them at teardown). Uploaded PDFs land in the capture dir — the
+  `.zip` must never appear there (zips are parsed client-side by `parseReportZip`).
+- The mock OpenAI must answer `/v1/responses` with a *report* evaluation JSON when the prompt
+  contains `REPORT INFORMATION` (see `/home/ubuntu/pr90-evidence/mock_openai.py`); the
+  presentation-shaped mock makes report jobs fail. Save request bodies to assert on
+  `Presentation topic (report title):` / `Additional report question:` (or the
+  `none set — grade the report against the presentation topic` fallback) and on `input_file` (PDF)
+  vs `<report>` (paste-text).
+- Fixtures: eeClass-style zip = folders `109062362 (林鍵鋒)/x.pdf`; add `index.html`,
+  `content.html`, `.DS_Store`, `__MACOSX/…/._x.pdf`, a `.txt` to prove they are ignored (exactly one
+  row per PDF). Direct PDFs derive the ID from a 9-digit run in the filename
+  (`王小明_113062113_期末報告.pdf`); a filename without one yields the amber "No student ID" row.
+  GTK chooser multi-select: `Ctrl+L` then `"/path/a.zip" "/path/b.zip"`.
+- The live sheet's `Report Topic` column may be blank for every real student; to see the
+  Assigned-question path, set `reportTopic` on one roster row via
+  `npx prisma db execute --stdin` (and NULL it afterwards / disclose it). `psql` is not installed.
+- Submission is sequential per row (PUT → `POST /api/report-grading/jobs` 201 → `/process`), but
+  `/process` is fire-and-forget, so with the mock all three finish within ~1 s and the
+  `Uploading report 1/3…` label is not observable — rely on `net.log` + capture-server timestamps.
+- Help-card key: `localStorage["report-grading-help-collapsed"]`. Expected unmatched-ID roster
+  lookup is a `404` (console "Failed to load resource") and a garbage zip logs the jszip
+  "Can't find end of central directory" error — both expected, not bugs.
 
 ## Verifying real Vercel Blob behaviour (preview deployment, no local stub)
 

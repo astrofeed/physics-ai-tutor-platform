@@ -14,7 +14,7 @@ const STEPS: HowToStep[] = [
   {
     title: "Check each row.",
     detail:
-      "Student ID, name, title (the presentation topic) and the assigned question come from the folder name and the sign-up sheet. Rows with a warning triangle need a student ID or were not found in the sheet — fix the ID and the row refills itself.",
+      "Student ID, name, presentation topic (sheet column Topics) and report question (sheet column Report Topic) come from the folder name and the sign-up sheet. Rows with a warning triangle need a student ID or were not found in the sheet — fix the ID and the row refills itself.",
   },
   {
     title: "Press Start grading, then move on.",
@@ -29,18 +29,18 @@ const STEPS: HowToStep[] = [
   {
     title: "Export a CSV when you are done.",
     detail:
-      "Tick the jobs and press Export CSV — it includes student ID, group, date, the assigned question, every criterion's AI and human score and the totals.",
+      "Tick the jobs and press Export CSV — it includes student ID, group, date, presentation topic, report question, every criterion's AI and human score and the totals.",
   },
 ];
 
 const FAQ: HowToFaq[] = [
   {
-    q: "What is the assigned question?",
-    a: "The sign-up sheet's “Report Topic” column: the specific question this student's report must answer. The AI's first criterion grades whether it was answered; when the column is blank the report is graded against its title instead.",
+    q: "What is the report question?",
+    a: "The sign-up sheet's “Report Topic” column: an extra question this student's report must answer on top of the presentation topic (column Topics). The AI's first criterion grades whether both were covered; when Report Topic is blank the report is graded against the presentation topic alone and is not penalised.",
   },
   {
     q: "The student ID was not found in the sign-up sheet.",
-    a: "Type the title (and question, if any) by hand; grading works the same. If the student signed up after the last import, press Refresh on the sign-up sheet card and drop the file again.",
+    a: "Type the presentation topic (and report question, if any) by hand; grading works the same. If the student signed up after the last import, press Refresh on the sign-up sheet card and drop the file again.",
   },
   {
     q: "A student's folder has several PDFs.",
@@ -52,7 +52,7 @@ const FAQ: HowToFaq[] = [
   },
   {
     q: "I need to find a group's reports.",
-    a: "Search the job list by student ID, name, title, group (e.g. Group 1) or date (e.g. 9/15).",
+    a: "Search the job list by student ID, name, topic, group (e.g. Group 1) or date (e.g. 9/15).",
   },
 ];
 

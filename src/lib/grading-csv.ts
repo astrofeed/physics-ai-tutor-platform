@@ -84,7 +84,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     "Authors",
     "Group",
     "Presentation date",
-    "Assigned question",
+    "Report question",
     "Status",
     ...criteria.flatMap(({ criterion, weightPercent }) => [
       `${criterion} (${weightPercent}%) AI score`,
