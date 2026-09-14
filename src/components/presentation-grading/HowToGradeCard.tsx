@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React from "react";
+import { HowToCard, type HowToFaq, type HowToStep } from "@/components/grading/HowToCard";
 
 const COLLAPSED_STORAGE_KEY = "presentation-grading-help-collapsed";
 
-const STEPS: { title: string; detail: string }[] = [
+const STEPS: HowToStep[] = [
   {
     title: "Drop the eeClass export (.zip) into the box at the top.",
     detail:
@@ -35,7 +33,7 @@ const STEPS: { title: string; detail: string }[] = [
   },
 ];
 
-const FAQ: { q: string; a: string }[] = [
+const FAQ: HowToFaq[] = [
   {
     q: "The student did not submit slides.",
     a: "That is fine. The job is graded from the video alone, the result page says so, and slide-related scores are marked provisional — check the slides during the live session.",
@@ -58,59 +56,14 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
-/** Step-by-step instructions and FAQ for TAs; stays open until dismissed. */
+/** Step-by-step instructions and FAQ for TAs grading presentations. */
 export function HowToGradeCard() {
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    if (window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1") setCollapsed(true);
-  }, []);
-
-  const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    window.localStorage.setItem(COLLAPSED_STORAGE_KEY, next ? "1" : "0");
-  };
-
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <HelpCircle className="h-4 w-4 text-gray-500" />
-            How to grade a presentation
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={toggle} aria-expanded={!collapsed}>
-            {collapsed ? "Show" : "Hide"}
-            {collapsed ? <ChevronDown className="ml-1 h-4 w-4" /> : <ChevronUp className="ml-1 h-4 w-4" />}
-          </Button>
-        </div>
-      </CardHeader>
-      {collapsed ? null : (
-        <CardContent className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
-          <ol className="space-y-3">
-            {STEPS.map((step, index) => (
-              <li key={step.title} className="flex gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900">
-                  {index + 1}
-                </span>
-                <div>
-                  <p className="font-medium">{step.title}</p>
-                  <p className="text-gray-500">{step.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <dl className="space-y-3">
-            {FAQ.map((item) => (
-              <div key={item.q}>
-                <dt className="font-medium">{item.q}</dt>
-                <dd className="text-gray-500">{item.a}</dd>
-              </div>
-            ))}
-          </dl>
-        </CardContent>
-      )}
-    </Card>
+    <HowToCard
+      title="How to grade a presentation"
+      storageKey={COLLAPSED_STORAGE_KEY}
+      steps={STEPS}
+      faq={FAQ}
+    />
   );
 }

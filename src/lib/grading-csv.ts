@@ -82,6 +82,9 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     "Student ID",
     "Title",
     "Authors",
+    "Group",
+    "Presentation date",
+    "Assigned question",
     "Status",
     ...criteria.flatMap(({ criterion, weightPercent }) => [
       `${criterion} (${weightPercent}%) AI score`,
@@ -110,6 +113,9 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       job.studentId,
       job.title,
       job.authors,
+      job.groupLabel,
+      job.presentationDate,
+      job.assignedQuestion,
       job.status,
       ...criteria.flatMap(({ criterion }) => {
         const score = byCriterion.get(criterion);

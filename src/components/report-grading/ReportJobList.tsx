@@ -83,9 +83,9 @@ export function ReportJobList({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search title, author, or student ID…"
+        placeholder="Search title, author, student ID, group, or date…"
         className="pl-8 pr-8"
-        aria-label="Search by report title, author name, or student ID"
+        aria-label="Search by report title, author name, student ID, group, or presentation date"
       />
       {search ? (
         <button
@@ -117,7 +117,7 @@ export function ReportJobList({
           title={search ? "No matching results" : "No grading jobs yet"}
           description={
             search
-              ? "Try a different title or author name."
+              ? "Try a different title, author, student ID, group (“Group 1”) or date (“9/15”)."
               : "Submit a report above — results will appear here."
           }
         />
@@ -182,6 +182,8 @@ export function ReportJobList({
                   <p className="text-xs text-gray-500">
                     {[
                       job.studentId ? `ID ${job.studentId}` : "no student ID",
+                      job.groupLabel,
+                      job.presentationDate,
                       `effort ${job.reasoningEffort}`,
                       job.rubricVersion !== null ? `instructions v${job.rubricVersion}` : null,
                       formatTimestamp(job.createdAt),

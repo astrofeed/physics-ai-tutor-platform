@@ -107,6 +107,9 @@ model ReportGradingJob {
   authors String?
   /// Student ID, usually parsed from the uploaded file's name; used in CSV exports.
   studentId String?
+  /// The question the report was asked to answer (from the sign-up sheet's
+  /// "Report Topic" column); the rubric grades whether it was answered.
+  assignedQuestion String? @db.Text
   status  ReportJobStatus @default(QUEUED)
   error   String?         @db.Text
 
@@ -199,6 +202,7 @@ model PresentationRosterEntry {
   name             String?
   englishName      String?
   topic            String?
+  reportTopic      String?
   groupLabel       String?
   presentationDate String?
 
