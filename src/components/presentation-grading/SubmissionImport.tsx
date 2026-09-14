@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Archive, Check, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,82 @@ import { lookupRosterStudent } from "@/hooks/usePresentationRoster";
 import type { JobSubmitPhase, NewJobInput } from "@/hooks/usePresentationGrading";
 import type { PresentationReasoningEffort } from "@/lib/presentation-grading";
 import { parseSubmissionZip, type SubmissionPackage } from "@/lib/submission-zip";
-import { FilePicker } from "./FilePicker";
+
+const ZIP_ACCEPT = ".zip,application/zip,application/x-zip-compressed";
+
+function isZip(file: File): boolean {
+  return /\.zip$/i.test(file.name) || file.type.includes("zip");
+}
+
+interface ArchiveDropZoneProps {
+  reading: boolean;
+  disabled: boolean;
+  onFiles: (files: File[]) => void;
+}
+
+/** The primary way in: a large drop target for one or more eeClass exports. */
+function ArchiveDropZone({ reading, disabled, onFiles }: ArchiveDropZoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const pick = (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (files.length === 0) return;
+    const zips = files.filter(isZip);
+    if (zips.length < files.length) {
+      toast.error("Only .zip exports go here. Single videos and slides go in the pickers below.");
+    }
+    if (zips.length > 0) onFiles(zips);
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!disabled) setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        if (!disabled) pick(e.dataTransfer.files);
+      }}
+      className={`flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+        dragging
+          ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30"
+          : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-900"
+      }`}
+    >
+      {reading ? (
+        <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
+      ) : (
+        <Archive className="h-7 w-7 text-gray-400" />
+      )}
+      <span className="text-sm font-medium">
+        {reading ? "Reading the archives…" : "Drop eeClass exports (.zip) here, or click to choose them"}
+      </span>
+      <span className="text-xs text-gray-500">
+        Student ID, name, topic, video and slides are filled in for you. One student fills the
+        form below; several students (or several zips) become a queue graded one after another.
+      </span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ZIP_ACCEPT}
+        multiple
+        className="hidden"
+        aria-label="eeClass exports (.zip)"
+        onChange={(e) => {
+          pick(e.target.files);
+          e.target.value = "";
+        }}
+      />
+    </button>
+  );
+}
 
 /** A submission package with name and topic resolved against the roster. */
 export interface ResolvedSubmission extends SubmissionPackage {
@@ -52,38 +127,43 @@ interface SubmissionImportProps {
   reasoningEffort: PresentationReasoningEffort;
 }
 
+/** Packages from every readable archive; unreadable or empty ones are reported and skipped. */
+async function parseArchives(files: File[]): Promise<SubmissionPackage[]> {
+  const packages: SubmissionPackage[] = [];
+  for (const file of files) {
+    try {
+      const found = await parseSubmissionZip(file);
+      if (found.length === 0) toast.error(`No video or slides found in ${file.name}.`);
+      packages.push(...found);
+    } catch (error) {
+      console.error(`Failed to read the submission archive ${file.name}:`, error);
+      toast.error(`Could not read ${file.name} as a .zip file.`);
+    }
+  }
+  return packages;
+}
+
 /**
- * Accepts an eeClass export (.zip). One student fills the form; a bulk export
- * with several student folders becomes a queue submitted one after another.
+ * Accepts eeClass exports (.zip). One student fills the form; several students
+ * (from one bulk export or several zips) become a queue submitted one after another.
  */
 export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffort }: SubmissionImportProps) {
-  const [archive, setArchive] = useState<File | null>(null);
+  const [archiveNames, setArchiveNames] = useState<string[]>([]);
   const [reading, setReading] = useState(false);
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [runningBatch, setRunningBatch] = useState(false);
 
-  const handleArchive = async (file: File | null) => {
-    setArchive(file);
-    if (!file) return;
+  const handleArchives = async (files: File[]) => {
     setReading(true);
     try {
-      const packages = await parseSubmissionZip(file);
-      if (packages.length === 0) {
-        toast.error("No video or slides found in that archive.");
-        setArchive(null);
-        return;
-      }
-      const resolved = await Promise.all(packages.map(resolveSubmission));
+      const resolved = await Promise.all((await parseArchives(files)).map(resolveSubmission));
+      if (resolved.length === 0) return;
       if (resolved.length === 1) {
         onSingle(resolved[0]);
-        setArchive(null);
         return;
       }
+      setArchiveNames(files.map((file) => file.name));
       setRows(resolved.map((pkg) => ({ ...pkg, status: pkg.video ? "pending" : "no-video" })));
-    } catch (error) {
-      console.error("Failed to read the submission archive:", error);
-      toast.error("Could not read that .zip file.");
-      setArchive(null);
     } finally {
       setReading(false);
     }
@@ -118,7 +198,7 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
 
   const clearBatch = () => {
     setRows([]);
-    setArchive(null);
+    setArchiveNames([]);
   };
 
   const readyCount = rows.filter(isReady).length;
@@ -126,15 +206,18 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
 
   if (rows.length === 0) {
     return (
-      <FilePicker
-        label=""
-        hint={reading ? "Reading archive…" : "Or import an eeClass export (.zip) — fills ID, name, topic, video and slides"}
-        accept=".zip,application/zip,application/x-zip-compressed"
-        file={reading ? archive : null}
-        onChange={(file) => void handleArchive(file)}
-        icon={reading ? Loader2 : Archive}
-        disabled={reading || phase !== null}
-      />
+      <div className="space-y-3">
+        <ArchiveDropZone
+          reading={reading}
+          disabled={reading || phase !== null}
+          onFiles={(files) => void handleArchives(files)}
+        />
+        <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-gray-400">
+          <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+          or fill in by hand
+          <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+        </div>
+      </div>
     );
   }
 
@@ -142,7 +225,8 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
     <div className="space-y-3 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">
-          {rows.length} students in {archive?.name ?? "the archive"}
+          {rows.length} students in{" "}
+          {archiveNames.length === 1 ? archiveNames[0] : `${archiveNames.length} archives`}
         </p>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={clearBatch} disabled={runningBatch}>
@@ -162,7 +246,7 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
       ) : null}
       <ul className="divide-y divide-gray-200 dark:divide-gray-800 text-sm">
         {rows.map((row, index) => (
-          <li key={row.label} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-2 py-2 items-center">
+          <li key={`${index}-${row.label}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-2 py-2 items-center">
             <div className="min-w-0">
               <p className="truncate font-medium">{row.studentId ?? "No student ID"}</p>
               <p className="truncate text-xs text-gray-500">

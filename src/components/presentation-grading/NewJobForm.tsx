@@ -103,8 +103,9 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       <CardHeader>
         <CardTitle>New grading job</CardTitle>
         <CardDescription>
-          The audio is extracted in your browser — the video itself is never uploaded. You can
-          submit several students back to back; jobs run in the background.
+          Drop the eeClass export below and check what was filled in, or enter a student by hand.
+          The audio is extracted in your browser — the video itself is never uploaded; jobs run in
+          the background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
