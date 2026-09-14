@@ -28,6 +28,7 @@ import {
 
 const PHASE_LABELS: Record<Exclude<JobSubmitPhase, null>, string> = {
   extracting: "Extracting audio from the video…",
+  transcoding: "Converting the video with ffmpeg (first time downloads ~30 MB)…",
   uploading: "Uploading audio and slides…",
   creating: "Starting the grading job…",
 };
@@ -241,8 +242,8 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             {source === "video" ? (
               <FilePicker
                 label=""
-                hint={`Video, max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
-                accept="video/*"
+                hint={`MP4, MOV, WebM, WMV or AVI — max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
+                accept="video/*,.wmv,.avi,.mkv"
                 file={video}
                 onChange={setVideo}
                 icon={FileVideo}

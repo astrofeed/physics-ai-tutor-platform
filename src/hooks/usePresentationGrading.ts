@@ -219,7 +219,7 @@ export interface NewJobInput {
   reasoningEffort: PresentationReasoningEffort;
 }
 
-export type JobSubmitPhase = "extracting" | "uploading" | "creating" | null;
+export type JobSubmitPhase = "extracting" | "transcoding" | "uploading" | "creating" | null;
 
 /** Extracts audio, uploads media, creates the job, and starts processing. */
 export function useSubmitPresentationJob(onCreated: () => void) {
@@ -252,8 +252,7 @@ export function useSubmitPresentationJob(onCreated: () => void) {
       try {
         let audioBlobUrl: string | undefined;
         if (input.video) {
-          setPhase("extracting");
-          const { wav, durationSeconds } = await extractAudioFromVideo(input.video);
+          const { wav, durationSeconds } = await extractAudioFromVideo(input.video, setPhase);
           if (durationSeconds > PRESENTATION_VIDEO_MAX_SECONDS) {
             toast.error(
               `The video is ${Math.floor(durationSeconds / 60)}:${String(Math.round(durationSeconds % 60)).padStart(2, "0")} long; presentations must be at most 3:30.`
