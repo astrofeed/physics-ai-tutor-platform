@@ -2,18 +2,16 @@
 
 import React, { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { gradedBlind, type HumanGrading, type HumanScoreEntry } from "@/lib/human-grading";
+import type { HumanGrading, HumanScoreEntry } from "@/lib/human-grading";
 import { formatTimestamp } from "@/components/presentation-grading/job-format";
 
 export interface HumanScoreItem {
   name: string;
   max: number;
-  /** Shown beside the input only once the AI result has been revealed. */
   aiScore: number;
 }
 
@@ -51,27 +49,15 @@ function formatScore(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-function BlindBadge({ human }: { human: HumanGrading }) {
-  const blind = gradedBlind(human);
-  if (blind === null) return null;
-  return blind ? (
-    <Badge variant="success">Graded before seeing the AI</Badge>
-  ) : (
-    <Badge variant="warning">Graded after seeing the AI</Badge>
-  );
-}
-
 /**
- * Staff enter their own score per rubric item. Once saved, the card shows the
- * human and AI scores side by side; before that the AI numbers stay hidden so
- * the human grade is independent.
+ * Optional staff score per rubric item, shown beside the AI's once saved so
+ * the two can be compared.
  */
 export function HumanScoreCard({ items, human, saving, onSave }: Props) {
   const [draft, setDraft] = useState<Draft>(() => draftFrom(items, human.scores));
   const [editing, setEditing] = useState(human.scores.length === 0);
   const [error, setError] = useState<string | null>(null);
 
-  const aiRevealed = human.aiRevealedAt !== null;
   const savedByName = new Map(human.scores.map((entry) => [entry.name, entry.score]));
 
   const submit = async (event: React.FormEvent) => {
@@ -89,25 +75,25 @@ export function HumanScoreCard({ items, human, saving, onSave }: Props) {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base">Your scores</CardTitle>
-        <BlindBadge human={human} />
+        <span className="text-xs text-gray-500">Optional</span>
       </CardHeader>
       <CardContent className="space-y-4">
         {editing ? (
           <form onSubmit={submit} className="space-y-3">
             <p className="text-sm text-gray-500">
-              {human.scores.length > 0
-                ? "Editing keeps the time of your first grade, so whether it counts as blind or AI-informed does not change."
-                : aiRevealed
-                  ? "You have already opened the AI result; these scores will be recorded as AI-informed."
-                  : "Enter your scores first. The AI result opens once they are saved, so your grade stays independent."}
+              Enter your own score per item to compare it with the AI&apos;s. Scores can be
+              changed later.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {items.map((item) => {
                 const id = `human-score-${item.name}`;
                 return (
                   <div key={item.name} className="space-y-1">
-                    <Label htmlFor={id} className="text-sm">
-                      {item.name} <span className="text-gray-500">/ {item.max}</span>
+                    <Label htmlFor={id} className="flex justify-between gap-2 text-sm">
+                      <span>
+                        {item.name} <span className="text-gray-500">/ {item.max}</span>
+                      </span>
+                      <span className="text-gray-500">AI {formatScore(item.aiScore)}</span>
                     </Label>
                     <Input
                       id={id}
@@ -155,12 +141,8 @@ export function HumanScoreCard({ items, human, saving, onSave }: Props) {
                   <tr>
                     <th className="py-1 pr-3 font-medium">Item</th>
                     <th className="py-1 pr-3 text-right font-medium">You</th>
-                    {aiRevealed ? (
-                      <>
-                        <th className="py-1 pr-3 text-right font-medium">AI</th>
-                        <th className="py-1 text-right font-medium">Δ (you − AI)</th>
-                      </>
-                    ) : null}
+                    <th className="py-1 pr-3 text-right font-medium">AI</th>
+                    <th className="py-1 text-right font-medium">Δ (you − AI)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -174,16 +156,12 @@ export function HumanScoreCard({ items, human, saving, onSave }: Props) {
                         <td className="py-1.5 pr-3 text-right font-semibold tabular-nums">
                           {mine === undefined ? "—" : formatScore(mine)}
                         </td>
-                        {aiRevealed ? (
-                          <>
-                            <td className="py-1.5 pr-3 text-right tabular-nums">
-                              {formatScore(item.aiScore)}
-                            </td>
-                            <td className="py-1.5 text-right tabular-nums text-gray-500">
-                              {mine === undefined ? "—" : formatScore(mine - item.aiScore)}
-                            </td>
-                          </>
-                        ) : null}
+                        <td className="py-1.5 pr-3 text-right tabular-nums">
+                          {formatScore(item.aiScore)}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-500">
+                          {mine === undefined ? "—" : formatScore(mine - item.aiScore)}
+                        </td>
                       </tr>
                     );
                   })}

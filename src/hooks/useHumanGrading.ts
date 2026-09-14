@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { HumanScoreEntry } from "@/lib/human-grading";
 
@@ -16,23 +16,32 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return body?.error ?? fallback;
 }
 
-async function postReveal(kind: HumanGradingKind, jobId: string): Promise<Response> {
-  return fetch(`${API_BASE[kind]}/${jobId}/reveal-ai`, { method: "POST" });
-}
-
 /**
- * Saves staff scores for a job and records when the AI result is revealed.
- * Saving scores also reveals the AI result, since the comparison is shown
- * right after. `onChanged` should reload the job so the page reflects the
- * new state.
+ * Saves staff scores for a job and records the first time staff saw the AI
+ * result. The result is shown as soon as the page opens, so the view is
+ * recorded on mount; the timestamps still tell blind grades from AI-informed
+ * ones for the end-of-term comparison. `onChanged` should reload the job.
  */
 export function useHumanGrading(
   kind: HumanGradingKind,
   jobId: string,
+  aiRevealedAt: string | null,
   onChanged: () => void
 ) {
   const [saving, setSaving] = useState(false);
-  const [revealing, setRevealing] = useState(false);
+
+  useEffect(() => {
+    if (aiRevealedAt !== null) return;
+    fetch(`${API_BASE[kind]}/${jobId}/reveal-ai`, { method: "POST" })
+      .then((res) => {
+        if (!res.ok) {
+          console.error(`[human-grading] recording AI view for ${kind} job ${jobId} failed:`, res.status);
+        }
+      })
+      .catch((error) => {
+        console.error(`[human-grading] recording AI view for ${kind} job ${jobId} failed:`, error);
+      });
+  }, [kind, jobId, aiRevealedAt]);
 
   const saveScores = useCallback(
     async (scores: HumanScoreEntry[]): Promise<boolean> => {
@@ -46,10 +55,6 @@ export function useHumanGrading(
         if (!res.ok) {
           toast.error(await errorMessage(res, "Failed to save your scores"));
           return false;
-        }
-        const reveal = await postReveal(kind, jobId);
-        if (!reveal.ok) {
-          console.error(`[human-grading] reveal after save failed for ${kind} job ${jobId}:`, reveal.status);
         }
         toast.success("Your scores were saved");
         onChanged();
@@ -65,24 +70,5 @@ export function useHumanGrading(
     [kind, jobId, onChanged]
   );
 
-  const revealAi = useCallback(async (): Promise<boolean> => {
-    setRevealing(true);
-    try {
-      const res = await postReveal(kind, jobId);
-      if (!res.ok) {
-        toast.error(await errorMessage(res, "Failed to open the AI result"));
-        return false;
-      }
-      onChanged();
-      return true;
-    } catch (error) {
-      console.error(`[human-grading] revealing AI for ${kind} job ${jobId} failed:`, error);
-      toast.error("Failed to open the AI result");
-      return false;
-    } finally {
-      setRevealing(false);
-    }
-  }, [kind, jobId, onChanged]);
-
-  return { saveScores, saving, revealAi, revealing };
+  return { saveScores, saving };
 }

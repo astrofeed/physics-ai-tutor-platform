@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { AiResultGate } from "@/components/grading/AiResultGate";
 import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { JobResult } from "@/components/presentation-grading/JobResult";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
@@ -12,17 +11,19 @@ interface Props {
   onChanged: () => void;
 }
 
-/** Human scorecard entry above the (initially folded) AI result of a finished job. */
+/** AI result of a finished job with an optional human scorecard underneath. */
 export function PresentationGradedView({ job, onChanged }: Props) {
-  const { saveScores, saving, revealAi, revealing } = useHumanGrading(
+  const { saveScores, saving } = useHumanGrading(
     "presentation",
     job.id,
+    job.human.aiRevealedAt,
     onChanged
   );
   const scorecard = parseEvaluation(job.summaryJson)?.scorecard ?? null;
 
   return (
     <>
+      <JobResult job={job} />
       {scorecard ? (
         <HumanScoreCard
           items={scorecard.map((entry) => ({
@@ -35,13 +36,6 @@ export function PresentationGradedView({ job, onChanged }: Props) {
           onSave={saveScores}
         />
       ) : null}
-      <AiResultGate
-        revealed={job.human.aiRevealedAt !== null || !scorecard}
-        revealing={revealing}
-        onReveal={() => void revealAi()}
-      >
-        <JobResult job={job} />
-      </AiResultGate>
     </>
   );
 }
