@@ -115,7 +115,7 @@ export function JobList({
           title={search ? "No matching results" : "No grading jobs yet"}
           description={
             search
-              ? "Try a different presenter name, student ID or topic."
+              ? "Try a different presenter name, student ID, topic, group or date."
               : "Submit a presentation above — results will appear here."
           }
         />
