@@ -179,3 +179,39 @@ export function googleSheetCsvExportUrl(input: string): string | null {
 
   return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gid}`;
 }
+
+export type RosterSearch =
+  | { kind: "group"; number: number }
+  | { kind: "date"; month: number; day: number };
+
+/**
+ * Reads a job-list search as a roster group or presentation date, so that
+ * "1", "group 1" and "Group 01" find Group 1 only (not Groups 10–19) and
+ * "9/5" or "09/05" find that one date. Other text is not a roster search.
+ */
+export function parseRosterSearch(query: string): RosterSearch | null {
+  const trimmed = query.trim();
+  const group = /^(?:group|第)?\s*(\d{1,3})\s*組?$/i.exec(trimmed);
+  if (group) return { kind: "group", number: Number(group[1]) };
+  const date = /^(\d{1,2})\s*\/\s*(\d{1,2})$/.exec(trimmed);
+  if (date) return { kind: "date", month: Number(date[1]), day: Number(date[2]) };
+  return null;
+}
+
+function firstInteger(text: string): number | null {
+  const match = /\d+/.exec(text);
+  return match ? Number(match[0]) : null;
+}
+
+/** Whether a roster entry's group label or date is the one being searched for. */
+export function rosterEntryMatchesSearch(
+  entry: Pick<RosterEntryInput, "groupLabel" | "presentationDate">,
+  search: RosterSearch
+): boolean {
+  if (search.kind === "group") {
+    return entry.groupLabel !== null && firstInteger(entry.groupLabel) === search.number;
+  }
+  if (entry.presentationDate === null) return false;
+  const parts = entry.presentationDate.split("/").map((part) => Number(part.trim()));
+  return parts.length === 2 && parts[0] === search.month && parts[1] === search.day;
+}
