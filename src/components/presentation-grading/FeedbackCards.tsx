@@ -126,20 +126,22 @@ export function StudentFeedbackCard({ evaluation }: { evaluation: PresentationEv
           </ul>
         </SubSection>
 
-        <SubSection title="Questions to think about">
-          <div className="space-y-3">
-            {evaluation.guidingQuestions.map((group, i) => (
-              <div key={i} className="text-sm">
-                <ReferenceChip reference={group.reference} />
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {group.questions.map((question, j) => (
-                    <li key={j}>{question}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </SubSection>
+        {evaluation.guidingQuestions.length > 0 ? (
+          <SubSection title="Questions to think about">
+            <div className="space-y-3">
+              {evaluation.guidingQuestions.map((group, i) => (
+                <div key={i} className="text-sm">
+                  <ReferenceChip reference={group.reference} />
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {group.questions.map((question, j) => (
+                      <li key={j}>{question}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </SubSection>
+        ) : null}
 
         <SubSection title="Advice for the report">
           <p className="text-sm leading-relaxed">{evaluation.reportAdvice}</p>
