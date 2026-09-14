@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { del } from "@vercel/blob";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isUploadedBlobUrl } from "@/lib/chat-attachments";
 import { DEFAULT_PRESENTATION_RUBRIC } from "@/lib/default-presentation-rubric";
@@ -16,6 +17,7 @@ import {
   type PresentationJobSummary,
   type PresentationReasoningEffort,
 } from "@/lib/presentation-grading";
+import { parseRosterSearch } from "@/lib/presentation-roster";
 import { extractPptxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
 import { toHumanGrading } from "@/lib/services/human-grading-service";
@@ -179,23 +181,33 @@ function toSummary(
   };
 }
 
+/**
+ * A search that names a roster group or date ("Group 1", "9/15") lists exactly
+ * those students' jobs; anything else is a substring match on topic,
+ * presenters and student IDs.
+ */
+async function jobSearchFilter(query: string): Promise<Prisma.PresentationGradingJobWhereInput> {
+  if (parseRosterSearch(query)) {
+    const ids = await rosterStudentIdsMatching(query);
+    return ids.length > 0
+      ? { OR: ids.map((id) => ({ studentIds: { contains: id } })) }
+      : { id: { in: [] } };
+  }
+  return {
+    OR: [
+      { topic: { contains: query, mode: "insensitive" } },
+      { presenters: { contains: query, mode: "insensitive" } },
+      { studentIds: { contains: query, mode: "insensitive" } },
+    ],
+  };
+}
+
 export async function listPresentationJobs(
   page: number,
   pageSize: number,
   query?: string
 ) {
-  const where = query
-    ? {
-        OR: [
-          { topic: { contains: query, mode: "insensitive" as const } },
-          { presenters: { contains: query, mode: "insensitive" as const } },
-          { studentIds: { contains: query, mode: "insensitive" as const } },
-          ...(await rosterStudentIdsMatching(query)).map((id) => ({
-            studentIds: { contains: id },
-          })),
-        ],
-      }
-    : undefined;
+  const where = query ? await jobSearchFilter(query) : undefined;
   const [jobs, totalCount] = await Promise.all([
     prisma.presentationGradingJob.findMany({
       where,

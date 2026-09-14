@@ -4,6 +4,8 @@ import {
   ROSTER_SHEET_MAX_BYTES,
   googleSheetCsvExportUrl,
   parseRosterCsv,
+  parseRosterSearch,
+  rosterEntryMatchesSearch,
   type RosterLookup,
   type RosterSummary,
 } from "@/lib/presentation-roster";
@@ -148,19 +150,21 @@ export async function rosterScheduleByStudentId(
   return schedule;
 }
 
-/** Student IDs whose roster group or presentation date matches a search query. */
-export async function rosterStudentIdsMatching(query: string, limit = 200): Promise<string[]> {
+/** Student IDs whose roster group or presentation date is the one a search names; [] for other searches. */
+export async function rosterStudentIdsMatching(query: string): Promise<string[]> {
+  const search = parseRosterSearch(query);
+  if (!search) return [];
   const entries = await prisma.presentationRosterEntry.findMany({
-    where: {
-      OR: [
-        { groupLabel: { contains: query, mode: "insensitive" } },
-        { presentationDate: { contains: query, mode: "insensitive" } },
-      ],
-    },
-    select: { studentId: true },
-    take: limit,
+    where:
+      search.kind === "group"
+        ? { groupLabel: { not: null } }
+        : { presentationDate: { not: null } },
+    select: { studentId: true, groupLabel: true, presentationDate: true },
   });
-  return Array.from(new Set(entries.map((entry) => entry.studentId)));
+  const ids = entries
+    .filter((entry) => rosterEntryMatchesSearch(entry, search))
+    .map((entry) => entry.studentId);
+  return Array.from(new Set(ids));
 }
 
 export async function lookupRosterEntry(studentId: string): Promise<RosterLookup | null> {

@@ -103,6 +103,7 @@ export function usePresentationJobs() {
   pageRef.current = page;
   const searchRef = useRef(debouncedSearch);
   searchRef.current = debouncedSearch;
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -113,6 +114,7 @@ export function usePresentationJobs() {
   }, [search]);
 
   const refresh = useCallback(async (silent = false) => {
+    const seq = ++requestSeq.current;
     if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -123,12 +125,13 @@ export function usePresentationJobs() {
       const res = await fetch(`/api/presentation-grading/jobs?${params}`);
       if (!res.ok) throw new Error(String(res.status));
       const body = await res.json();
+      if (seq !== requestSeq.current) return;
       setJobs(body.data.jobs);
       setTotalCount(body.data.totalCount);
     } catch {
       if (!silent) toast.error("Failed to load grading jobs");
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && seq === requestSeq.current) setLoading(false);
     }
   }, []);
 
