@@ -176,6 +176,7 @@ export async function lookupRosterEntry(studentId: string): Promise<RosterLookup
       name: true,
       englishName: true,
       topic: true,
+      reportTopic: true,
       groupLabel: true,
       presentationDate: true,
     },

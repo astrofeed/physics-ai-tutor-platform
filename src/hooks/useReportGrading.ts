@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { toast } from "sonner";
 import { formatBytes } from "@/lib/chat-attachments";
+import type { ReportBatchFile } from "@/hooks/useReportBatch";
 import {
   REPORT_FILE_MAX_BYTES,
   REPORT_TEXT_MAX_CHARS,
+  filenameStem,
   type ReportJobDetail,
   type ReportJobSummary,
   type ReportReasoningEffort,
@@ -189,13 +191,8 @@ export function useReportJob(id: string) {
   return { job, loading, notFound, refresh: load };
 }
 
-export interface ReportBatchFile {
-  file: File;
-  /** Parsed from the filename; the grader can correct it before submitting. */
-  studentId: string | null;
-}
-
 export interface NewReportJobInput {
+  /** Used for pasted text; each PDF row carries its own title. */
   title: string;
   authors?: string;
   /** Exactly one of files / reportText is provided. */
@@ -233,11 +230,6 @@ async function createJobAndProcess(payload: Record<string, unknown>): Promise<vo
     );
     // The job list shows it as QUEUED; retry restarts it.
   });
-}
-
-/** Strips the extension: "113012345_final.pdf" → "113012345_final". */
-function filenameStem(name: string): string {
-  return name.replace(/\.[^.]+$/, "");
 }
 
 /**
@@ -294,7 +286,8 @@ export function useSubmitReportJob(onCreated: () => void) {
       let started = 0;
       try {
         for (let index = 0; index < input.files.length; index += 1) {
-          const { file, studentId } = input.files[index];
+          const row = input.files[index];
+          const { file } = row;
           setProgress({ phase: "uploading", current: index + 1, total });
           const blob = await upload(file.name, file, {
             access: "public",
@@ -307,9 +300,10 @@ export function useSubmitReportJob(onCreated: () => void) {
           });
           setProgress({ phase: "creating", current: index + 1, total });
           await createJobAndProcess({
-            title: total === 1 && input.title ? input.title : filenameStem(file.name),
-            authors: input.authors,
-            studentId: studentId ?? undefined,
+            title: row.title.trim() || filenameStem(file.name),
+            authors: row.studentName.trim() || undefined,
+            studentId: row.studentId?.trim() || undefined,
+            assignedQuestion: row.assignedQuestion.trim() || undefined,
             reportBlobUrl: blob.url,
             reportFilename: file.name,
             reasoningEffort: input.reasoningEffort,

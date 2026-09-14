@@ -5,11 +5,12 @@
  *
  * Sheet layout (one block per presentation group):
  *
- *   Group 1 | 9/15 | 1 | 林鍵鋒 | Lim Kien Hong | 109062362 | ... | Screened Coulomb forces …
+ *   Group 1 | 9/15 | 1 | 林鍵鋒 | Lim Kien Hong | 109062362 | ... | Screened Coulomb forces … | Report Topic
  *           |      | 2 | …
  *
  * Only the header names matter; the group label and date are filled down from
- * the first row of each block.
+ * the first row of each block. "Report Topic" is optional: when filled it is
+ * the specific question the student's written report must answer.
  */
 
 import { studentIdFromFilename } from "@/lib/report-grading";
@@ -19,6 +20,7 @@ export interface RosterEntryInput {
   name: string | null;
   englishName: string | null;
   topic: string | null;
+  reportTopic: string | null;
   groupLabel: string | null;
   presentationDate: string | null;
 }
@@ -36,6 +38,8 @@ export interface RosterLookup {
   name: string | null;
   englishName: string | null;
   topic: string | null;
+  /** The question the written report must answer; null when the sheet leaves it blank. */
+  reportTopic: string | null;
   groupLabel: string | null;
   presentationDate: string | null;
 }
@@ -87,10 +91,12 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/** Checked in order per cell, so "Report Topic" is claimed before the generic topic pattern sees it. */
 const HEADER_PATTERNS = {
   studentId: /student\s*id|學號/i,
   name: /chinese\s*name|^name$|姓名/i,
   englishName: /english\s*name/i,
+  reportTopic: /report\s*topic|報告題目/i,
   topic: /topic|題目/i,
   presentationDate: /date|日期/i,
 } as const;
@@ -102,7 +108,10 @@ function findColumns(row: string[]): Partial<Record<HeaderKey, number>> | null {
   row.forEach((cell, index) => {
     const label = cell.trim();
     for (const key of Object.keys(HEADER_PATTERNS) as HeaderKey[]) {
-      if (columns[key] === undefined && HEADER_PATTERNS[key].test(label)) columns[key] = index;
+      if (columns[key] === undefined && HEADER_PATTERNS[key].test(label)) {
+        columns[key] = index;
+        break;
+      }
     }
   });
   return columns.studentId === undefined ? null : columns;
@@ -148,6 +157,7 @@ export function parseRosterCsv(csv: string): RosterEntryInput[] {
       name: cellOrNull(row, columns.name),
       englishName: cellOrNull(row, columns.englishName),
       topic: cellOrNull(row, columns.topic),
+      reportTopic: cellOrNull(row, columns.reportTopic),
       groupLabel,
       presentationDate,
     });

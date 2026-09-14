@@ -1,7 +1,8 @@
 /**
  * Reads an LMS (eeClass) submission export in the browser and turns it into
- * one package per student: the presentation video, the slides if present,
- * and the student ID / name parsed from the folder or archive name.
+ * one package per student: for presentations the video plus slides if present,
+ * for written reports each PDF; in both cases with the student ID / name
+ * parsed from the folder or archive name.
  *
  * eeClass names the export `109062362 (林鍵鋒).zip` with a folder of the same
  * name containing the uploaded files plus a `content.html` stub; a bulk export
@@ -131,6 +132,41 @@ export async function parseSubmissionZip(archive: File): Promise<SubmissionPacka
       video,
       slides,
       topicHint: video ? video.name.replace(/\.[a-z0-9]+$/i, "").trim() || null : null,
+    });
+  }
+  return packages.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export interface ReportPackage {
+  /** Folder (or archive) name the PDF came from, e.g. "109062362 (林鍵鋒)". */
+  label: string;
+  studentId: string | null;
+  studentName: string | null;
+  report: File;
+}
+
+/**
+ * One package per PDF in a written-report export, with the student ID / name
+ * from its folder. A folder with several PDFs yields several packages for the
+ * same student; the grader removes the ones that are not the report.
+ */
+export async function parseReportZip(archive: File): Promise<ReportPackage[]> {
+  const zip = await JSZip.loadAsync(await archive.arrayBuffer());
+  const archiveLabel = archive.name.replace(/\.zip$/i, "");
+
+  const entries: { label: string; entry: JSZip.JSZipObject }[] = [];
+  zip.forEach((path, entry) => {
+    if (entry.dir || isShadowEntry(path) || extensionOf(path) !== "pdf") return;
+    entries.push({ label: studentFolder(path) ?? archiveLabel, entry });
+  });
+
+  const packages: ReportPackage[] = [];
+  for (const { label, entry } of entries) {
+    packages.push({
+      label,
+      studentId: studentIdFromFilename(label) ?? studentIdFromFilename(archiveLabel),
+      studentName: studentNameFromLabel(label) ?? studentNameFromLabel(archiveLabel),
+      report: await toFile({ entry, mimeType: SLIDES_MIME.pdf }),
     });
   }
   return packages.sort((a, b) => a.label.localeCompare(b.label));

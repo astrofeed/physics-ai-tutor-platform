@@ -3,7 +3,9 @@
 import React, { useState } from "react";
 import { StaffOnly } from "@/components/auth/StaffOnly";
 import { cn } from "@/lib/utils";
+import { RosterCard } from "@/components/presentation-grading/RosterCard";
 import { NewReportJobForm } from "@/components/report-grading/NewReportJobForm";
+import { ReportHowToCard } from "@/components/report-grading/ReportHowToCard";
 import { ReportJobList } from "@/components/report-grading/ReportJobList";
 import { ReportRubricEditor } from "@/components/report-grading/ReportRubricEditor";
 import { useReportJobs } from "@/hooks/useReportGrading";
@@ -23,8 +25,8 @@ function ReportGradingContent() {
           Written report grading
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          A draft review of a written report or lecture notes — a summary, evidence-referenced
-          comments, and a scored breakdown of each rubric criterion with its reason.
+          A draft review of each written report — a summary, evidence-referenced comments, and a
+          scored breakdown of every criterion, including whether the assigned question was answered.
         </p>
       </div>
 
@@ -52,7 +54,9 @@ function ReportGradingContent() {
 
       {tab === "grade" ? (
         <div className="space-y-6">
+          <ReportHowToCard />
           <NewReportJobForm onCreated={() => void jobsState.refresh(true)} />
+          <RosterCard />
           <ReportJobList
             jobs={jobsState.jobs}
             loading={jobsState.loading}

@@ -21,6 +21,7 @@ export const REPORT_GRADING_MODEL = "gpt-5.6-luna";
 export const REPORT_JOBS_PER_HOUR = 60;
 
 export const REPORT_STUDENT_ID_MAX_CHARS = 50;
+export const REPORT_ASSIGNED_QUESTION_MAX_CHARS = 2_000;
 
 /** How many report PDFs one batch submission may contain. */
 export const REPORT_BATCH_MAX_FILES = 40;
@@ -34,6 +35,11 @@ export interface ReportJobSummary {
   title: string;
   authors: string | null;
   studentId: string | null;
+  /** The question the report had to answer, from the sign-up sheet; null when none was set. */
+  assignedQuestion: string | null;
+  /** From the sign-up sheet for the student ID; null when not rostered. */
+  groupLabel: string | null;
+  presentationDate: string | null;
   status: ReportJobStatusValue;
   error: string | null;
   model: string | null;
@@ -87,6 +93,11 @@ export function studentIdFromFilename(filename: string): string | null {
   const runs = filename.match(/\d{5,15}/g);
   if (!runs) return null;
   return runs.reduce((best, run) => (run.length > best.length ? run : best));
+}
+
+/** "113012345_final.pdf" → "113012345_final". */
+export function filenameStem(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
 }
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;

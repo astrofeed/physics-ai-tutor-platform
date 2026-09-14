@@ -58,6 +58,8 @@ function ReportJobDetailContent({ id }: { id: string }) {
             {[
               job.authors,
               job.studentId ? `ID ${job.studentId}` : null,
+              job.groupLabel,
+              job.presentationDate,
               job.reportFilename,
               job.model,
               `effort ${job.reasoningEffort}`,
@@ -73,6 +75,11 @@ function ReportJobDetailContent({ id }: { id: string }) {
               ? ` · completed ${formatTimestamp(job.completedAt)} in ${formatDuration(job.gradingDurationMs)}`
               : ""}
           </p>
+          {job.assignedQuestion ? (
+            <p className="mt-2 text-sm">
+              <span className="font-medium">Assigned question:</span> {job.assignedQuestion}
+            </p>
+          ) : null}
         </div>
         <div className="mt-8 flex shrink-0 flex-col items-end gap-2">
           <Badge variant={REPORT_STATUS_BADGE_VARIANTS[job.status]}>
