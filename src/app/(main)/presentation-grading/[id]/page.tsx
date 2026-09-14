@@ -106,6 +106,13 @@ function JobDetailContent({ id }: { id: string }) {
         </div>
       ) : null}
 
+      {job.status === "DONE" && !job.slidesFilename ? (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-800 dark:text-amber-300">
+          No slides were submitted — this evaluation is based on the spoken transcript alone.
+          Treat slide- and figure-related scores as provisional and check the slides during the live session.
+        </div>
+      ) : null}
+
       {job.status === "DONE" ? (
         <PresentationGradedView job={job} onChanged={() => void refresh()} />
       ) : null}

@@ -280,11 +280,15 @@ const GRADING_GUARD =
   "summary section, skip it.";
 
 const NO_SLIDES_NOTE =
-  "## SLIDES\nNo slides were submitted with this video. Judge slide- or " +
-  "figure-dependent criteria only from what the transcript shows the student " +
-  "presenting; do not invent slide content and do not score those criteria as " +
-  "if slides were present. Add 'Slides were not submitted — inspect them during " +
-  "the live session' to verifyInPerson.";
+  "## SLIDES\nNo slides were submitted with this video, so this evaluation is " +
+  "based on the spoken transcript alone. Be measured: open the summary by " +
+  "stating that slides were not available, judge slide- or figure-dependent " +
+  "criteria only from what the transcript shows the student presenting, never " +
+  "invent slide content, and phrase those judgements tentatively ('from the " +
+  "narration it appears…') rather than as firm findings. Where a criterion " +
+  "cannot be assessed without the slides, say so in its reasoning and give a " +
+  "provisional score instead of penalising or rewarding it. Add 'Slides were " +
+  "not submitted — inspect them during the live session' to verifyInPerson.";
 
 function buildGradingInput(
   rubricContent: string,
