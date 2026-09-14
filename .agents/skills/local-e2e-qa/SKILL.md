@@ -224,6 +224,65 @@ such as `input_file` / `input_image` / `<document>` blocks — the DB only store
 - pdfjs logs `Warning: UnknownErrorException: Ensure that the standardFontDataUrl API parameter is
   provided.` on every PDF extraction; it is benign (extraction still succeeds).
 
+## Presentation grading: video → audio in the browser (ffmpeg.wasm fallback)
+
+`extractAudioFromVideo` tries Web Audio `decodeAudioData` first and falls back to ffmpeg.wasm for
+containers Chrome can't decode (WMV/AVI/MKV). The mock/stub recipe above extends to it:
+
+- The mock OpenAI server must also answer `POST /v1/audio/transcriptions` (multipart; save the
+  `file` part — it is the WAV the server re-downloaded from Blob — and return `{"text": …}`) and a
+  non-streaming `/v1/responses` whose `output_text` is a JSON string matching
+  `PresentationEvaluationSchema` (`scorecard[]`, `questions[]`, …); then jobs reach DONE locally.
+- Blob stand-in for `uploadToBlob` in `usePresentationGrading.ts`: a tiny CORS server that accepts
+  `PUT /<filename>` and returns `{"url": "http://127.0.0.1:<port>/<saved-name>"}`; also whitelist
+  that origin in `isUploadedBlobUrl`. Mark both `E2E-TEST-STUB` and `git checkout` them at teardown
+  (check `git status` first — only revert your own files if the lead has concurrent edits).
+- Fixtures via ffmpeg lavfi: `-f lavfi -i "sine=…"` (or espeak → wav) + `-c:v wmv2 -c:a wmav2`
+  for WMV, `-c:v mpeg4 -c:a libmp3lame` for AVI, `-an` for a silent file, `-t 230` for one that
+  breaks the 3:30 limit. A ~14 s clip transcodes in ~1 s, so the phase labels flash by: install a
+  `MutationObserver` on the submit button's text into `window.__phaseLog` to prove the order
+  (`Extracting… → Converting the video with ffmpeg… → Uploading… → Starting…`).
+- Network proof: a CDP `Network` listener on the existing Chrome catches the one-time
+  `unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.{js,wasm}` GETs (loaded via `toBlobURL`,
+  so only 2 requests ever; a second fallback file in the same page session must add none) and the
+  stub PUTs. Uploaded WAV should be `pcm_s16le` mono 16 kHz ≈ 32 000 B/s (`ffprobe -show_entries
+  stream=codec_name,sample_rate,channels:format=duration`).
+- The dev server logs `LOAD FAILED net::ERR_ABORTED <id> type=Fetch` bursts right after a job
+  completes — React Query refetch aborts, unrelated to ffmpeg/worker loading.
+- Native GTK file chooser: `Ctrl+L`, type the absolute path, Enter. The slides picker filters to
+  `.pdf,.pptx,…` so only matching files are listed.
+
+## Presentation grading: eeClass ZIP import + Google Sheets sign-up roster
+
+- The roster needs the `PresentationRoster*` migration: `nvm use 22.23.2 && npx prisma generate &&
+  npx prisma migrate deploy` on the scratch DB, otherwise `/api/presentation-grading/roster` 500s
+  (`Cannot read properties of undefined (reading 'findFirst')`).
+- `GET /api/presentation-grading/roster` auto-imports the real course sheet
+  (`DEFAULT_ROSTER_SHEET_URL`, docs.google.com — network needed) the first time staff open the
+  grade tab. To retest the "empty roster" path, `delete from "PresentationRoster"` and reload; to
+  get a stable expected count, export the sheet as CSV yourself and count distinct 9-digit IDs
+  (the number drifts as students sign up — don't trust a count quoted in the task).
+- ZIP parsing is client-side (jszip); the archive itself is never uploaded — assert on the Blob
+  stand-in that only `presentation-audio.wav` / slides PUTs appear. `ArchiveDropZone` is a
+  `<button>` wrapping a hidden `<input multiple accept=".zip">`: click it, then `Ctrl+L` in the GTK
+  chooser; multi-select by typing `"/path/a.zip" "/path/b.zip"` in the location bar. The input is
+  reset after each pick, so re-picking the same file must fire again (regression to keep).
+- Multi-student fixtures: `mkdir -p "fixture/113062113 (名字)"` folders with an mp4 and optional
+  pdf, `zip -r`. A folder without a video becomes a `No video in folder` row that is excluded from
+  `Grade all (N)`. A student ID absent from the sheet keeps the folder name and falls back to the
+  video filename as topic (info toast); present IDs get name/topic/group/date from the sheet.
+- `Grade all` submits sequentially through `usePresentationGrading.submit` — with the mock
+  OpenAI the whole queue finishes in seconds, so screenshot the `Submitting…`/`Started` mix
+  quickly or rely on the CDP `net.log` ordering (WAV PUT → `/jobs` 201 → `/process`, repeated).
+- Help card collapse state lives in `localStorage["presentation-grading-help-collapsed"]`.
+- Mobile check without resizing the X window: drive `Emulation.setDeviceMetricsOverride`
+  over CDP on the tab (see `/home/ubuntu/zip-evidence/cdp_viewport.mjs`). Note the override sticks
+  to that target even after `clearDeviceMetricsOverride` from a separate CDP session — open a new
+  tab to get back to desktop width.
+- A React "change in the order of Hooks called by RosterCard" console error can appear during a
+  Fast Refresh while the lead edits that component (`HotReload` in the stack); it is an HMR
+  artifact, not a runtime bug — re-check on the final commit after a full reload before reporting.
+
 ## Verifying real Vercel Blob behaviour (preview deployment, no local stub)
 
 Blob-storage bugs (e.g. pathname collisions, token options such as `addRandomSuffix`) cannot be
