@@ -24,9 +24,9 @@ const STEPS: { title: string; detail: string }[] = [
       "The browser extracts the audio (a few seconds; WMV/AVI take longer the first time while ffmpeg downloads), uploads it and starts the job. Grading runs in the background for a few minutes — you can submit the next student or leave the page.",
   },
   {
-    title: "Open the job, enter your own scores first, then reveal the AI result.",
+    title: "Open the job to read the AI result; add your own scores if you like.",
     detail:
-      "The AI scorecard is hidden until you have saved your scores (or press “Show AI result anyway”). Grading blind first is what makes the AI-vs-human comparison meaningful. Scores can be edited later.",
+      "The AI scorecard, mistakes and suggested questions show right away. The “Your scores” card underneath is optional — fill it in to compare your grade with the AI’s; scores can be edited later.",
   },
   {
     title: "Export a CSV when you are done.",
