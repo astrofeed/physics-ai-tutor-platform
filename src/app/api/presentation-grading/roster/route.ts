@@ -5,7 +5,7 @@ import { STAFF_ROLES } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import {
   RosterImportError,
-  getRosterSummary,
+  getOrImportDefaultRoster,
   importRosterFromSheet,
 } from "@/lib/services/presentation-roster-service";
 
@@ -17,7 +17,9 @@ export async function GET() {
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
-  return NextResponse.json({ data: await getRosterSummary() });
+  const { roster, importError } = await getOrImportDefaultRoster(auth.user.id);
+  if (importError) logger.warn("Default sign-up sheet import failed", { importError });
+  return NextResponse.json({ data: roster, importError });
 }
 
 export async function PUT(request: Request) {

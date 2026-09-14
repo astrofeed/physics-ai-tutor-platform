@@ -6,16 +6,24 @@ import type { RosterLookup, RosterSummary } from "@/lib/presentation-roster";
 
 const ROSTER_ENDPOINT = "/api/presentation-grading/roster";
 
-/** The imported sign-up sheet (student ID → name/topic) and its re-import action. */
+/**
+ * The imported sign-up sheet (student ID → name/topic) and its re-import action.
+ * The server imports the course's default sheet on first load, so `roster` is
+ * only null when that import failed (`importError` says why).
+ */
 export function usePresentationRoster() {
   const [roster, setRoster] = useState<RosterSummary | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetch(ROSTER_ENDPOINT)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((body) => setRoster(body.data))
+      .then((body) => {
+        setRoster(body.data);
+        setImportError(body.importError ?? null);
+      })
       .catch((error) => {
         console.error("Failed to load the sign-up sheet summary:", error);
         toast.error("Failed to load the sign-up sheet");
@@ -37,6 +45,7 @@ export function usePresentationRoster() {
         return false;
       }
       setRoster(body.data);
+      setImportError(null);
       toast.success(
         `Imported ${body.data.entryCount} students (${body.data.withTopicCount} with a topic)`
       );
@@ -50,7 +59,7 @@ export function usePresentationRoster() {
     }
   }, []);
 
-  return { roster, loading, importing, importSheet };
+  return { roster, importError, loading, importing, importSheet };
 }
 
 /** Looks a student up in the imported roster; null when absent or on error. */

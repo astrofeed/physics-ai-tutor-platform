@@ -42,6 +42,10 @@ export interface RosterLookup {
 
 export const ROSTER_SHEET_MAX_BYTES = 2 * 1024 * 1024;
 
+/** The course's Question Bank sign-up sheet; imported automatically until staff point at another sheet. */
+export const DEFAULT_ROSTER_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1wS5mNJc2Lzr4SECkBHwYhs_qL2AoxveqIqACmrQsCnY/edit?gid=0#gid=0";
+
 /** RFC 4180 parser: quoted cells may contain commas, quotes ("") and newlines. */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

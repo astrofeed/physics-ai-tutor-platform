@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
+  DEFAULT_ROSTER_SHEET_URL,
   ROSTER_SHEET_MAX_BYTES,
   googleSheetCsvExportUrl,
   parseRosterCsv,
@@ -98,6 +99,25 @@ export async function getRosterSummary(): Promise<RosterSummary | null> {
     entryCount,
     withTopicCount,
   };
+}
+
+/**
+ * The current roster, importing the course's default sign-up sheet on first use
+ * so staff never have to paste it. Import failures are returned, not thrown,
+ * so the page still renders and can show why the default is missing.
+ */
+export async function getOrImportDefaultRoster(
+  userId: string
+): Promise<{ roster: RosterSummary | null; importError: string | null }> {
+  const existing = await getRosterSummary();
+  if (existing) return { roster: existing, importError: null };
+
+  try {
+    return { roster: await importRosterFromSheet(DEFAULT_ROSTER_SHEET_URL, userId), importError: null };
+  } catch (error) {
+    if (error instanceof RosterImportError) return { roster: null, importError: error.message };
+    throw error;
+  }
 }
 
 export async function lookupRosterEntry(studentId: string): Promise<RosterLookup | null> {

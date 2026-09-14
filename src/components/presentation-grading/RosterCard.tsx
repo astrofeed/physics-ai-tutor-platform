@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { usePresentationRoster } from "@/hooks/usePresentationRoster";
+import { DEFAULT_ROSTER_SHEET_URL } from "@/lib/presentation-roster";
 
 function formatImportedAt(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -16,15 +17,21 @@ function formatImportedAt(iso: string): string {
   });
 }
 
-/** Import of the Question Bank sign-up sheet; used to auto-fill name and topic by student ID. */
+/**
+ * The Question Bank sign-up sheet used to auto-fill name and topic by student ID.
+ * The course sheet is imported by default; staff only touch the link to switch sheets.
+ */
 export function RosterCard() {
-  const { roster, loading, importing, importSheet } = usePresentationRoster();
-  const [sheetUrl, setSheetUrl] = useState("");
+  const { roster, importError, loading, importing, importSheet } = usePresentationRoster();
+  const [draftUrl, setDraftUrl] = useState<string | null>(null);
+
+  const currentUrl = roster?.sourceUrl ?? DEFAULT_ROSTER_SHEET_URL;
+  const sheetUrl = draftUrl ?? currentUrl;
+  const changed = sheetUrl.trim() !== currentUrl;
 
   const handleImport = async () => {
-    if (await importSheet(sheetUrl.trim() || roster?.sourceUrl || "")) setSheetUrl("");
+    if (await importSheet(sheetUrl.trim())) setDraftUrl(null);
   };
-  const canImport = !importing && (sheetUrl.trim().length > 0 || roster !== null);
 
   return (
     <Card>
@@ -34,31 +41,38 @@ export function RosterCard() {
           Question Bank sign-up sheet
         </CardTitle>
         <CardDescription>
-          Paste the Google Sheet link (shared as “Anyone with the link can view”). Student ID,
-          name and topic are then filled in automatically when you type an ID or import an
-          eeClass export.
+          Already set to the course sign-up sheet — student ID, name and topic are filled in
+          automatically when you type an ID or import an eeClass export. Press Refresh after new
+          sign-ups; only change the link if the course uses a different sheet.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
             aria-label="Google Sheet link"
-            placeholder="https://docs.google.com/spreadsheets/d/…"
             value={sheetUrl}
-            onChange={(e) => setSheetUrl(e.target.value)}
+            onChange={(e) => setDraftUrl(e.target.value)}
             maxLength={2000}
+            className="text-xs"
           />
-          <Button variant="outline" onClick={handleImport} disabled={!canImport} className="shrink-0">
+          <Button
+            variant="outline"
+            onClick={handleImport}
+            disabled={importing || loading || sheetUrl.trim().length === 0}
+            className="shrink-0"
+          >
             {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {roster && !sheetUrl.trim() ? "Re-import" : "Import"}
+            {changed ? "Import this sheet" : "Refresh"}
           </Button>
         </div>
         <p className="text-xs text-gray-500">
           {loading
-            ? "Loading…"
+            ? "Loading the sign-up sheet…"
             : roster
               ? `${roster.entryCount} students (${roster.withTopicCount} with a topic) imported ${formatImportedAt(roster.importedAt)}${roster.importedByName ? ` by ${roster.importedByName}` : ""}.`
-              : "No sheet imported yet — topics will have to be typed by hand."}
+              : importError
+                ? `The course sheet could not be imported: ${importError}`
+                : "No sheet imported yet — topics will have to be typed by hand."}
         </p>
       </CardContent>
     </Card>
