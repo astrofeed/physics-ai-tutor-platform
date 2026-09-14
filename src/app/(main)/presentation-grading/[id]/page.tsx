@@ -45,8 +45,8 @@ function JobDetailContent({ id }: { id: string }) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
             <Link href="/presentation-grading">
               <ArrowLeft className="mr-1 h-4 w-4" />
@@ -77,7 +77,7 @@ function JobDetailContent({ id }: { id: string }) {
               : ""}
           </p>
         </div>
-        <div className="mt-8 flex shrink-0 flex-col items-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:mt-8 sm:flex-col sm:items-end">
           <Badge variant={STATUS_BADGE_VARIANTS[job.status]}>
             {STATUS_LABELS[job.status]}
             {inProgress ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : null}
