@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useRef, useState } from "react";
-import { FileVideo, FileText, Loader2, X } from "lucide-react";
+import React, { useState } from "react";
+import { FileVideo, FileText, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/lib/chat-attachments";
+import { FilePicker } from "./FilePicker";
+import { SubmissionImport, type ResolvedSubmission } from "./SubmissionImport";
+import { lookupRosterStudent } from "@/hooks/usePresentationRoster";
 import {
   PRESENTATION_SLIDES_MAX_BYTES,
   PRESENTATION_TRANSCRIPT_MAX_CHARS,
@@ -28,73 +32,10 @@ import {
 
 const PHASE_LABELS: Record<Exclude<JobSubmitPhase, null>, string> = {
   extracting: "Extracting audio from the video…",
+  transcoding: "Converting the video with ffmpeg (first time downloads ~30 MB)…",
   uploading: "Uploading audio and slides…",
   creating: "Starting the grading job…",
 };
-
-function FilePicker({
-  label,
-  hint,
-  accept,
-  file,
-  onChange,
-  icon: Icon,
-  required,
-}: {
-  label: string;
-  hint: string;
-  accept: string;
-  file: File | null;
-  onChange: (file: File | null) => void;
-  icon: React.ElementType;
-  required?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  return (
-    <div className="space-y-1.5">
-      {label ? (
-        <Label>
-          {label}
-          {required ? <span className="text-red-500"> *</span> : null}
-        </Label>
-      ) : null}
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-      />
-      {file ? (
-        <div className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm">
-          <Icon className="h-4 w-4 shrink-0 text-gray-500" />
-          <span className="truncate flex-1">{file.name}</span>
-          <span className="text-xs text-gray-500 shrink-0">{formatBytes(file.size)}</span>
-          <button
-            type="button"
-            aria-label={label ? `Remove ${label.toLowerCase()}` : "Remove file"}
-            onClick={() => {
-              onChange(null);
-              if (inputRef.current) inputRef.current.value = "";
-            }}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 px-3 py-3 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-        >
-          <Icon className="h-4 w-4" />
-          {hint}
-        </button>
-      )}
-    </div>
-  );
-}
 
 export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [topic, setTopic] = useState("");
@@ -107,6 +48,30 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const [transcript, setTranscript] = useState("");
   const [slides, setSlides] = useState<File | null>(null);
   const { submit, phase } = useSubmitPresentationJob(onCreated);
+
+  const applySubmission = (submission: ResolvedSubmission) => {
+    setSource("video");
+    setStudentIds(submission.studentId ?? "");
+    setPresenters(submission.presenters);
+    setTopic(submission.topic);
+    setVideo(submission.video);
+    setSlides(submission.slides);
+    const slidesNote = submission.slides ? "" : " No slides in this archive — grading from the video only.";
+    if (submission.topicFromRoster) {
+      toast.success(`Filled from the sign-up sheet: ${submission.label}.${slidesNote}`);
+    } else {
+      toast.info(
+        `${submission.label} is not in the sign-up sheet — the topic was taken from the video filename. Please check it.${slidesNote}`
+      );
+    }
+  };
+
+  const fillFromRoster = async () => {
+    const entry = await lookupRosterStudent(studentIds.split(/[,\s]+/)[0] ?? "");
+    if (!entry) return;
+    if (!presenters.trim() && entry.name) setPresenters(entry.name);
+    if (!topic.trim() && entry.topic) setTopic(entry.topic);
+  };
 
   const hasSource = source === "video" ? video !== null : transcript.trim().length > 0;
   const canSubmit =
@@ -138,11 +103,19 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       <CardHeader>
         <CardTitle>New grading job</CardTitle>
         <CardDescription>
-          The audio is extracted in your browser — the video itself is never uploaded. You can
-          submit several students back to back; jobs run in the background.
+          Drop the eeClass export below and check what was filled in, or enter a student by hand.
+          The audio is extracted in your browser — the video itself is never uploaded; jobs run in
+          the background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <SubmissionImport
+          onSingle={applySubmission}
+          submit={submit}
+          phase={phase}
+          track={track === "unknown" ? undefined : track}
+          reasoningEffort={reasoningEffort}
+        />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="job-topic">
@@ -178,6 +151,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             maxLength={200}
             value={studentIds}
             onChange={(e) => setStudentIds(e.target.value)}
+            onBlur={() => void fillFromRoster()}
           />
         </div>
 
@@ -241,8 +215,8 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             {source === "video" ? (
               <FilePicker
                 label=""
-                hint={`Video, max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
-                accept="video/*"
+                hint={`MP4, MOV, WebM, WMV or AVI — max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
+                accept="video/*,.wmv,.avi,.mkv"
                 file={video}
                 onChange={setVideo}
                 icon={FileVideo}

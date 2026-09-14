@@ -58,7 +58,10 @@ function JobDetailContent({ id }: { id: string }) {
             {[
               job.presenters,
               job.studentIds,
+              job.groupLabel,
+              job.presentationDate ? `presents ${job.presentationDate}` : null,
               job.track ? `Track ${job.track}` : null,
+              job.slidesFilename ? `slides: ${job.slidesFilename}` : "no slides submitted",
               job.model,
               `effort ${job.reasoningEffort}`,
               job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,
@@ -102,6 +105,13 @@ function JobDetailContent({ id }: { id: string }) {
             : "Preparing the transcript…"}
           <br />
           You can leave this page; processing continues in the background.
+        </div>
+      ) : null}
+
+      {job.status === "DONE" && !job.slidesFilename ? (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-800 dark:text-amber-300">
+          No slides were submitted — this evaluation is based on the spoken transcript alone.
+          Treat slide- and figure-related scores as provisional and check the slides during the live session.
         </div>
       ) : null}
 

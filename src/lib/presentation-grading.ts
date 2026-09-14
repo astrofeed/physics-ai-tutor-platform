@@ -55,6 +55,9 @@ export interface PresentationJobSummary {
   topic: string;
   presenters: string | null;
   studentIds: string | null;
+  /** From the sign-up sheet for the first student ID; null when not rostered. */
+  groupLabel: string | null;
+  presentationDate: string | null;
   track: string | null;
   status: PresentationJobStatusValue;
   error: string | null;

@@ -19,6 +19,11 @@ import {
 import { extractPptxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
 import { toHumanGrading } from "@/lib/services/human-grading-service";
+import {
+  rosterScheduleByStudentId,
+  rosterStudentIdsMatching,
+  type RosterSchedule,
+} from "@/lib/services/presentation-roster-service";
 
 const MAX_SLIDES_TEXT_CHARS = 60_000;
 
@@ -134,15 +139,32 @@ async function rubricVersionOf(rubricId: string): Promise<number | null> {
   return rubric?.version ?? null;
 }
 
+function studentIdsOf(job: { studentIds: string | null }): string[] {
+  return (job.studentIds ?? "").split(/[\s,;、]+/).filter((id) => /^\d{5,15}$/.test(id));
+}
+
+/** Group / date of the job's first rostered student, resolved at read time so re-imports stay in sync. */
+async function scheduleForJobs(
+  jobs: { studentIds: string | null }[]
+): Promise<(RosterSchedule | null)[]> {
+  const schedule = await rosterScheduleByStudentId(jobs.flatMap(studentIdsOf));
+  return jobs.map(
+    (job) => studentIdsOf(job).map((id) => schedule.get(id)).find((entry) => entry) ?? null
+  );
+}
+
 function toSummary(
   job: JobRecord & { createdBy?: { name: string | null } },
-  rubricVersion: number | null
+  rubricVersion: number | null,
+  schedule: RosterSchedule | null
 ): PresentationJobSummary {
   return {
     id: job.id,
     topic: job.topic,
     presenters: job.presenters,
     studentIds: job.studentIds,
+    groupLabel: schedule?.groupLabel ?? null,
+    presentationDate: schedule?.presentationDate ?? null,
     track: job.track,
     status: job.status,
     error: job.error,
@@ -168,6 +190,9 @@ export async function listPresentationJobs(
           { topic: { contains: query, mode: "insensitive" as const } },
           { presenters: { contains: query, mode: "insensitive" as const } },
           { studentIds: { contains: query, mode: "insensitive" as const } },
+          ...(await rosterStudentIdsMatching(query)).map((id) => ({
+            studentIds: { contains: id },
+          })),
         ],
       }
     : undefined;
@@ -181,9 +206,12 @@ export async function listPresentationJobs(
     }),
     prisma.presentationGradingJob.count({ where }),
   ]);
-  const versions = await Promise.all(jobs.map((j) => rubricVersionOf(j.rubricId)));
+  const [versions, schedules] = await Promise.all([
+    Promise.all(jobs.map((j) => rubricVersionOf(j.rubricId))),
+    scheduleForJobs(jobs),
+  ]);
   return {
-    jobs: jobs.map((job, i) => toSummary(job, versions[i])),
+    jobs: jobs.map((job, i) => toSummary(job, versions[i], schedules[i])),
     totalCount,
   };
 }
@@ -200,8 +228,12 @@ export async function getPresentationJob(
     },
   });
   if (!job) return null;
+  const [rubricVersion, [schedule]] = await Promise.all([
+    rubricVersionOf(job.rubricId),
+    scheduleForJobs([job]),
+  ]);
   return {
-    ...toSummary(job, await rubricVersionOf(job.rubricId)),
+    ...toSummary(job, rubricVersion, schedule),
     transcript: job.transcript,
     slidesText: job.slidesText,
     slidesFilename: job.slidesFilename,
@@ -279,6 +311,17 @@ const GRADING_GUARD =
   "already captures the scores. If the rubric asks for a machine-readable " +
   "summary section, skip it.";
 
+const NO_SLIDES_NOTE =
+  "## SLIDES\nNo slides were submitted with this video, so this evaluation is " +
+  "based on the spoken transcript alone. Be measured: open the summary by " +
+  "stating that slides were not available, judge slide- or figure-dependent " +
+  "criteria only from what the transcript shows the student presenting, never " +
+  "invent slide content, and phrase those judgements tentatively ('from the " +
+  "narration it appears…') rather than as firm findings. Where a criterion " +
+  "cannot be assessed without the slides, say so in its reasoning and give a " +
+  "provisional score instead of penalising or rewarding it. Add 'Slides were " +
+  "not submitted — inspect them during the live session' to verifyInPerson.";
+
 function buildGradingInput(
   rubricContent: string,
   job: JobRecord,
@@ -300,6 +343,8 @@ function buildGradingInput(
   if (slides.text) {
     const sanitized = slides.text.replace(/<\/slides>/gi, "</ slides>");
     textParts.push(`<slides>\n${sanitized}\n</slides>`);
+  } else if (!slides.pdf) {
+    textParts.push(NO_SLIDES_NOTE);
   }
 
   const content: Array<
