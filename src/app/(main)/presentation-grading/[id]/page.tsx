@@ -59,6 +59,7 @@ function JobDetailContent({ id }: { id: string }) {
               job.presenters,
               job.studentIds,
               job.track ? `Track ${job.track}` : null,
+              job.slidesFilename ? `slides: ${job.slidesFilename}` : "no slides submitted",
               job.model,
               `effort ${job.reasoningEffort}`,
               job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,

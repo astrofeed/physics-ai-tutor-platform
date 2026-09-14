@@ -71,6 +71,7 @@ model User {
   rateLimitHits          RateLimitHit[]
   confirmedAnswerKeys    AssignmentQuestion[] @relation("KeyConfirmedBy")
   presentationRubrics    PresentationRubric[] @relation("RubricUpdatedBy")
+  presentationRosters    PresentationRoster[]
   presentationGradingJobs PresentationGradingJob[] @relation("PresentationJobCreatedBy")
   reportRubrics    ReportRubric[]     @relation("ReportRubricUpdatedBy")
   reportGradingJobs ReportGradingJob[] @relation("ReportJobCreatedBy")
@@ -177,6 +178,34 @@ model PresentationRubric {
 
   updatedBy User                     @relation("RubricUpdatedBy", fields: [updatedById], references: [id])
   jobs      PresentationGradingJob[]
+}
+
+/// Snapshot of the presentation sign-up sheet (Google Sheet), used to auto-fill
+/// name/topic from a student ID. Re-importing replaces the previous snapshot.
+model PresentationRoster {
+  id           String   @id @default(cuid())
+  sourceUrl    String
+  importedById String
+  importedAt   DateTime @default(now())
+
+  importedBy User                     @relation(fields: [importedById], references: [id])
+  entries    PresentationRosterEntry[]
+}
+
+model PresentationRosterEntry {
+  id               String  @id @default(cuid())
+  rosterId         String
+  studentId        String
+  name             String?
+  englishName      String?
+  topic            String?
+  groupLabel       String?
+  presentationDate String?
+
+  roster PresentationRoster @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@unique([rosterId, studentId])
+  @@index([studentId])
 }
 
 model PresentationGradingJob {

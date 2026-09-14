@@ -279,6 +279,13 @@ const GRADING_GUARD =
   "already captures the scores. If the rubric asks for a machine-readable " +
   "summary section, skip it.";
 
+const NO_SLIDES_NOTE =
+  "## SLIDES\nNo slides were submitted with this video. Judge slide- or " +
+  "figure-dependent criteria only from what the transcript shows the student " +
+  "presenting; do not invent slide content and do not score those criteria as " +
+  "if slides were present. Add 'Slides were not submitted — inspect them during " +
+  "the live session' to verifyInPerson.";
+
 function buildGradingInput(
   rubricContent: string,
   job: JobRecord,
@@ -300,6 +307,8 @@ function buildGradingInput(
   if (slides.text) {
     const sanitized = slides.text.replace(/<\/slides>/gi, "</ slides>");
     textParts.push(`<slides>\n${sanitized}\n</slides>`);
+  } else if (!slides.pdf) {
+    textParts.push(NO_SLIDES_NOTE);
   }
 
   const content: Array<

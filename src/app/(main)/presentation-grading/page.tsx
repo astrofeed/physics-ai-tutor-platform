@@ -5,6 +5,7 @@ import { StaffOnly } from "@/components/auth/StaffOnly";
 import { cn } from "@/lib/utils";
 import { JobList } from "@/components/presentation-grading/JobList";
 import { NewJobForm } from "@/components/presentation-grading/NewJobForm";
+import { RosterCard } from "@/components/presentation-grading/RosterCard";
 import { RubricEditor } from "@/components/presentation-grading/RubricEditor";
 import { usePresentationJobs } from "@/hooks/usePresentationGrading";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -53,6 +54,7 @@ function PresentationGradingContent() {
       {tab === "grade" ? (
         <div className="space-y-6">
           <NewJobForm onCreated={() => void jobsState.refresh(true)} />
+          <RosterCard />
           <JobList
             jobs={jobsState.jobs}
             loading={jobsState.loading}
