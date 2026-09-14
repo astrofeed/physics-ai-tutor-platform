@@ -81,9 +81,9 @@ export function JobList({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search presenter, student ID or topic…"
+        placeholder="Search presenter, student ID, topic, group or date…"
         className="pl-8 pr-8"
-        aria-label="Search by presenter name, student ID or problem/topic"
+        aria-label="Search by presenter name, student ID, problem/topic, group or presentation date"
       />
       {search ? (
         <button
@@ -180,6 +180,8 @@ export function JobList({
                   <p className="text-xs text-gray-500">
                     {[
                       job.studentIds,
+                      job.groupLabel,
+                      job.presentationDate,
                       job.track ? `Track ${job.track}` : null,
                       `effort ${job.reasoningEffort}`,
                       job.rubricVersion !== null ? `rubric v${job.rubricVersion}` : null,

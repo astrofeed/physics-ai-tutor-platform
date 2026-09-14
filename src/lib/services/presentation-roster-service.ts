@@ -120,6 +120,49 @@ export async function getOrImportDefaultRoster(
   }
 }
 
+export interface RosterSchedule {
+  groupLabel: string | null;
+  presentationDate: string | null;
+}
+
+/** Group / date per student ID for the given IDs (from the latest roster). */
+export async function rosterScheduleByStudentId(
+  studentIds: string[]
+): Promise<Map<string, RosterSchedule>> {
+  const schedule = new Map<string, RosterSchedule>();
+  if (studentIds.length === 0) return schedule;
+
+  const entries = await prisma.presentationRosterEntry.findMany({
+    where: { studentId: { in: studentIds } },
+    orderBy: { roster: { importedAt: "desc" } },
+    select: { studentId: true, groupLabel: true, presentationDate: true },
+  });
+  for (const entry of entries) {
+    if (!schedule.has(entry.studentId)) {
+      schedule.set(entry.studentId, {
+        groupLabel: entry.groupLabel,
+        presentationDate: entry.presentationDate,
+      });
+    }
+  }
+  return schedule;
+}
+
+/** Student IDs whose roster group or presentation date matches a search query. */
+export async function rosterStudentIdsMatching(query: string, limit = 200): Promise<string[]> {
+  const entries = await prisma.presentationRosterEntry.findMany({
+    where: {
+      OR: [
+        { groupLabel: { contains: query, mode: "insensitive" } },
+        { presentationDate: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    select: { studentId: true },
+    take: limit,
+  });
+  return Array.from(new Set(entries.map((entry) => entry.studentId)));
+}
+
 export async function lookupRosterEntry(studentId: string): Promise<RosterLookup | null> {
   const entry = await prisma.presentationRosterEntry.findFirst({
     where: { studentId },

@@ -58,6 +58,8 @@ function JobDetailContent({ id }: { id: string }) {
             {[
               job.presenters,
               job.studentIds,
+              job.groupLabel,
+              job.presentationDate ? `presents ${job.presentationDate}` : null,
               job.track ? `Track ${job.track}` : null,
               job.slidesFilename ? `slides: ${job.slidesFilename}` : "no slides submitted",
               job.model,

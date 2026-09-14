@@ -148,6 +148,8 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
     "Topic",
     "Presenters",
     "Student IDs",
+    "Group",
+    "Presentation date",
     "Track",
     "Status",
     ...categories.flatMap(({ category, maxPoints }) => [
@@ -172,6 +174,8 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
       job.topic,
       job.presenters,
       job.studentIds,
+      job.groupLabel,
+      job.presentationDate,
       job.track,
       job.status,
       ...categories.flatMap(({ category }) => [
