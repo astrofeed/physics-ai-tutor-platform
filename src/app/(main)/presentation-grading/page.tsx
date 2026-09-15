@@ -7,6 +7,7 @@ import { HowToGradeCard } from "@/components/presentation-grading/HowToGradeCard
 import { JobList } from "@/components/presentation-grading/JobList";
 import { NewJobForm } from "@/components/presentation-grading/NewJobForm";
 import { RosterCard } from "@/components/presentation-grading/RosterCard";
+import { usePresentationRoster } from "@/hooks/usePresentationRoster";
 import { RubricEditor } from "@/components/presentation-grading/RubricEditor";
 import { usePresentationJobs } from "@/hooks/usePresentationGrading";
 import { useTrackTime } from "@/lib/use-track-time";
@@ -16,6 +17,7 @@ type Tab = "grade" | "rubric";
 function PresentationGradingContent() {
   const [tab, setTab] = useState<Tab>("grade");
   const jobsState = usePresentationJobs();
+  const rosterState = usePresentationRoster();
   useTrackTime("PRESENTATION_GRADING");
 
   return (
@@ -56,7 +58,7 @@ function PresentationGradingContent() {
         <div className="space-y-6">
           <HowToGradeCard />
           <NewJobForm onCreated={() => void jobsState.refresh(true)} />
-          <RosterCard />
+          <RosterCard {...rosterState} />
           <JobList
             jobs={jobsState.jobs}
             loading={jobsState.loading}
@@ -65,6 +67,9 @@ function PresentationGradingContent() {
             totalCount={jobsState.totalCount}
             search={jobsState.search}
             onSearchChange={jobsState.setSearch}
+            groupNumbers={rosterState.roster?.groupNumbers ?? []}
+            group={jobsState.group}
+            onGroupChange={jobsState.setGroup}
             onPageChange={jobsState.setPage}
             onRefresh={() => void jobsState.refresh(true)}
           />

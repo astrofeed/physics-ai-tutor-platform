@@ -6,12 +6,20 @@ import type { RosterLookup, RosterSummary } from "@/lib/presentation-roster";
 
 const ROSTER_ENDPOINT = "/api/presentation-grading/roster";
 
+export interface RosterState {
+  roster: RosterSummary | null;
+  importError: string | null;
+  loading: boolean;
+  importing: boolean;
+  importSheet: (sheetUrl: string) => Promise<boolean>;
+}
+
 /**
  * The imported sign-up sheet (student ID → name/topic) and its re-import action.
  * The server imports the course's default sheet on first load, so `roster` is
  * only null when that import failed (`importError` says why).
  */
-export function usePresentationRoster() {
+export function usePresentationRoster(): RosterState {
   const [roster, setRoster] = useState<RosterSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

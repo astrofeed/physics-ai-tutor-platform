@@ -4,9 +4,10 @@ import {
   ROSTER_SHEET_MAX_BYTES,
   googleSheetCsvExportUrl,
   parseRosterCsv,
-  parseRosterSearch,
   rosterEntryMatchesSearch,
+  rosterGroupNumbers,
   type RosterLookup,
+  type RosterSearch,
   type RosterSummary,
 } from "@/lib/presentation-roster";
 
@@ -79,6 +80,7 @@ export async function importRosterFromSheet(sheetUrl: string, userId: string): P
     importedByName: roster.importedBy.name,
     entryCount: entries.length,
     withTopicCount: entries.filter((entry) => entry.topic !== null).length,
+    groupNumbers: rosterGroupNumbers(entries.map((entry) => entry.groupLabel)),
   };
 }
 
@@ -89,9 +91,14 @@ export async function getRosterSummary(): Promise<RosterSummary | null> {
   });
   if (!roster) return null;
 
-  const [entryCount, withTopicCount] = await Promise.all([
+  const [entryCount, withTopicCount, groups] = await Promise.all([
     prisma.presentationRosterEntry.count({ where: { rosterId: roster.id } }),
     prisma.presentationRosterEntry.count({ where: { rosterId: roster.id, topic: { not: null } } }),
+    prisma.presentationRosterEntry.findMany({
+      where: { rosterId: roster.id, groupLabel: { not: null } },
+      distinct: ["groupLabel"],
+      select: { groupLabel: true },
+    }),
   ]);
 
   return {
@@ -100,6 +107,7 @@ export async function getRosterSummary(): Promise<RosterSummary | null> {
     importedByName: roster.importedBy.name,
     entryCount,
     withTopicCount,
+    groupNumbers: rosterGroupNumbers(groups.map((entry) => entry.groupLabel)),
   };
 }
 
@@ -160,10 +168,8 @@ export async function rosterScheduleByStudentId(
   return schedule;
 }
 
-/** Student IDs whose roster group or presentation date is the one a search names; [] for other searches. */
-export async function rosterStudentIdsMatching(query: string): Promise<string[]> {
-  const search = parseRosterSearch(query);
-  if (!search) return [];
+/** Student IDs whose roster group or presentation date is the one searched for. */
+export async function rosterStudentIdsMatching(search: RosterSearch): Promise<string[]> {
   const entries = await prisma.presentationRosterEntry.findMany({
     where:
       search.kind === "group"

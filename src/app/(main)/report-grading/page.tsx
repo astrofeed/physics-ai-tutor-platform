@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { StaffOnly } from "@/components/auth/StaffOnly";
 import { cn } from "@/lib/utils";
 import { RosterCard } from "@/components/presentation-grading/RosterCard";
+import { usePresentationRoster } from "@/hooks/usePresentationRoster";
 import { NewReportJobForm } from "@/components/report-grading/NewReportJobForm";
 import { ReportHowToCard } from "@/components/report-grading/ReportHowToCard";
 import { ReportJobList } from "@/components/report-grading/ReportJobList";
@@ -16,6 +17,7 @@ type Tab = "grade" | "rubric";
 function ReportGradingContent() {
   const [tab, setTab] = useState<Tab>("grade");
   const jobsState = useReportJobs();
+  const rosterState = usePresentationRoster();
   useTrackTime("PRESENTATION_GRADING", "report");
 
   return (
@@ -56,7 +58,7 @@ function ReportGradingContent() {
         <div className="space-y-6">
           <ReportHowToCard />
           <NewReportJobForm onCreated={() => void jobsState.refresh(true)} />
-          <RosterCard />
+          <RosterCard {...rosterState} />
           <ReportJobList
             jobs={jobsState.jobs}
             loading={jobsState.loading}
@@ -65,6 +67,9 @@ function ReportGradingContent() {
             totalCount={jobsState.totalCount}
             search={jobsState.search}
             onSearchChange={jobsState.setSearch}
+            groupNumbers={rosterState.roster?.groupNumbers ?? []}
+            group={jobsState.group}
+            onGroupChange={jobsState.setGroup}
             onPageChange={jobsState.setPage}
             onRefresh={() => void jobsState.refresh(true)}
           />

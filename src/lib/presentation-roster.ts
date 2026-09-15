@@ -32,6 +32,8 @@ export interface RosterSummary {
   importedByName: string | null;
   entryCount: number;
   withTopicCount: number;
+  /** Distinct group numbers on the sheet, ascending — the options of the results Group filter. */
+  groupNumbers: number[];
 }
 
 export interface RosterLookup {
@@ -204,6 +206,25 @@ export type RosterSearch =
   | { kind: "group"; number: number }
   | { kind: "date"; month: number; day: number };
 
+/** How a grading results list is narrowed: free text and/or one roster group. */
+export interface JobListFilter {
+  query?: string;
+  /** Roster group number (the "3" of "Group 3"); only that group's students are listed. */
+  group?: number;
+}
+
+const MAX_GROUP_NUMBER = 999;
+
+/** The `q` / `group` query parameters of a results-list request; malformed values are ignored. */
+export function parseJobListFilter(searchParams: URLSearchParams): JobListFilter {
+  const query = (searchParams.get("q") ?? "").trim().slice(0, 200);
+  const group = Number(searchParams.get("group"));
+  return {
+    query: query || undefined,
+    group: Number.isInteger(group) && group >= 1 && group <= MAX_GROUP_NUMBER ? group : undefined,
+  };
+}
+
 /**
  * Reads a job-list search as a roster group or presentation date, so that
  * "1", "group 1" and "Group 01" find Group 1 only (not Groups 10–19) and
@@ -221,6 +242,12 @@ export function parseRosterSearch(query: string): RosterSearch | null {
 function firstInteger(text: string): number | null {
   const match = /\d+/.exec(text);
   return match ? Number(match[0]) : null;
+}
+
+/** Distinct group numbers behind labels such as "Group 3" / "第3組", ascending. */
+export function rosterGroupNumbers(groupLabels: (string | null)[]): number[] {
+  const numbers = groupLabels.flatMap((label) => (label === null ? [] : firstInteger(label) ?? []));
+  return Array.from(new Set(numbers)).sort((a, b) => a - b);
 }
 
 /** Whether a roster entry's group label or date is the one being searched for. */

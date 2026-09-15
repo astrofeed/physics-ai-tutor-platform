@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
+import { parseJobListFilter } from "@/lib/presentation-roster";
 import { consumeActionRateLimit } from "@/lib/services/action-rate-limit";
 import {
   createReportJob,
@@ -36,9 +37,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(searchParams.get("pageSize")) || 20));
-  const query = (searchParams.get("q") ?? "").trim().slice(0, 200) || undefined;
 
-  const result = await listReportJobs(page, pageSize, query);
+  const result = await listReportJobs(page, pageSize, parseJobListFilter(searchParams));
   return NextResponse.json({ data: result });
 }
 

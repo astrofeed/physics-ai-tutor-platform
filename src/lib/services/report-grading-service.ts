@@ -10,7 +10,7 @@ import {
   type ReportReasoningEffort,
 } from "@/lib/report-grading";
 import { logger } from "@/lib/logger";
-import { parseRosterSearch } from "@/lib/presentation-roster";
+import { parseRosterSearch, type JobListFilter, type RosterSearch } from "@/lib/presentation-roster";
 import { toHumanGrading } from "@/lib/services/human-grading-service";
 import { toFeedbackEmailStatus } from "@/lib/services/feedback-email-service";
 import { gradeReport, loadReport } from "@/lib/services/report-grading-ai";
@@ -145,16 +145,20 @@ function toSummary(
   };
 }
 
+/** Reports of exactly the students the roster search names (a group or a date). */
+async function rosterJobFilter(search: RosterSearch): Promise<Prisma.ReportGradingJobWhereInput> {
+  const ids = await rosterStudentIdsMatching(search);
+  return ids.length > 0 ? { studentId: { in: ids } } : { id: { in: [] } };
+}
+
 /**
  * A search that names a roster group or date ("Group 1", "9/15") lists exactly
  * those students' reports; anything else is a substring match on title,
  * authors and student ID.
  */
 async function jobSearchFilter(query: string): Promise<Prisma.ReportGradingJobWhereInput> {
-  if (parseRosterSearch(query)) {
-    const ids = await rosterStudentIdsMatching(query);
-    return ids.length > 0 ? { studentId: { in: ids } } : { id: { in: [] } };
-  }
+  const rosterSearch = parseRosterSearch(query);
+  if (rosterSearch) return rosterJobFilter(rosterSearch);
   return {
     OR: [
       { title: { contains: query, mode: "insensitive" } },
@@ -164,8 +168,14 @@ async function jobSearchFilter(query: string): Promise<Prisma.ReportGradingJobWh
   };
 }
 
-export async function listReportJobs(page: number, pageSize: number, query?: string) {
-  const where = query ? await jobSearchFilter(query) : undefined;
+export async function listReportJobs(page: number, pageSize: number, filter: JobListFilter = {}) {
+  const conditions = await Promise.all([
+    ...(filter.query ? [jobSearchFilter(filter.query)] : []),
+    ...(filter.group !== undefined
+      ? [rosterJobFilter({ kind: "group", number: filter.group })]
+      : []),
+  ]);
+  const where = conditions.length > 0 ? { AND: conditions } : undefined;
   const [jobs, totalCount] = await Promise.all([
     prisma.reportGradingJob.findMany({
       where,
