@@ -31,6 +31,12 @@ export interface FeedbackDraft {
   message: string;
 }
 
+/** `GET …/feedback-email`: the draft, and whether a model rewrote it as a letter (false = raw template). */
+export interface FeedbackDraftResponse {
+  draft: FeedbackDraft;
+  rewritten: boolean;
+}
+
 export interface DraftStudent {
   name: string | null;
   senderName: string;
@@ -44,10 +50,6 @@ function signature(senderName: string): string {
   return `Best regards,\n${senderName}`;
 }
 
-function bulleted(items: string[]): string {
-  return items.map((item) => `- ${item}`).join("\n");
-}
-
 function joinSections(sections: (string | false | null)[]): string {
   return sections.filter((section): section is string => Boolean(section)).join("\n\n");
 }
@@ -57,54 +59,48 @@ function topicSuggestionsText(
 ): string {
   const lead =
     suggestions.verdict === "revise"
-      ? "Before extending, please revise the report first: "
-      : "Your report is on solid ground: ";
+      ? "For the written report, please address the points above first. "
+      : "For the written report, you are in a good position to go further. ";
   const options = suggestions.options
-    .map((option, i) => `${i + 1}. ${option.title}\n   ${option.direction}\n   Why: ${option.rationale}`)
+    .map((option, i) => `${i + 1}. ${option.title} — ${option.direction}`)
     .join("\n");
-  return `Suggested report topics\n${lead}${suggestions.assessment}\n\n${options}`;
+  return `${lead}${suggestions.assessment} A few directions you could take:\n${options}`;
 }
 
-/** Student-facing draft: summary, strengths, questions, report advice and topic suggestions. */
+/**
+ * Template draft (summary + suggested report directions, no section labels).
+ * The API normally replaces the middle with a model-written letter; this is
+ * what staff see when no model is available.
+ */
 export function presentationFeedbackDraft(
   topic: string,
   evaluation: PresentationEvaluation,
   student: DraftStudent
 ): FeedbackDraft {
-  const guiding = evaluation.guidingQuestions
-    .map((group) => `${group.reference}\n${bulleted(group.questions)}`)
-    .join("\n\n");
   return {
     subject: `Feedback on your presentation: ${topic}`,
     message: joinSections([
       greeting(student.name),
-      `Here is the feedback on your presentation "${topic}".`,
-      `Summary\n${evaluation.summary}`,
-      evaluation.strengths.length > 0 && `What you did well\n${bulleted(evaluation.strengths)}`,
-      guiding && `Questions to think about\n${guiding}`,
-      `Advice for the report\n${evaluation.reportAdvice}`,
+      `Here is my feedback on your presentation "${topic}".`,
+      evaluation.summary,
       evaluation.topicSuggestions && topicSuggestionsText(evaluation.topicSuggestions),
       signature(student.senderName),
     ]),
   };
 }
 
-/** Student-facing draft: summary and the evidence-referenced comments. */
+/** Template draft for a report: the summary alone. */
 export function reportFeedbackDraft(
   title: string,
   evaluation: ReportEvaluation,
   student: DraftStudent
 ): FeedbackDraft {
-  const comments = evaluation.comments
-    .map((comment) => `- ${comment.comment} (${comment.reference})`)
-    .join("\n");
   return {
     subject: `Feedback on your report: ${title}`,
     message: joinSections([
       greeting(student.name),
-      `Here is the feedback on your written report "${title}".`,
-      `Summary\n${evaluation.summary}`,
-      comments && `Comments\n${comments}`,
+      `Here is my feedback on your written report "${title}".`,
+      evaluation.summary,
       signature(student.senderName),
     ]),
   };

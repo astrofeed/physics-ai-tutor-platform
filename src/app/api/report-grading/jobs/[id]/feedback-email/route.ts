@@ -2,7 +2,20 @@ import { NextResponse } from "next/server";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
 import { FeedbackEmailInputSchema } from "@/lib/feedback-email";
+import { draftReportFeedback } from "@/lib/services/feedback-draft-service";
 import { sendReportFeedback } from "@/lib/services/feedback-email-service";
+
+/** Editable draft of the AI feedback, written as a letter and signed with the caller's name. */
+export async function GET(_request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireApiRole([...STAFF_ROLES]);
+  if (isErrorResponse(auth)) return auth;
+
+  const result = await draftReportFeedback(params.id, auth.user.name ?? "Course staff");
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ data: result.data });
+}
 
 export async function POST(
   request: Request,
