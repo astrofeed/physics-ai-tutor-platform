@@ -58,6 +58,7 @@ function JobDetailContent({ id }: { id: string }) {
             {[
               job.presenters,
               job.studentIds,
+              job.englishName,
               job.groupLabel,
               job.presentationDate ? `presents ${job.presentationDate}` : null,
               job.track ? `Track ${job.track}` : null,

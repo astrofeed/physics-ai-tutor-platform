@@ -58,6 +58,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
             {[
               job.authors,
               job.studentId ? `ID ${job.studentId}` : null,
+              job.englishName,
               job.groupLabel,
               job.presentationDate,
               job.reportFilename,

@@ -182,6 +182,7 @@ export function ReportJobList({
                   <p className="text-xs text-gray-500">
                     {[
                       job.studentId ? `ID ${job.studentId}` : "no student ID",
+                      job.englishName,
                       job.groupLabel,
                       job.presentationDate,
                       `effort ${job.reasoningEffort}`,

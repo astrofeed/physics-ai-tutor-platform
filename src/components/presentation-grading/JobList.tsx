@@ -180,6 +180,7 @@ export function JobList({
                   <p className="text-xs text-gray-500">
                     {[
                       job.studentIds,
+                      job.englishName,
                       job.groupLabel,
                       job.presentationDate,
                       job.track ? `Track ${job.track}` : null,
