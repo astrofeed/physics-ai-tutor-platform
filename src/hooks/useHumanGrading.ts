@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { HumanScoreEntry } from "@/lib/human-grading";
+import type { HumanScoresInput } from "@/lib/human-grading";
 
 export type HumanGradingKind = "report" | "presentation";
 
@@ -17,7 +17,7 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 }
 
 /**
- * Saves staff scores for a job and records the first time staff saw the AI
+ * Saves staff scores (per item or one total) for a job and records the first time staff saw the AI
  * result. The result is shown as soon as the page opens, so the view is
  * recorded on mount; the timestamps still tell blind grades from AI-informed
  * ones for the end-of-term comparison. `onChanged` should reload the job.
@@ -44,13 +44,13 @@ export function useHumanGrading(
   }, [kind, jobId, aiRevealedAt]);
 
   const saveScores = useCallback(
-    async (scores: HumanScoreEntry[]): Promise<boolean> => {
+    async (input: HumanScoresInput): Promise<boolean> => {
       setSaving(true);
       try {
         const res = await fetch(`${API_BASE[kind]}/${jobId}/human-scores`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scores }),
+          body: JSON.stringify(input),
         });
         if (!res.ok) {
           toast.error(await errorMessage(res, "Failed to save your scores"));

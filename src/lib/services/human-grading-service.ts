@@ -13,6 +13,7 @@ import { parseEvaluation } from "@/lib/presentation-grading";
 interface HumanGradingRow {
   aiRevealedAt: Date | null;
   humanGradedAt: Date | null;
+  humanTotal: Prisma.Decimal | null;
   humanGradedBy: { name: string | null } | null;
 }
 
@@ -26,6 +27,7 @@ export function toHumanGrading(
 ): HumanGrading {
   return {
     scores: scores.map((row) => ({ name: row.name, score: Number(row.score) })),
+    total: job.humanTotal === null ? null : Number(job.humanTotal),
     gradedAt: job.humanGradedAt?.toISOString() ?? null,
     gradedByName: job.humanGradedBy?.name ?? null,
     aiRevealedAt: job.aiRevealedAt?.toISOString() ?? null,
@@ -37,13 +39,21 @@ export type SaveHumanScoresResult =
   | { ok: false; status: 404 | 409 | 400; error: string };
 
 /**
- * Checks every submitted score against the names and upper bounds the AI
- * result defines, so human and AI scores always pair up one-to-one.
+ * Checks the submitted scores against the names and upper bounds the AI
+ * result defines (so human and AI scores pair up one-to-one), or a directly
+ * entered total against the scale's maximum.
  */
 function validateAgainst(
   input: HumanScoresInput,
-  maxByName: Map<string, number>
+  maxByName: Map<string, number>,
+  maxTotal: number
 ): SaveHumanScoresResult {
+  if ("total" in input) {
+    if (input.total > maxTotal) {
+      return { ok: false, status: 400, error: `Total must be between 0 and ${maxTotal}` };
+    }
+    return { ok: true };
+  }
   const seen = new Set<string>();
   for (const entry of input.scores) {
     const max = maxByName.get(entry.name);
@@ -65,6 +75,15 @@ function validateAgainst(
   return { ok: true };
 }
 
+/** A total replaces any per-item scores and vice versa; `humanGradedAt` keeps its first value. */
+function gradingUpdate(input: HumanScoresInput, graderId: string, gradedAt: Date | null) {
+  return {
+    humanGradedById: graderId,
+    humanGradedAt: gradedAt ?? new Date(),
+    humanTotal: "total" in input ? input.total : null,
+  };
+}
+
 export async function saveReportHumanScores(
   jobId: string,
   graderId: string,
@@ -82,21 +101,22 @@ export async function saveReportHumanScores(
 
   const valid = validateAgainst(
     input,
-    new Map(criteria.map((c) => [c.criterion, REPORT_CRITERION_MAX_SCORE]))
+    new Map(criteria.map((c) => [c.criterion, REPORT_CRITERION_MAX_SCORE])),
+    REPORT_CRITERION_MAX_SCORE
   );
   if (!valid.ok) return valid;
 
   await prisma.$transaction([
     prisma.reportHumanScore.deleteMany({ where: { jobId } }),
     prisma.reportHumanScore.createMany({
-      data: input.scores.map((s) => ({ jobId, criterion: s.name, score: s.score })),
+      data:
+        "scores" in input
+          ? input.scores.map((s) => ({ jobId, criterion: s.name, score: s.score }))
+          : [],
     }),
     prisma.reportGradingJob.update({
       where: { id: jobId },
-      data: {
-        humanGradedById: graderId,
-        humanGradedAt: job.humanGradedAt ?? new Date(),
-      },
+      data: gradingUpdate(input, graderId, job.humanGradedAt),
     }),
   ]);
   return { ok: true };
@@ -119,21 +139,22 @@ export async function savePresentationHumanScores(
 
   const valid = validateAgainst(
     input,
-    new Map(scorecard.map((c) => [c.category, c.maxPoints]))
+    new Map(scorecard.map((c) => [c.category, c.maxPoints])),
+    scorecard.reduce((sum, c) => sum + c.maxPoints, 0)
   );
   if (!valid.ok) return valid;
 
   await prisma.$transaction([
     prisma.presentationHumanScore.deleteMany({ where: { jobId } }),
     prisma.presentationHumanScore.createMany({
-      data: input.scores.map((s) => ({ jobId, category: s.name, score: s.score })),
+      data:
+        "scores" in input
+          ? input.scores.map((s) => ({ jobId, category: s.name, score: s.score }))
+          : [],
     }),
     prisma.presentationGradingJob.update({
       where: { id: jobId },
-      data: {
-        humanGradedById: graderId,
-        humanGradedAt: job.humanGradedAt ?? new Date(),
-      },
+      data: gradingUpdate(input, graderId, job.humanGradedAt),
     }),
   ]);
   return { ok: true };

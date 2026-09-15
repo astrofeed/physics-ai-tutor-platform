@@ -137,6 +137,8 @@ model ReportGradingJob {
   aiRevealedAt    DateTime?
   humanGradedAt   DateTime?
   humanGradedById String?
+  /// Staff total entered directly (0-10) when they skip per-criterion scores.
+  humanTotal      Decimal?  @db.Decimal(10, 2)
 
   createdBy     User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
   humanGradedBy User?        @relation("ReportJobHumanGradedBy", fields: [humanGradedById], references: [id])
@@ -251,6 +253,8 @@ model PresentationGradingJob {
   aiRevealedAt    DateTime?
   humanGradedAt   DateTime?
   humanGradedById String?
+  /// Staff total entered directly (0-100) when they skip per-category scores.
+  humanTotal      Decimal?  @db.Decimal(10, 2)
 
   createdBy     User               @relation("PresentationJobCreatedBy", fields: [createdById], references: [id])
   humanGradedBy User?              @relation("PresentationJobHumanGradedBy", fields: [humanGradedById], references: [id])
