@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { GRADING_FEEDBACK_EMAILED_ACTION } from "@/lib/constants";
-import { emailConfigured, sendEmail } from "@/lib/email";
+import { EmailNotConfiguredError, sendEmail } from "@/lib/email";
 import { gradingFeedbackEmail } from "@/lib/email-templates";
 import type { FeedbackEmailInput, FeedbackEmailStatus } from "@/lib/feedback-email";
 
@@ -57,13 +57,6 @@ async function sendFeedback(
   sender: Sender,
   input: FeedbackEmailInput
 ): Promise<SendFeedbackResult> {
-  if (!emailConfigured) {
-    return {
-      ok: false,
-      status: 503,
-      error: "Email is not configured on this server (GMAIL_USER / GMAIL_APP_PASSWORD).",
-    };
-  }
   if (!(await jobExists(kind, jobId))) {
     return { ok: false, status: 404, error: "Job not found" };
   }
@@ -76,6 +69,9 @@ async function sendFeedback(
       html: gradingFeedbackEmail({ message: input.message, senderName }),
     });
   } catch (error) {
+    if (error instanceof EmailNotConfiguredError) {
+      return { ok: false, status: 503, error: error.message };
+    }
     console.error(`[feedback-email] ${kind} job ${jobId}: send to ${input.to} failed`, error);
     return { ok: false, status: 502, error: "The mail server rejected the message. Try again." };
   }

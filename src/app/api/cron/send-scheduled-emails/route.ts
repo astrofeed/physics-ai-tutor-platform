@@ -49,6 +49,9 @@ export async function GET(req: Request) {
           failedCount = result.failedCount;
           skippedCount = result.skippedCount;
           recipientCount = result.recipients.length;
+          if (recipientCount > 0 && sentCount === 0) {
+            throw new Error(`No emails were sent (${failedCount} failed): ${result.errors[0]}`);
+          }
         }
 
         // Create in-app notification if flagged, visible only to the chosen roles

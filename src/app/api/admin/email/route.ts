@@ -43,6 +43,12 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+    if (result.sentCount === 0) {
+      return NextResponse.json(
+        { error: `No emails were sent: ${result.errors[0] ?? "mail server rejected the messages"}` },
+        { status: 502 }
+      );
+    }
 
     await prisma.auditLog.create({
       data: {

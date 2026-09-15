@@ -79,9 +79,13 @@ export async function checkAndBanSpammer({
     if (email) {
       const subject = "PhysTutor Account Suspended — Unusual Activity Detected";
       const html = accountSuspendedEmail({ userName: name, recentCount, sourceLabel });
-      await sendEmail({ to: email, subject, html });
+      try {
+        await sendEmail({ to: email, subject, html });
+      } catch (emailError) {
+        console.error(`[spam] Ban applied but suspension email to ${email} failed:`, emailError);
+        return true;
+      }
 
-      // Log email in audit
       await prisma.auditLog.create({
         data: {
           userId,
@@ -115,7 +119,9 @@ export async function checkAndBanSpammer({
             reason,
             adminUrl: process.env.NEXTAUTH_URL || "",
           }),
-        });
+        }).catch((emailError) =>
+          console.error("[spam] Failed to notify staff about auto-ban:", emailError)
+        );
       }
     }
 

@@ -190,6 +190,9 @@ export function NotifyUsersDialog({
     if (!res.ok) {
       throw new Error(data?.error || "Failed to send emails");
     }
+    if (data?.failedCount) {
+      toast.warning(`${data.failedCount} email${data.failedCount === 1 ? "" : "s"} could not be delivered`);
+    }
     return describeDelivery(data ?? {});
   };
 
