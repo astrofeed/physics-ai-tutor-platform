@@ -109,6 +109,23 @@ export function notificationEmail(params: NotificationEmailParams): string {
 }
 
 // ---------------------------------------------------------------------------
+// Template: Grading feedback sent to a student
+// ---------------------------------------------------------------------------
+
+export interface GradingFeedbackEmailParams {
+  /** Staff-edited draft; already contains its own greeting and sign-off. */
+  message: string;
+  senderName: string;
+}
+
+/** AI feedback on a report or presentation, forwarded to the student by staff. */
+export function gradingFeedbackEmail(params: GradingFeedbackEmailParams): string {
+  return brandedLayout(`
+              <p style="margin: 0; color: #111827; font-size: 14px; line-height: 1.7; white-space: pre-wrap;">${esc(params.message)}</p>
+              <p style="margin: 24px 0 0; color: #6b7280; font-size: 13px;">Sent by ${esc(params.senderName)} via PhysTutor. Reply to this email is not monitored; contact your TA or professor directly with questions.</p>`);
+}
+
+// ---------------------------------------------------------------------------
 // Template: Password reset
 // ---------------------------------------------------------------------------
 

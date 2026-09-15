@@ -13,6 +13,9 @@ const transporter =
 
 const FROM_EMAIL = process.env.EMAIL_FROM || `PhysTutor <${process.env.GMAIL_USER || "noreply@phystutor.app"}>`;
 
+/** False when no Gmail credentials are set; sendEmail then only logs. */
+export const emailConfigured = transporter !== null;
+
 interface SendEmailOptions {
   to: string | string[];
   subject: string;

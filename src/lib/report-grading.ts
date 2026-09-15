@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type { HumanGrading } from "@/lib/human-grading";
+import type { FeedbackEmailStatus } from "@/lib/feedback-email";
 
 export const REASONING_EFFORT_OPTIONS = ["high", "xhigh"] as const;
 
@@ -52,7 +53,7 @@ export interface ReportJobSummary {
   completedAt: string | null;
 }
 
-export interface ReportJobDetail extends ReportJobSummary {
+export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
   reportText: string | null;
   reportFilename: string | null;
   resultJson: string | null;
