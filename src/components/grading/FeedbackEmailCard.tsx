@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useEffectiveSession } from "@/lib/effective-session-context";
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ interface Props {
 export function FeedbackEmailCard({ kind, jobId, status, draftFor, onChanged }: Props) {
   const [open, setOpen] = useState(false);
   const { send, sending } = useFeedbackEmail(kind, jobId, onChanged);
-  const senderName = useSession().data?.user?.name ?? "Course staff";
+  const senderName = useEffectiveSession().name || "Course staff";
   const sentBefore = status.feedbackSentAt !== null;
 
   return (
