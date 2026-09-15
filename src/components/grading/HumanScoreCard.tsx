@@ -79,6 +79,7 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
 export function HumanScoreCard({ items, total, totalFromItems, human, saving, onSave }: Props) {
   const graded = human.scores.length > 0 || human.total !== null;
   const [editing, setEditing] = useState(!graded);
+  const [openedByGrader, setOpenedByGrader] = useState(false);
 
   const savedByName = new Map(human.scores.map((entry) => [entry.name, entry.score]));
   const rows: Row[] = [
@@ -119,6 +120,7 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
               return ok;
             }}
             onCancel={graded ? () => setEditing(false) : null}
+            focusOnOpen={openedByGrader}
           />
         ) : (
           <>
@@ -128,7 +130,14 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
                 {human.gradedAt ? `Saved ${formatTimestamp(human.gradedAt)}` : null}
                 {human.gradedByName ? ` by ${human.gradedByName}` : null}
               </span>
-              <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setOpenedByGrader(true);
+                  setEditing(true);
+                }}
+              >
                 Edit scores
               </Button>
             </div>
