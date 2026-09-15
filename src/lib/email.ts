@@ -13,6 +13,14 @@ const transporter =
 
 const FROM_EMAIL = process.env.EMAIL_FROM || `PhysTutor <${process.env.GMAIL_USER || "noreply@phystutor.app"}>`;
 
+/** Thrown by sendEmail when GMAIL_USER / GMAIL_APP_PASSWORD are unset; nothing is ever "sent" to the log. */
+export class EmailNotConfiguredError extends Error {
+  constructor() {
+    super("Email is not configured on this server (GMAIL_USER / GMAIL_APP_PASSWORD).");
+    this.name = "EmailNotConfiguredError";
+  }
+}
+
 interface SendEmailOptions {
   to: string | string[];
   subject: string;
@@ -21,10 +29,10 @@ interface SendEmailOptions {
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   if (!transporter) {
-    console.warn(
-      `[email] GMAIL_USER/GMAIL_APP_PASSWORD not set. Would have sent "${subject}" to ${Array.isArray(to) ? to.join(", ") : to}`
+    console.error(
+      `[email] GMAIL_USER/GMAIL_APP_PASSWORD not set; not sending "${subject}" to ${Array.isArray(to) ? to.join(", ") : to}`
     );
-    return;
+    throw new EmailNotConfiguredError();
   }
 
   try {

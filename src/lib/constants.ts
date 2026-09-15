@@ -44,6 +44,14 @@ export const ROLE_HIERARCHY: Record<string, number> = {
   ADMIN: 3,
 };
 
+/** AuditLog actions that the admin Email Records page lists as sent mail. */
+export const BULK_EMAIL_SENT_ACTION = "bulk_email_sent";
+export const GRADING_FEEDBACK_EMAILED_ACTION = "grading_feedback_emailed";
+export const EMAIL_SENT_AUDIT_ACTIONS = [
+  BULK_EMAIL_SENT_ACTION,
+  GRADING_FEEDBACK_EMAILED_ACTION,
+] as const;
+
 /** Roles considered "staff" (non-student) */
 export const STAFF_ROLES = ["TA", "PROFESSOR", "ADMIN"] as const;
 

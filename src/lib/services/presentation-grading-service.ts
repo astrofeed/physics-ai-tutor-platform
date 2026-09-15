@@ -21,6 +21,7 @@ import { parseRosterSearch } from "@/lib/presentation-roster";
 import { extractPptxText } from "@/lib/services/office-text-extraction";
 import { logger } from "@/lib/logger";
 import { toHumanGrading } from "@/lib/services/human-grading-service";
+import { toFeedbackEmailStatus } from "@/lib/services/feedback-email-service";
 import {
   rosterScheduleByStudentId,
   rosterStudentIdsMatching,
@@ -247,6 +248,7 @@ export async function getPresentationJob(
   ]);
   return {
     ...toSummary(job, rubricVersion, schedule),
+    ...toFeedbackEmailStatus(job, schedule?.email ?? null),
     transcript: job.transcript,
     slidesText: job.slidesText,
     slidesFilename: job.slidesFilename,

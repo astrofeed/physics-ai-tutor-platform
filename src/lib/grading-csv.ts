@@ -13,6 +13,7 @@ import {
 import {
   parseEvaluation,
   type PresentationJobDetail,
+  type TopicSuggestions,
 } from "@/lib/presentation-grading";
 import {
   gradedBlind,
@@ -141,13 +142,41 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
   return toCsv([header, ...rows]);
 }
 
+function topicSuggestionHeader(optionCount: number): CsvValue[] {
+  return [
+    "Report topic verdict",
+    "Report topic assessment",
+    ...Array.from({ length: optionCount }, (_, i) => `Suggested report topic ${i + 1}`),
+  ];
+}
+
+function topicSuggestionCells(
+  suggestions: TopicSuggestions | null | undefined,
+  optionCount: number
+): CsvValue[] {
+  const options = suggestions?.options ?? [];
+  return [
+    suggestions?.verdict ?? "",
+    suggestions?.assessment ?? "",
+    ...Array.from({ length: optionCount }, (_, i) => {
+      const option = options[i];
+      return option ? `${option.title} — ${option.direction}` : "";
+    }),
+  ];
+}
+
 /**
- * One row per presentation job: identifying fields plus the AI and human
- * score of every scorecard category and the totals — no questions or
+ * One row per presentation job: identifying fields, the AI and human score of
+ * every scorecard category, the totals and the AI's report-topic suggestions
+ * (verdict, assessment, one column per suggested topic) — no questions or
  * comments. Category columns follow the first graded job's scorecard order.
  */
 export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
   const evaluations = jobs.map((job) => parseEvaluation(job.summaryJson));
+  const topicOptionCount = Math.max(
+    0,
+    ...evaluations.map((evaluation) => evaluation?.topicSuggestions?.options.length ?? 0)
+  );
 
   const categories: { category: string; maxPoints: number }[] = [];
   const seen = new Set<string>();
@@ -176,6 +205,7 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
     "AI total (/100)",
     "Human total (/100)",
     ...HUMAN_AUDIT_HEADER,
+    ...topicSuggestionHeader(topicOptionCount),
   ];
 
   const rows = jobs.map((job, i) => {
@@ -200,6 +230,7 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
       job.totalScore ?? "",
       humanTotal ?? "",
       ...humanAuditCells(job.human),
+      ...topicSuggestionCells(evaluations[i]?.topicSuggestions, topicOptionCount),
     ];
   });
 

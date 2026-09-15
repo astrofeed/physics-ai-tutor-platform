@@ -12,6 +12,7 @@ import {
 import { logger } from "@/lib/logger";
 import { parseRosterSearch } from "@/lib/presentation-roster";
 import { toHumanGrading } from "@/lib/services/human-grading-service";
+import { toFeedbackEmailStatus } from "@/lib/services/feedback-email-service";
 import { gradeReport, loadReport } from "@/lib/services/report-grading-ai";
 import {
   rosterScheduleByStudentId,
@@ -201,6 +202,7 @@ export async function getReportJob(id: string): Promise<ReportJobDetail | null> 
   ]);
   return {
     ...toSummary(job, version, schedule),
+    ...toFeedbackEmailStatus(job, schedule?.email ?? null),
     reportText: job.reportText,
     reportFilename: job.reportFilename,
     resultJson: job.resultJson,

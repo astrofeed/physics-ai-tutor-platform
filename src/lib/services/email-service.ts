@@ -86,6 +86,11 @@ export async function sendBulkEmails(params: SendBulkEmailsParams): Promise<Send
   const errors = results
     .filter((r): r is PromiseRejectedResult => r.status === "rejected")
     .map((r) => String(r.reason?.message || r.reason));
+  if (failedCount > 0) {
+    console.error(
+      `[email] ${failedCount}/${recipients.length} sends failed for "${subject}": ${errors[0]}`
+    );
+  }
 
   return { recipients, sentCount, failedCount, skippedCount, errors };
 }

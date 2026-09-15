@@ -1,10 +1,12 @@
 "use client";
 
 import React from "react";
+import { FeedbackEmailCard } from "@/components/grading/FeedbackEmailCard";
 import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { ReportJobResult } from "@/components/report-grading/ReportJobResult";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
 import { weightedAverage } from "@/lib/human-grading";
+import { reportFeedbackDraft } from "@/lib/feedback-email";
 import {
   parseReportEvaluation,
   REPORT_CRITERION_MAX_SCORE,
@@ -24,13 +26,28 @@ export function ReportGradedView({ job, onChanged }: Props) {
     job.human.aiRevealedAt,
     onChanged
   );
-  const criterionScores = parseReportEvaluation(job.resultJson)?.criterionScores ?? null;
+  const evaluation = parseReportEvaluation(job.resultJson);
+  const criterionScores = evaluation?.criterionScores ?? null;
   const weightByCriterion = new Map(criterionScores?.map((c) => [c.criterion, c.weightPercent]));
   const weightOf = (criterion: string) => weightByCriterion.get(criterion);
 
   return (
     <>
       <ReportJobResult job={job} />
+      {evaluation ? (
+        <FeedbackEmailCard
+          kind="report"
+          jobId={job.id}
+          status={job}
+          draftFor={(senderName) =>
+            reportFeedbackDraft(job.title, evaluation, {
+              name: job.englishName ?? job.authors,
+              senderName,
+            })
+          }
+          onChanged={onChanged}
+        />
+      ) : null}
       {criterionScores ? (
         <HumanScoreCard
           items={criterionScores.map((entry) => ({

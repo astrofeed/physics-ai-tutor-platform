@@ -19,6 +19,7 @@ export interface RosterEntryInput {
   studentId: string;
   name: string | null;
   englishName: string | null;
+  email: string | null;
   topic: string | null;
   reportTopic: string | null;
   groupLabel: string | null;
@@ -96,6 +97,7 @@ const HEADER_PATTERNS = {
   studentId: /student\s*id|學號/i,
   name: /chinese\s*name|^name$|姓名/i,
   englishName: /english\s*name/i,
+  email: /e-?mail|信箱/i,
   reportTopic: /report\s*topic|報告題目/i,
   topic: /topic|題目/i,
   presentationDate: /date|日期/i,
@@ -121,6 +123,13 @@ function cellOrNull(row: string[], index: number | undefined): string | null {
   if (index === undefined) return null;
   const value = row[index]?.replace(/\s+/g, " ").trim();
   return value ? value : null;
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function emailOrNull(value: string | null): string | null {
+  const email = value?.toLowerCase() ?? null;
+  return email && EMAIL_PATTERN.test(email) ? email : null;
 }
 
 /**
@@ -156,6 +165,7 @@ export function parseRosterCsv(csv: string): RosterEntryInput[] {
       studentId,
       name: cellOrNull(row, columns.name),
       englishName: cellOrNull(row, columns.englishName),
+      email: emailOrNull(cellOrNull(row, columns.email)),
       topic: cellOrNull(row, columns.topic),
       reportTopic: cellOrNull(row, columns.reportTopic),
       groupLabel,

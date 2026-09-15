@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type { HumanGrading } from "@/lib/human-grading";
+import type { FeedbackEmailStatus } from "@/lib/feedback-email";
 
 export const PRESENTATION_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI transcription cap
 export const PRESENTATION_SLIDES_MAX_BYTES = 30 * 1024 * 1024;
@@ -72,7 +73,7 @@ export interface PresentationJobSummary {
   completedAt: string | null;
 }
 
-export interface PresentationJobDetail extends PresentationJobSummary {
+export interface PresentationJobDetail extends PresentationJobSummary, FeedbackEmailStatus {
   transcript: string | null;
   slidesText: string | null;
   slidesFilename: string | null;

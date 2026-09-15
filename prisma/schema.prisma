@@ -139,6 +139,9 @@ model ReportGradingJob {
   humanGradedById String?
   /// Staff total entered directly (0-10) when they skip per-criterion scores.
   humanTotal      Decimal?  @db.Decimal(10, 2)
+  /// Last time staff emailed the AI feedback to the student, and where.
+  feedbackSentAt  DateTime?
+  feedbackSentTo  String?
 
   createdBy     User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
   humanGradedBy User?        @relation("ReportJobHumanGradedBy", fields: [humanGradedById], references: [id])
@@ -203,6 +206,7 @@ model PresentationRosterEntry {
   studentId        String
   name             String?
   englishName      String?
+  email            String?
   topic            String?
   reportTopic      String?
   groupLabel       String?
@@ -255,6 +259,9 @@ model PresentationGradingJob {
   humanGradedById String?
   /// Staff total entered directly (0-100) when they skip per-category scores.
   humanTotal      Decimal?  @db.Decimal(10, 2)
+  /// Last time staff emailed the AI feedback to the student, and where.
+  feedbackSentAt  DateTime?
+  feedbackSentTo  String?
 
   createdBy     User               @relation("PresentationJobCreatedBy", fields: [createdById], references: [id])
   humanGradedBy User?              @relation("PresentationJobHumanGradedBy", fields: [humanGradedById], references: [id])
