@@ -4,6 +4,7 @@ import { StaffOnly } from "@/components/auth/StaffOnly";
 import React, { useEffect, useState, useCallback } from "react";
 import { Mail, CalendarClock, Send, Clock, Users } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { GRADING_FEEDBACK_EMAILED_ACTION } from "@/lib/constants";
 
 import { Pagination } from "@/components/ui/pagination";
 import {
@@ -180,6 +181,11 @@ function EmailRecordsPageContent() {
               const message = (record.details?.message as string) || "";
               const badge = STATUS_BADGE[record.status] || STATUS_BADGE.SENT;
               const isScheduled = record.type === "scheduled";
+              const kindLabel = isScheduled
+                ? "Scheduled"
+                : record.action === GRADING_FEEDBACK_EMAILED_ACTION
+                  ? "Grading feedback sent"
+                  : "Sent";
 
               return (
                 <details
@@ -205,7 +211,7 @@ function EmailRecordsPageContent() {
                           </span>
                         </div>
                         <p className="text-xs text-gray-400 dark:text-gray-500">
-                          {isScheduled ? "Scheduled" : "Sent"} by {senderName} · {recipientCount} recipient{recipientCount !== 1 ? "s" : ""}
+                          {kindLabel} by {senderName} · {recipientCount} recipient{recipientCount !== 1 ? "s" : ""}
                         </p>
                       </div>
                     </div>

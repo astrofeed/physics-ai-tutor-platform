@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { EMAIL_SENT_AUDIT_ACTIONS } from "@/lib/constants";
 
 export async function GET(req: Request) {
   try {
@@ -12,8 +13,8 @@ export async function GET(req: Request) {
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "15", 10)));
     const filter = searchParams.get("filter") || "all"; // all | sent | scheduled
 
-    // Fetch sent email audit logs
-    const sentWhere = { action: "bulk_email_sent" as const };
+    // Sent mail: staff bulk emails and per-student grading feedback
+    const sentWhere = { action: { in: [...EMAIL_SENT_AUDIT_ACTIONS] } };
 
     // Fetch scheduled emails
     const scheduledWhere = filter === "sent"

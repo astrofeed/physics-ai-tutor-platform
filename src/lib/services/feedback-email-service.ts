@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { GRADING_FEEDBACK_EMAILED_ACTION } from "@/lib/constants";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { gradingFeedbackEmail } from "@/lib/email-templates";
 import type { FeedbackEmailInput, FeedbackEmailStatus } from "@/lib/feedback-email";
@@ -81,21 +82,44 @@ async function sendFeedback(
 
   const sentAt = new Date();
   await markSent(kind, jobId, input.to, sentAt);
+  await recordInEmailRecords(kind, jobId, sender.id, senderName, input);
+  return { ok: true, sentAt: sentAt.toISOString() };
+}
+
+/**
+ * Same AuditLog shape as bulk emails so the admin Email Records page lists the
+ * send. The recipient is stored as a user id when the address belongs to a
+ * platform account (the page then shows the name), otherwise as the address.
+ */
+async function recordInEmailRecords(
+  kind: JobKind,
+  jobId: string,
+  senderId: string,
+  senderName: string,
+  input: FeedbackEmailInput
+) {
+  const account = await prisma.user.findUnique({
+    where: { email: input.to },
+    select: { id: true },
+  });
   await prisma.auditLog.create({
     data: {
-      userId: sender.id,
-      action: "grading_feedback_emailed",
+      userId: senderId,
+      action: GRADING_FEEDBACK_EMAILED_ACTION,
       details: {
-        performedBy: sender.id,
+        performedBy: senderId,
         performedByName: senderName,
+        recipientIds: [account?.id ?? input.to],
+        recipientCount: 1,
+        subject: input.subject,
+        message: input.message,
+        sentCount: 1,
+        failedCount: 0,
         jobKind: kind,
         jobId,
-        to: input.to,
-        subject: input.subject,
       },
     },
   });
-  return { ok: true, sentAt: sentAt.toISOString() };
 }
 
 export function sendReportFeedback(jobId: string, sender: Sender, input: FeedbackEmailInput) {
