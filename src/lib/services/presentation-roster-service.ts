@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import {
   DEFAULT_ROSTER_SHEET_URL,
   ROSTER_SHEET_MAX_BYTES,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/presentation-roster";
 
 const FETCH_TIMEOUT_MS = 15_000;
-/** Rosters older than this are re-imported from their sheet when the grading pages load. */
+/** Rosters older than this are re-imported from their sheet when a grading page or result loads. */
 const ROSTER_REFRESH_MS = 60 * 60 * 1000;
 
 export class RosterImportError extends Error {}
@@ -136,6 +137,24 @@ export async function getOrImportDefaultRoster(
   } catch (error) {
     if (error instanceof RosterImportError) return { roster: existing, importError: error.message };
     throw error;
+  }
+}
+
+const FAILED_REFRESH_RETRY_MS = 5 * 60 * 1000;
+let lastFailedRefreshAt = 0;
+
+/**
+ * Same refresh as `getOrImportDefaultRoster`, for reads that only need the
+ * roster to be current (a result page opened directly, before any grading
+ * page ran the hourly refresh). Import failures are logged, never surfaced,
+ * and not retried for a few minutes so a dead sheet cannot slow every read.
+ */
+export async function refreshRosterIfStale(userId: string): Promise<void> {
+  if (Date.now() - lastFailedRefreshAt < FAILED_REFRESH_RETRY_MS) return;
+  const { importError } = await getOrImportDefaultRoster(userId);
+  if (importError) {
+    lastFailedRefreshAt = Date.now();
+    logger.warn("[roster] background refresh failed", { importError });
   }
 }
 

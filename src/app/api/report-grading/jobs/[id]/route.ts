@@ -7,6 +7,7 @@ import {
   updateReportJob,
   deleteReportJob,
 } from "@/lib/services/report-grading-service";
+import { refreshRosterIfStale } from "@/lib/services/presentation-roster-service";
 import { REPORT_STUDENT_ID_MAX_CHARS } from "@/lib/report-grading";
 
 export async function GET(
@@ -16,6 +17,7 @@ export async function GET(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
+  await refreshRosterIfStale(auth.user.id);
   const job = await getReportJob(params.id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
