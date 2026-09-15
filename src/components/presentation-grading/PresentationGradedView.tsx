@@ -6,7 +6,6 @@ import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { JobResult } from "@/components/presentation-grading/JobResult";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
 import { sumScores } from "@/lib/human-grading";
-import { presentationFeedbackDraft } from "@/lib/feedback-email";
 import { parseEvaluation, type PresentationJobDetail } from "@/lib/presentation-grading";
 
 interface Props {
@@ -33,12 +32,6 @@ export function PresentationGradedView({ job, onChanged }: Props) {
           kind="presentation"
           jobId={job.id}
           status={job}
-          draftFor={(senderName) =>
-            presentationFeedbackDraft(job.topic, evaluation, {
-              name: job.englishName ?? job.presenters,
-              senderName,
-            })
-          }
           onChanged={onChanged}
         />
       ) : null}

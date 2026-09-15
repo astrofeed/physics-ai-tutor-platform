@@ -19,13 +19,15 @@ import {
   FEEDBACK_EMAIL_SUBJECT_MAX,
   FeedbackEmailInputSchema,
   type FeedbackDraft,
+  type FeedbackDraftResponse,
   type FeedbackEmailInput,
 } from "@/lib/feedback-email";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  draft: FeedbackDraft;
+  /** Null while the server is still writing the draft. */
+  draft: FeedbackDraftResponse | null;
   /** Prefilled recipient from the sign-up sheet; empty when unknown. */
   defaultTo: string;
   sending: boolean;
@@ -49,25 +51,38 @@ function parseForm(to: string, subject: string, message: string): FeedbackEmailI
 export function FeedbackEmailDialog({ open, onOpenChange, draft, defaultTo, sending, onSend }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
+      {!open ? null : draft ? (
         <FeedbackEmailForm
-          draft={draft}
+          draft={draft.draft}
+          rewritten={draft.rewritten}
           defaultTo={defaultTo}
           sending={sending}
           onSend={onSend}
           onClose={() => onOpenChange(false)}
         />
-      ) : null}
+      ) : (
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>Email feedback to the student</DialogTitle>
+            <DialogDescription>Writing the draft from the AI feedback…</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-center py-10 text-gray-500">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        </DialogContent>
+      )}
     </Dialog>
   );
 }
 
-interface FormProps extends Omit<Props, "open" | "onOpenChange"> {
+interface FormProps extends Omit<Props, "open" | "onOpenChange" | "draft"> {
+  draft: FeedbackDraft;
+  rewritten: boolean;
   onClose: () => void;
 }
 
-/** Mounted only while the dialog is open so each opening starts from the fresh draft. */
-function FeedbackEmailForm({ draft, defaultTo, sending, onSend, onClose }: FormProps) {
+/** Mounted only once the draft has arrived so each opening starts from a fresh draft. */
+function FeedbackEmailForm({ draft, rewritten, defaultTo, sending, onSend, onClose }: FormProps) {
   const [to, setTo] = useState(defaultTo);
   const [subject, setSubject] = useState(draft.subject);
   const [message, setMessage] = useState(draft.message);
@@ -89,8 +104,9 @@ function FeedbackEmailForm({ draft, defaultTo, sending, onSend, onClose }: FormP
       <DialogHeader>
         <DialogTitle>Email feedback to the student</DialogTitle>
         <DialogDescription>
-          The draft below is the AI&apos;s feedback. Edit anything before sending; the student
-          only sees the final text.
+          {rewritten
+            ? "A letter drafted from the AI feedback, in your name. Edit anything before sending; the student only sees the final text."
+            : "The AI feedback as written for graders (no model was available to rewrite it as a letter). Please edit before sending; the student only sees the final text."}
         </DialogDescription>
       </DialogHeader>
 

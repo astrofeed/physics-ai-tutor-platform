@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import type { FeedbackEmailInput } from "@/lib/feedback-email";
+import type { FeedbackDraftResponse, FeedbackEmailInput } from "@/lib/feedback-email";
 import type { HumanGradingKind } from "@/hooks/useHumanGrading";
 
 const API_BASE: Record<HumanGradingKind, string> = {
@@ -15,9 +15,28 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return body?.error ?? fallback;
 }
 
-/** Emails the staff-edited AI feedback of a job to the student; `onSent` should reload the job. */
+/**
+ * Loads the letter-style draft of a job's AI feedback and emails the staff-edited
+ * version to the student; `onSent` should reload the job.
+ */
 export function useFeedbackEmail(kind: HumanGradingKind, jobId: string, onSent: () => void) {
   const [sending, setSending] = useState(false);
+
+  const loadDraft = useCallback(async (): Promise<FeedbackDraftResponse | null> => {
+    try {
+      const res = await fetch(`${API_BASE[kind]}/${jobId}/feedback-email`);
+      if (!res.ok) {
+        toast.error(await errorMessage(res, "Failed to prepare the draft"));
+        return null;
+      }
+      const body: { data: FeedbackDraftResponse } = await res.json();
+      return body.data;
+    } catch (error) {
+      console.error(`[feedback-email] drafting for ${kind} job ${jobId} failed:`, error);
+      toast.error("Failed to prepare the draft");
+      return null;
+    }
+  }, [kind, jobId]);
 
   const send = useCallback(
     async (input: FeedbackEmailInput): Promise<boolean> => {
@@ -46,5 +65,5 @@ export function useFeedbackEmail(kind: HumanGradingKind, jobId: string, onSent: 
     [kind, jobId, onSent]
   );
 
-  return { send, sending };
+  return { loadDraft, send, sending };
 }

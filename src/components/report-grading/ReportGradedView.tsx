@@ -6,7 +6,6 @@ import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { ReportJobResult } from "@/components/report-grading/ReportJobResult";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
 import { weightedAverage } from "@/lib/human-grading";
-import { reportFeedbackDraft } from "@/lib/feedback-email";
 import {
   parseReportEvaluation,
   REPORT_CRITERION_MAX_SCORE,
@@ -39,12 +38,6 @@ export function ReportGradedView({ job, onChanged }: Props) {
           kind="report"
           jobId={job.id}
           status={job}
-          draftFor={(senderName) =>
-            reportFeedbackDraft(job.title, evaluation, {
-              name: job.englishName ?? job.authors,
-              senderName,
-            })
-          }
           onChanged={onChanged}
         />
       ) : null}
