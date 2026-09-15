@@ -123,11 +123,12 @@ export async function getOrImportDefaultRoster(
 }
 
 export interface RosterSchedule {
+  englishName: string | null;
   groupLabel: string | null;
   presentationDate: string | null;
 }
 
-/** Group / date per student ID for the given IDs (from the latest roster). */
+/** English name / group / date per student ID for the given IDs (from the latest roster). */
 export async function rosterScheduleByStudentId(
   studentIds: string[]
 ): Promise<Map<string, RosterSchedule>> {
@@ -137,11 +138,12 @@ export async function rosterScheduleByStudentId(
   const entries = await prisma.presentationRosterEntry.findMany({
     where: { studentId: { in: studentIds } },
     orderBy: { roster: { importedAt: "desc" } },
-    select: { studentId: true, groupLabel: true, presentationDate: true },
+    select: { studentId: true, englishName: true, groupLabel: true, presentationDate: true },
   });
   for (const entry of entries) {
     if (!schedule.has(entry.studentId)) {
       schedule.set(entry.studentId, {
+        englishName: entry.englishName,
         groupLabel: entry.groupLabel,
         presentationDate: entry.presentationDate,
       });

@@ -145,7 +145,7 @@ function studentIdsOf(job: { studentIds: string | null }): string[] {
   return (job.studentIds ?? "").split(/[\s,;、]+/).filter((id) => /^\d{5,15}$/.test(id));
 }
 
-/** Group / date of the job's first rostered student, resolved at read time so re-imports stay in sync. */
+/** English name / group / date of the job's first rostered student, resolved at read time so re-imports stay in sync. */
 async function scheduleForJobs(
   jobs: { studentIds: string | null }[]
 ): Promise<(RosterSchedule | null)[]> {
@@ -165,6 +165,7 @@ function toSummary(
     topic: job.topic,
     presenters: job.presenters,
     studentIds: job.studentIds,
+    englishName: schedule?.englishName ?? null,
     groupLabel: schedule?.groupLabel ?? null,
     presentationDate: schedule?.presentationDate ?? null,
     track: job.track,

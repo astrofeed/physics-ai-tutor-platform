@@ -38,6 +38,7 @@ export interface ReportJobSummary {
   /** The question the report had to answer, from the sign-up sheet; null when none was set. */
   assignedQuestion: string | null;
   /** From the sign-up sheet for the student ID; null when not rostered. */
+  englishName: string | null;
   groupLabel: string | null;
   presentationDate: string | null;
   status: ReportJobStatusValue;

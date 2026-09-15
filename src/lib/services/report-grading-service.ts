@@ -109,7 +109,7 @@ async function rubricVersionOf(rubricId: string): Promise<number | null> {
   return rubric?.version ?? null;
 }
 
-/** Group / date from the sign-up sheet, resolved at read time so re-imports stay in sync. */
+/** English name / group / date from the sign-up sheet, resolved at read time so re-imports stay in sync. */
 async function scheduleForJobs(
   jobs: { studentId: string | null }[]
 ): Promise<(RosterSchedule | null)[]> {
@@ -129,6 +129,7 @@ function toSummary(
     authors: job.authors,
     studentId: job.studentId,
     assignedQuestion: job.assignedQuestion,
+    englishName: schedule?.englishName ?? null,
     groupLabel: schedule?.groupLabel ?? null,
     presentationDate: schedule?.presentationDate ?? null,
     status: job.status,
