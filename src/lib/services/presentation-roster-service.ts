@@ -12,6 +12,8 @@ import {
 } from "@/lib/presentation-roster";
 
 const FETCH_TIMEOUT_MS = 15_000;
+/** Rosters older than this are re-imported from their sheet when the grading pages load. */
+const ROSTER_REFRESH_MS = 60 * 60 * 1000;
 
 export class RosterImportError extends Error {}
 
@@ -111,21 +113,28 @@ export async function getRosterSummary(): Promise<RosterSummary | null> {
   };
 }
 
+function isStale(roster: RosterSummary): boolean {
+  return Date.now() - new Date(roster.importedAt).getTime() > ROSTER_REFRESH_MS;
+}
+
 /**
- * The current roster, importing the course's default sign-up sheet on first use
- * so staff never have to paste it. Import failures are returned, not thrown,
- * so the page still renders and can show why the default is missing.
+ * The current roster: the course's default sign-up sheet is imported on first
+ * use so staff never have to paste it, and a roster older than an hour is
+ * re-imported from its sheet so students who add their email or report topic
+ * later show up without anyone pressing Refresh. Import failures are returned,
+ * not thrown, so the page still renders (with the previous roster, if any).
  */
 export async function getOrImportDefaultRoster(
   userId: string
 ): Promise<{ roster: RosterSummary | null; importError: string | null }> {
   const existing = await getRosterSummary();
-  if (existing) return { roster: existing, importError: null };
+  if (existing && !isStale(existing)) return { roster: existing, importError: null };
 
   try {
-    return { roster: await importRosterFromSheet(DEFAULT_ROSTER_SHEET_URL, userId), importError: null };
+    const sheetUrl = existing?.sourceUrl ?? DEFAULT_ROSTER_SHEET_URL;
+    return { roster: await importRosterFromSheet(sheetUrl, userId), importError: null };
   } catch (error) {
-    if (error instanceof RosterImportError) return { roster: null, importError: error.message };
+    if (error instanceof RosterImportError) return { roster: existing, importError: error.message };
     throw error;
   }
 }
