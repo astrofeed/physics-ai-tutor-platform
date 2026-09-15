@@ -4,6 +4,7 @@ import React from "react";
 import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { JobResult } from "@/components/presentation-grading/JobResult";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
+import { sumScores } from "@/lib/human-grading";
 import { parseEvaluation, type PresentationJobDetail } from "@/lib/presentation-grading";
 
 interface Props {
@@ -19,7 +20,8 @@ export function PresentationGradedView({ job, onChanged }: Props) {
     job.human.aiRevealedAt,
     onChanged
   );
-  const scorecard = parseEvaluation(job.summaryJson)?.scorecard ?? null;
+  const evaluation = parseEvaluation(job.summaryJson);
+  const scorecard = evaluation?.scorecard ?? null;
 
   return (
     <>
@@ -31,6 +33,11 @@ export function PresentationGradedView({ job, onChanged }: Props) {
             max: entry.maxPoints,
             aiScore: entry.awardedPoints,
           }))}
+          total={{
+            max: scorecard.reduce((sum, entry) => sum + entry.maxPoints, 0),
+            aiScore: evaluation?.totalScore ?? job.totalScore,
+          }}
+          totalFromItems={sumScores}
           human={job.human}
           saving={saving}
           onSave={saveScores}

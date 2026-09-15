@@ -14,7 +14,13 @@ import {
   parseEvaluation,
   type PresentationJobDetail,
 } from "@/lib/presentation-grading";
-import { gradedBlind, weightedAverage, type HumanGrading } from "@/lib/human-grading";
+import {
+  gradedBlind,
+  humanTotalOf,
+  sumScores,
+  weightedAverage,
+  type HumanGrading,
+} from "@/lib/human-grading";
 
 type CsvValue = string | number | null | undefined;
 
@@ -29,6 +35,7 @@ function toCsv(rows: CsvValue[][]): string {
 }
 
 const HUMAN_AUDIT_HEADER: CsvValue[] = [
+  "Human scoring",
   "Human graded at",
   "Human grader",
   "AI revealed at",
@@ -38,6 +45,7 @@ const HUMAN_AUDIT_HEADER: CsvValue[] = [
 function humanAuditCells(human: HumanGrading): CsvValue[] {
   const blind = gradedBlind(human);
   return [
+    human.total !== null ? "total only" : human.scores.length > 0 ? "per item" : "",
     human.gradedAt ?? "",
     human.gradedByName ?? "",
     human.aiRevealedAt ?? "",
@@ -93,7 +101,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       `${criterion} AI reason`,
     ]),
     "AI weighted total (0-10)",
-    "Human weighted total (0-10)",
+    "Human total (0-10)",
     ...HUMAN_AUDIT_HEADER,
     "Summary",
   ];
@@ -109,7 +117,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
           weightOf
         )
       : null;
-    const humanTotal = weightedAverage(job.human.scores, weightOf);
+    const humanTotal = humanTotalOf(job.human, (scores) => weightedAverage(scores, weightOf));
     return [
       job.studentId,
       job.title,
@@ -175,10 +183,7 @@ export function presentationJobsToCsv(jobs: PresentationJobDetail[]): string {
       evaluations[i]?.scorecard.map((entry) => [entry.category, entry]) ?? []
     );
     const humanByCategory = humanScoresByName(job.human);
-    const humanTotal =
-      job.human.scores.length > 0
-        ? job.human.scores.reduce((sum, entry) => sum + entry.score, 0)
-        : null;
+    const humanTotal = humanTotalOf(job.human, sumScores);
     return [
       job.topic,
       job.presenters,
