@@ -8,6 +8,7 @@ import {
   updatePresentationJob,
   deletePresentationJob,
 } from "@/lib/services/presentation-grading-service";
+import { refreshRosterIfStale } from "@/lib/services/presentation-roster-service";
 
 export async function GET(
   _request: Request,
@@ -16,6 +17,7 @@ export async function GET(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
+  await refreshRosterIfStale(auth.user.id);
   const job = await getPresentationJob(params.id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
