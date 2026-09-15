@@ -61,7 +61,7 @@ export function ReportDropZone({ reading, disabled, hasFiles, onFiles }: ReportD
       {hasFiles ? null : (
         <span className="text-xs text-gray-500">
           Zips are opened in your browser (never uploaded, any size) and every PDF inside becomes
-          one row below. Student ID, name, topic and the assigned question are filled in from the
+          one row below. Student ID, name, presentation topic and report question are filled in from the
           sign-up sheet.
         </span>
       )}

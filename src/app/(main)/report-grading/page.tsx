@@ -26,7 +26,7 @@ function ReportGradingContent() {
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           A draft review of each written report — a summary, evidence-referenced comments, and a
-          scored breakdown of every criterion, including whether the assigned question was answered.
+          scored breakdown of every criterion, including whether the report question was answered.
         </p>
       </div>
 

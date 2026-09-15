@@ -78,7 +78,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
         <CardDescription>
           Drop the report PDFs or the eeClass export (.zip) — one or many. Each PDF becomes its own
           grading job: the AI reads it against the grading instructions, checks whether the
-          assigned question was answered, and returns a summary, evidence-referenced comments and
+          report question was answered, and returns a summary, evidence-referenced comments and
           per-criterion scores.
         </CardDescription>
       </CardHeader>
@@ -122,10 +122,10 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
               onRemove={batch.removeFile}
             />
             <p className="text-xs text-gray-500">
-              PDF only, up to {formatBytes(REPORT_FILE_MAX_BYTES)} each and {REPORT_BATCH_MAX_FILES}{" "}
-              per batch; files are deleted after grading. The student ID is read from the eeClass
-              folder name or the filename (e.g. 王小明_113012345_期末報告.pdf) and can be corrected
-              in each row — the name, title and assigned question refill from the sign-up sheet.
+              {`PDF only, up to ${formatBytes(REPORT_FILE_MAX_BYTES)} each and ${REPORT_BATCH_MAX_FILES} per batch; `}
+              files are deleted after grading. The student ID is read from the eeClass folder name
+              or the filename (e.g. 王小明_113012345_期末報告.pdf) and can be corrected in each
+              row — the name, presentation topic and report question refill from the sign-up sheet.
             </p>
           </div>
         ) : (

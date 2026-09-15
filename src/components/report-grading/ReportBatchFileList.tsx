@@ -24,7 +24,7 @@ function rosterNote(row: ReportBatchFile): string {
 
 /**
  * The report PDFs waiting to be submitted, one row per file. Everything the
- * AI is told about a report (student ID, name, title, assigned question) is
+ * AI is told about a report (student ID, name, presentation topic, report question) is
  * shown and editable; group and date come from the sign-up sheet.
  */
 export function ReportBatchFileList({
@@ -90,8 +90,8 @@ export function ReportBatchFileList({
                 className="h-8 text-xs"
               />
               <Input
-                aria-label={`Report title for ${row.file.name}`}
-                placeholder="Report title / presentation topic"
+                aria-label={`Presentation topic for ${row.file.name}`}
+                placeholder="Presentation topic (sheet: Topics)"
                 maxLength={200}
                 value={row.title}
                 disabled={disabled}
@@ -100,8 +100,8 @@ export function ReportBatchFileList({
               />
             </div>
             <Input
-              aria-label={`Assigned question for ${row.file.name}`}
-              placeholder="Assigned question the report must answer (from the sheet's Report Topic; blank = none)"
+              aria-label={`Report question for ${row.file.name}`}
+              placeholder="Report question to answer (sheet: Report Topic) — blank if none"
               maxLength={REPORT_ASSIGNED_QUESTION_MAX_CHARS}
               value={row.assignedQuestion}
               disabled={disabled}
