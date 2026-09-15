@@ -18,6 +18,8 @@ interface Props {
   saving: boolean;
   onSave: (input: HumanScoresInput) => Promise<boolean>;
   onCancel: (() => void) | null;
+  /** Focus the total field on open; only when the grader opened the form, so page load never scrolls here. */
+  focusOnOpen: boolean;
 }
 
 type Draft = Record<string, string>;
@@ -96,7 +98,15 @@ function ModeToggle({
  * Staff score entry: one overall total (the quick option between back-to-back
  * talks) or a score per rubric item, each shown beside the AI's.
  */
-export function HumanScoreForm({ items, total, human, saving, onSave, onCancel }: Props) {
+export function HumanScoreForm({
+  items,
+  total,
+  human,
+  saving,
+  onSave,
+  onCancel,
+  focusOnOpen,
+}: Props) {
   const [mode, setMode] = useState<ScoreMode>(human.scores.length > 0 ? "items" : "total");
   const [itemDraft, setItemDraft] = useState<Draft>(() => itemDraftFrom(items, human.scores));
   const [totalDraft, setTotalDraft] = useState(human.total === null ? "" : String(human.total));
@@ -141,7 +151,7 @@ export function HumanScoreForm({ items, total, human, saving, onSave, onCancel }
             min={0}
             max={total.max}
             step="any"
-            autoFocus
+            autoFocus={focusOnOpen}
             value={totalDraft}
             onChange={(e) => setTotalDraft(e.target.value)}
             disabled={saving}
