@@ -75,7 +75,7 @@ export function RosterCard({
           {loading
             ? "Loading the sign-up sheet…"
             : roster
-              ? `${roster.entryCount} students (${roster.withTopicCount} with a topic) imported ${formatImportedAt(roster.importedAt)}${roster.importedByName ? ` by ${roster.importedByName}` : ""}.`
+              ? `${roster.entryCount} students (${roster.withTopicCount} with a topic) imported ${formatImportedAt(roster.importedAt)}${roster.importedByName ? ` by ${roster.importedByName}` : ""}.${importError ? ` Could not refresh from the sheet just now: ${importError}` : " Refreshes from the sheet about once an hour."}`
               : importError
                 ? `The course sheet could not be imported: ${importError}`
                 : "No sheet imported yet — topics will have to be typed by hand."}
