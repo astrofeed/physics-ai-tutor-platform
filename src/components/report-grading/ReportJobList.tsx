@@ -2,19 +2,19 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Download, ListChecks, Loader2, RotateCcw, Search, X } from "lucide-react";
+import { Download, ListChecks, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import type { ReportJobDetail, ReportJobSummary } from "@/lib/report-grading";
 import { retryReportJob } from "@/hooks/useReportGrading";
 import { useCsvExport, useRowSelection } from "@/hooks/useGradingCsvExport";
 import { reportJobsToCsv } from "@/lib/grading-csv";
+import { JobListFilters, type JobListFilterProps } from "@/components/presentation-grading/JobListFilters";
 import {
   REPORT_STATUS_BADGE_VARIANTS,
   REPORT_STATUS_LABELS,
@@ -54,18 +54,15 @@ export function ReportJobList({
   page,
   totalPages,
   totalCount,
-  search,
-  onSearchChange,
   onPageChange,
   onRefresh,
-}: {
+  ...filterProps
+}: JobListFilterProps & {
   jobs: ReportJobSummary[];
   loading: boolean;
   page: number;
   totalPages: number;
   totalCount: number;
-  search: string;
-  onSearchChange: (value: string) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {
@@ -77,27 +74,13 @@ export function ReportJobList({
   );
   const allSelected = jobs.length > 0 && jobs.every((job) => selected.has(job.id));
 
-  const searchBox = (
-    <div className="relative w-full sm:max-w-xs">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-      <Input
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search title, author, student ID, group, or date…"
-        className="pl-8 pr-8"
-        aria-label="Search by report title, author name, student ID, group, or presentation date"
-      />
-      {search ? (
-        <button
-          type="button"
-          onClick={() => onSearchChange("")}
-          aria-label="Clear search"
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      ) : null}
-    </div>
+  const filtered = filterProps.search !== "" || filterProps.group !== null;
+  const filters = (
+    <JobListFilters
+      {...filterProps}
+      searchPlaceholder="Search title, author, student ID, group, or date…"
+      searchLabel="Search by report title, author name, student ID, group, or presentation date"
+    />
   );
 
   if (loading) {
@@ -111,13 +94,13 @@ export function ReportJobList({
   if (jobs.length === 0) {
     return (
       <div className="space-y-4">
-        {searchBox}
+        {filters}
         <EmptyState
           icon={ListChecks}
-          title={search ? "No matching results" : "No grading jobs yet"}
+          title={filtered ? "No matching results" : "No grading jobs yet"}
           description={
-            search
-              ? "Try a different title, author, student ID, group (“Group 1”) or date (“9/15”)."
+            filtered
+              ? "Try another group, title, author, student ID or date (“9/15”)."
               : "Submit a report above — results will appear here."
           }
         />
@@ -132,7 +115,7 @@ export function ReportJobList({
           Results <span className="text-sm font-normal text-gray-500">({totalCount})</span>
         </CardTitle>
         <div className="flex w-full flex-1 flex-wrap items-center justify-end gap-2 sm:w-auto">
-          {searchBox}
+          {filters}
           <Button
             variant="outline"
             size="sm"

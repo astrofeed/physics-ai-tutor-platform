@@ -5,7 +5,7 @@ import { Loader2, Sheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { usePresentationRoster } from "@/hooks/usePresentationRoster";
+import type { RosterState } from "@/hooks/usePresentationRoster";
 import { DEFAULT_ROSTER_SHEET_URL } from "@/lib/presentation-roster";
 
 function formatImportedAt(iso: string): string {
@@ -20,9 +20,15 @@ function formatImportedAt(iso: string): string {
 /**
  * The Question Bank sign-up sheet used to auto-fill name and topic by student ID.
  * The course sheet is imported by default; staff only touch the link to switch sheets.
+ * The page owns the roster state so the results list can offer the sheet's groups as a filter.
  */
-export function RosterCard() {
-  const { roster, importError, loading, importing, importSheet } = usePresentationRoster();
+export function RosterCard({
+  roster,
+  importError,
+  loading,
+  importing,
+  importSheet,
+}: RosterState) {
   const [draftUrl, setDraftUrl] = useState<string | null>(null);
 
   const currentUrl = roster?.sourceUrl ?? DEFAULT_ROSTER_SHEET_URL;

@@ -97,12 +97,15 @@ export function usePresentationJobs() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [group, setGroupState] = useState<number | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const pageRef = useRef(page);
   pageRef.current = page;
   const searchRef = useRef(debouncedSearch);
   searchRef.current = debouncedSearch;
+  const groupRef = useRef(group);
+  groupRef.current = group;
   const requestSeq = useRef(0);
 
   useEffect(() => {
@@ -122,6 +125,7 @@ export function usePresentationJobs() {
         pageSize: String(JOBS_PAGE_SIZE),
       });
       if (searchRef.current) params.set("q", searchRef.current);
+      if (groupRef.current !== null) params.set("group", String(groupRef.current));
       const res = await fetch(`/api/presentation-grading/jobs?${params}`);
       if (!res.ok) throw new Error(String(res.status));
       const body = await res.json();
@@ -137,7 +141,12 @@ export function usePresentationJobs() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh, page, debouncedSearch]);
+  }, [refresh, page, debouncedSearch, group]);
+
+  const setGroup = useCallback((value: number | null) => {
+    setGroupState(value);
+    setPage(1);
+  }, []);
 
   const hasActiveJobs = jobs.some((job) => ACTIVE_STATUSES.has(job.status));
   useEffect(() => {
@@ -152,6 +161,8 @@ export function usePresentationJobs() {
     setPage,
     search,
     setSearch,
+    group,
+    setGroup,
     totalPages: Math.max(1, Math.ceil(totalCount / JOBS_PAGE_SIZE)),
     totalCount,
     loading,
