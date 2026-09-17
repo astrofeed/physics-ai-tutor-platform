@@ -318,6 +318,37 @@ containers Chrome can't decode (WMV/AVI/MKV). The mock/stub recipe above extends
   lookup is a `404` (console "Failed to load resource") and a garbage zip logs the jszip
   "Can't find end of central directory" error — both expected, not bugs.
 
+## Grading result pages: human scores (Total only / Per item) + "Email feedback to the student"
+
+- Both cards render only when the AI result parses (`ReportGradedView` / `PresentationGradedView`);
+  a legacy job whose `summaryJson` has no scorecard is the negative case (no email card, no score
+  card). Seed DONE jobs directly (`prisma.reportGradingJob.create` with a parsed `resultJson`) —
+  no OpenAI/Blob needed. Include a presentation job with `topicSuggestions` and one with `null`
+  (the draft omits the "Suggested report topics" heading only for the latter) and jobs whose
+  `studentId` (a) has a roster `email`, (b) is rostered without one, (c) is not rostered.
+- Native `<input type=number min max>` blocks out-of-range submits, so prove the server bounds
+  (`PUT …/human-scores {total: 11}` → 400) with a same-origin `fetch` from the page as the TA.
+  Store async results on `window.__v` and read them in a second console call — the console tool
+  returns `{}` for a still-pending promise.
+- **Email safety (user rule: no mail to real students).** The imported sheet's roster `email` is
+  NULL for all rows unless the header has `E-mail/信箱`; set fake `@e2e.local` addresses on the
+  roster rows you use. `src/lib/email.ts` hardcodes `service: "gmail"`, so with fake creds the
+  send fails 502 (`EAUTH`) — acceptable, proves nothing is stamped. For a real *success* path
+  without internet mail: temporary `E2E-TEST-STUB` in `email.ts` that swaps `service: "gmail"` for
+  `{host:"127.0.0.1", port: E2E_SMTP_PORT, secure:false, ignoreTLS:true}` and run
+  `/home/ubuntu/pr94-evidence/smtp_sink.mjs` (stores `.eml`, 550-rejects recipients outside
+  `@e2e.local`/`@example.com`). Revert the stub with `git checkout src/lib/email.ts`.
+- With Gmail unset, *every* POST returns 503 before the job lookup, so the 404-unknown-job check
+  needs the configured (sink) server. Success writes `feedbackSentAt/To` + AuditLog
+  `grading_feedback_emailed` (bulk-email `details` shape; `recipientIds` holds the user id when the
+  address is a platform account, else the raw address) and shows up at `/admin/email-records` as
+  "Grading feedback sent by <staff>".
+- Watch the sign-off: the draft uses NextAuth `useSession()`; under the E2E cookie this may resolve
+  to the *seeded student* name instead of the effective TA — compare it against the visible
+  identity before calling it a pass.
+- Restarting `next dev` mid-recording produces `[Topbar] Failed to fetch …` console errors and a
+  spinner for ~10 s; note the timestamps so the console sweep can attribute them.
+
 ## Verifying real Vercel Blob behaviour (preview deployment, no local stub)
 
 Blob-storage bugs (e.g. pathname collisions, token options such as `addRandomSuffix`) cannot be
@@ -343,6 +374,32 @@ PREVIEW deployment instead, which shares production's DB and Blob store.
   resets; deleting the active conversation collapses the list panel (reopen via "Open conversation list").
 - Cleanup: delete only conversations you created (timestamps in the sidebar) — the shared DB
   also holds other testers' probe conversations.
+
+## Canvas simulations (`/simulations/<id>`, e.g. gauss-law)
+
+Sims are pure client-side canvas — no API, no DB rows to inspect. Prove behaviour visually:
+
+- Read the on-canvas HUD (`Config:`, `Q_enc:`, `Flux Φ:`, `Surface R:`) with `zoom` on the top-left
+  panel; compute expected values from the physics module in `src/lib/simulation/` first
+  (e.g. Φ = Q_enc/ε₀ with ε₀ = 8.854187817e-12, 1 canvas px = 1 mm for enclosure geometry).
+- Count field rays on the outermost ring in a zoomed screenshot; ray count formulas live in the
+  physics module (`fieldRayCount`), so assert exact numbers (4 / 12 / 24), not "more/fewer".
+- Sliders: focus the `<input type=range>` and use arrow keys (step = the input's `step`); if a
+  value is unreachable by keyboard, set `.value` + dispatch `input` from the page and screenshot.
+  Slider maxima in the UI may exceed the nominal spec (e.g. 22 cm vs "20 cm") — report the real max.
+- Dragging the surface: `mouse_move` → `left_mouse_down` (no coordinate) → `mouse_move` → screenshot
+  while held → `left_mouse_up`. Passing a coordinate to `left_mouse_down` is rejected.
+- Challenge modes randomise config/charge/radius: use Skip until the wanted config appears, and
+  read the canvas HUD to confirm it matches the description text (a past regression drew the
+  student's own config instead). After a correct answer the sim auto-advances after ~2 s, and
+  **Exit Challenge keeps the challenge's config/charge/radius** — don't mistake that for a bug.
+- "Reset" in the current implementation resets charge/radius/centre but NOT the config button.
+- Dark mode: `/settings` → Appearance → Dark (next-themes, no toggle in the user menu). Revert to
+  Light at teardown — it persists in localStorage across sessions.
+- Notes cards use `SimMath` (KaTeX). A literal `·` inside `\text{}` renders as red `\cdotp`
+  (pre-existing in several sims' constants lines) — report it, don't count it as a PR error.
+- 375 px: the 307 px canvas puts the HUD over the Gaussian surface and the challenge input
+  shrinks to ~90 px (placeholder overlaps the unit); functional but worth flagging.
 
 ## Teardown
 
