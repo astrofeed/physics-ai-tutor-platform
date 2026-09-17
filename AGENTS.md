@@ -1733,6 +1733,13 @@ Email-based forgot/reset password for credentials accounts:
   These log in through real NextAuth credentials (no E2E bypass), so run them against a production-mode build. `LOAD_PASSWORD` has no default on purpose. Coverage stops at assignment page/API, drafts and submit — chat SSE and file uploads are not exercised.
 - `e2e/concurrent-autosave.spec.ts` is the regression test: parallel drafts and parallel finals must leave exactly one submission with a full set of answers.
 
+### Gauss's Law Simulation (`src/components/simulations/GaussLaw.tsx`)
+
+- Physics lives in `src/lib/simulation/gauss-law.ts`; the canvas is a 2-D cross-section at `METERS_PER_PX = 0.001` (1 px = 1 mm), so radii are shown in cm. The slider value means total `Q` (nC) for point/sphere, `λ` (nC/m) for the line and `σ` (nC/m²) for the plane (`CHARGE_SYMBOL`/`CHARGE_UNIT`), and `enclosedCharge()` uses the matching geometry: lens volume for a partly enclosed ball, `λ × chord`, `σ × disc area`.
+- `fieldAt()` returns a signed vector, so negative charges reverse every arrow without special cases; the line field is perpendicular to the drawn line and the plane field is perpendicular to the plane.
+- Arrow *density* is `fieldRayCount(q)` (∝ |q|, min 4) and arrow *length/opacity* is normalised against `referenceField()` at `MAX_CHARGE`, so changing the slider visibly changes the picture. Never normalise against the current charge — that cancels the effect.
+- Rendering is in `gauss-law/drawGaussScene.ts`; controls, challenge panel, notes and the challenge hook are sibling files. Challenge mode copies the quiz geometry onto the canvas and locks the controls/drag so the picture matches the question while `hideAnswers` blanks `Q_enc`/`Φ`.
+
 ### Prisma Migrations
 
 ```bash
