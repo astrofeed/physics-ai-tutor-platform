@@ -2,7 +2,7 @@ import { SimMath } from "@/components/simulations/SimMath";
 
 const EQUATIONS = [
   "\\Phi = \\oint \\vec{E} \\cdot d\\vec{A} = \\frac{Q_{enc}}{\\varepsilon_0}",
-  "\\varepsilon_0 = 8.85 \\times 10^{-12} \\text{ C}^2/\\text{N·m}^2",
+  "\\varepsilon_0 = 8.85 \\times 10^{-12} \\text{ C}^2/(\\text{N}\\cdot\\text{m}^2)",
   "E_{\\text{point}} = \\frac{1}{4\\pi\\varepsilon_0}\\frac{Q}{r^2}",
   "E_{\\text{line}} = \\frac{\\lambda}{2\\pi\\varepsilon_0 r}",
   "E_{\\text{plane}} = \\frac{\\sigma}{2\\varepsilon_0}",

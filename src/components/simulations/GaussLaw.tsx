@@ -42,6 +42,7 @@ export default function GaussLaw() {
   const timeRef = useRef(0);
   const surfaceDraggingRef = useRef(false);
   const surfaceCenterRef = useRef(CENTERED); // normalized canvas coords
+  const sandboxRef = useRef<{ config: ChargeConfig; charge: number; surfaceRadius: number } | null>(null);
 
   const sceneRef = useRef({ config, charge, surfaceRadius, showField, showFlux, challengeActive });
   useEffect(() => {
@@ -164,8 +165,16 @@ export default function GaussLaw() {
     if (challengeActive) {
       setChallengeActive(false);
       challengeRef.current = createChallengeState();
+      const sandbox = sandboxRef.current;
+      if (sandbox) {
+        setConfig(sandbox.config);
+        setCharge(sandbox.charge);
+        setSurfaceRadius(sandbox.surfaceRadius);
+        surfaceCenterRef.current = CENTERED;
+      }
       return;
     }
+    sandboxRef.current = { config, charge, surfaceRadius };
     setChallengeActive(true);
     challengeRef.current = { ...createChallengeState(), active: true, description: "Predict the flux" };
     quiz.next();
@@ -174,6 +183,7 @@ export default function GaussLaw() {
 
   const reset = () => {
     surfaceCenterRef.current = CENTERED;
+    setConfig("point");
     setSurfaceRadius(DEFAULT_SURFACE_RADIUS);
     setCharge(DEFAULT_CHARGE);
     playSFX("pop");
