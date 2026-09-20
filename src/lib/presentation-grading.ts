@@ -163,6 +163,11 @@ export const PresentationEvaluationSchema = z.object({
 
 export type PresentationEvaluation = z.infer<typeof PresentationEvaluationSchema>;
 
+/** Student IDs from the job's free-text presenter field ("109062362, 109062363"). */
+export function studentIdsOf(job: { studentIds: string | null }): string[] {
+  return (job.studentIds ?? "").split(/[\s,;、]+/).filter((id) => /^\d{5,15}$/.test(id));
+}
+
 /** Parses a stored evaluation; null for legacy markdown jobs or bad JSON. */
 export function parseEvaluation(json: string | null): PresentationEvaluation | null {
   if (!json) return null;

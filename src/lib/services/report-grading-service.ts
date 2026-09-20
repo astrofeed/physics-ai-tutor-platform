@@ -14,6 +14,7 @@ import { parseRosterSearch, type JobListFilter, type RosterSearch } from "@/lib/
 import { toHumanGrading } from "@/lib/services/human-grading-service";
 import { toFeedbackEmailStatus } from "@/lib/services/feedback-email-service";
 import { gradeReport, loadReport } from "@/lib/services/report-grading-ai";
+import { latestTopicSuggestionsForStudent } from "@/lib/services/presentation-suggestions-service";
 import {
   rosterScheduleByStudentId,
   rosterStudentIdsMatching,
@@ -216,6 +217,7 @@ export async function getReportJob(id: string): Promise<ReportJobDetail | null> 
     reportText: job.reportText,
     reportFilename: job.reportFilename,
     resultJson: job.resultJson,
+    presentationJobId: job.presentationJobId,
     human: toHumanGrading(
       job,
       job.humanScores.map((row) => ({ name: row.criterion, score: row.score }))
@@ -259,13 +261,17 @@ export async function processReportJob(id: string): Promise<void> {
     });
 
     const report = await loadReport(job);
-    const { json } = await gradeReport(job, report);
+    const suggestions = job.studentId
+      ? await latestTopicSuggestionsForStudent(job.studentId)
+      : null;
+    const { json } = await gradeReport(job, report, suggestions);
 
     await prisma.reportGradingJob.update({
       where: { id },
       data: {
         status: "DONE",
         resultJson: json,
+        presentationJobId: suggestions?.presentationJobId ?? null,
         completedAt: new Date(),
         gradingDurationMs: Date.now() - startedAt.getTime(),
         reportBlobUrl: null,

@@ -10,6 +10,7 @@ import {
   type ReportEvaluation,
 } from "@/lib/report-grading";
 import type { JobRecord } from "@/lib/services/report-grading-service";
+import type { PresentationSuggestionsSource } from "@/lib/services/presentation-suggestions-service";
 
 /**
  * The model-facing half of report grading: fetch the report, build the
@@ -60,6 +61,16 @@ const REPORT_GRADING_GUARD =
   "that question; when it says no additional question was set, judge the " +
   "report against the topic alone and never penalise it for a missing " +
   "question. " +
+  "When REPORT INFORMATION lists PRESENTATION SUGGESTIONS (report-topic " +
+  "suggestions the AI made after grading this student's talk), the report was " +
+  "expected to act on them. Return suggestionChecks with exactly one entry per " +
+  "listed suggestion, in the same order, copying its title into `suggestion`; " +
+  "status is `completed` when the report does the substance of what the " +
+  "suggestion asks (not merely mentions it), `partially_addressed` when it " +
+  "makes a real but incomplete attempt, `not_addressed` when nothing in the " +
+  "report does it; `evidence` names the section/page/equation that shows this " +
+  "and, for partial work, what is still missing. When no suggestions are " +
+  "listed, return suggestionChecks as null. " +
   "Ground every remark in the report's own text; never invent content " +
   "that is not there. Every text field is plain prose (markdown/LaTeX " +
   "allowed): never embed JSON objects inside any field.";
@@ -85,13 +96,31 @@ export async function loadReport(job: JobRecord): Promise<ReportInput> {
   };
 }
 
-function buildGradingInput(rubricContent: string, job: JobRecord, report: ReportInput) {
+function suggestionsText(source: PresentationSuggestionsSource | null): string {
+  if (!source) return "PRESENTATION SUGGESTIONS: none (no graded presentation for this student)";
+  const { verdict, assessment, options } = source.suggestions;
+  const list = options
+    .map((o, i) => `${i + 1}. ${o.title}\n   Direction: ${o.direction}\n   Why: ${o.rationale}`)
+    .join("\n");
+  return (
+    `PRESENTATION SUGGESTIONS (from the AI review of the talk "${source.topic}"; ` +
+    `verdict: ${verdict} — ${assessment})\n${list}`
+  );
+}
+
+function buildGradingInput(
+  rubricContent: string,
+  job: JobRecord,
+  report: ReportInput,
+  suggestions: PresentationSuggestionsSource | null
+) {
   const metadata = [
     `Presentation topic (report title): ${job.title}`,
     `Authors: ${job.authors ?? "unknown"}`,
     `Additional report question: ${
       job.assignedQuestion ?? "none set — grade the report against the presentation topic"
     }`,
+    suggestionsText(suggestions),
   ].join("\n");
 
   const textParts = [rubricContent, `## REPORT INFORMATION\n${metadata}`];
@@ -120,7 +149,8 @@ function buildGradingInput(rubricContent: string, job: JobRecord, report: Report
 
 export async function gradeReport(
   job: JobRecord,
-  report: ReportInput
+  report: ReportInput,
+  suggestions: PresentationSuggestionsSource | null
 ): Promise<{ json: string; evaluation: ReportEvaluation }> {
   const rubric = await prisma.reportRubric.findUnique({
     where: { id: job.rubricId },
@@ -133,7 +163,7 @@ export async function gradeReport(
     text: {
       format: zodTextFormat(ReportEvaluationSchema, "report_evaluation"),
     },
-    input: buildGradingInput(rubric.content, job, report),
+    input: buildGradingInput(rubric.content, job, report, suggestions),
   });
   const evaluation = parseReportEvaluation(response.output_text);
   if (!evaluation) {

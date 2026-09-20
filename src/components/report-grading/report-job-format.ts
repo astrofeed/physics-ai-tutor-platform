@@ -1,4 +1,8 @@
-import type { ReportEvaluation, ReportJobStatusValue } from "@/lib/report-grading";
+import {
+  SUGGESTION_STATUS_LABELS,
+  type ReportEvaluation,
+  type ReportJobStatusValue,
+} from "@/lib/report-grading";
 import type { BadgeVariant } from "@/components/presentation-grading/job-format";
 
 export {
@@ -25,10 +29,19 @@ export function reportEvaluationToText(e: ReportEvaluation): string {
   const comments = e.comments
     .map((c, i) => `${i + 1}. [${c.reference}] ${c.comment}`)
     .join("\n");
-  const text = `## Summary\n${e.summary}\n\n## Comments\n${comments}`;
-  if (!e.criterionScores) return text;
-  const scores = e.criterionScores
-    .map((s) => `- ${s.criterion} (${s.weightPercent}%): ${s.score}/10\n  ${s.reason}`)
-    .join("\n");
-  return `${text}\n\n## Criterion scores\n${scores}`;
+  const sections = [`## Summary\n${e.summary}`];
+  if (e.suggestionChecks && e.suggestionChecks.length > 0) {
+    const checks = e.suggestionChecks
+      .map((c) => `- ${c.suggestion} — ${SUGGESTION_STATUS_LABELS[c.status]}\n  ${c.evidence}`)
+      .join("\n");
+    sections.push(`## Presentation suggestions\n${checks}`);
+  }
+  sections.push(`## Comments\n${comments}`);
+  if (e.criterionScores) {
+    const scores = e.criterionScores
+      .map((s) => `- ${s.criterion} (${s.weightPercent}%): ${s.score}/10\n  ${s.reason}`)
+      .join("\n");
+    sections.push(`## Criterion scores\n${scores}`);
+  }
+  return sections.join("\n\n");
 }
