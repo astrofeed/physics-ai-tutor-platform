@@ -57,6 +57,8 @@ export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
   reportText: string | null;
   reportFilename: string | null;
   resultJson: string | null;
+  /** The graded presentation whose suggested report topics were checked; null when none. */
+  presentationJobId: string | null;
   human: HumanGrading;
 }
 
@@ -74,6 +76,15 @@ export const ReportCriterionScoreSchema = z.object({
   reason: z.string(),
 });
 
+export const SUGGESTION_STATUSES = ["not_addressed", "partially_addressed", "completed"] as const;
+
+/** How far the report went with one suggestion the presentation AI made for it. */
+export const ReportSuggestionCheckSchema = z.object({
+  suggestion: z.string(),
+  status: z.enum(SUGGESTION_STATUSES),
+  evidence: z.string(),
+});
+
 export const ReportEvaluationSchema = z.object({
   summary: z.string(),
   comments: z.array(
@@ -84,6 +95,8 @@ export const ReportEvaluationSchema = z.object({
   ),
   /** Null on jobs graded before per-criterion scores existed. */
   criterionScores: z.array(ReportCriterionScoreSchema).nullable(),
+  /** One entry per presentation suggestion; null when the student had no graded presentation. */
+  suggestionChecks: z.array(ReportSuggestionCheckSchema).nullable(),
 });
 
 /**
@@ -104,15 +117,27 @@ export function filenameStem(name: string): string {
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;
 export type ReportCriterionScore = z.infer<typeof ReportCriterionScoreSchema>;
+export type ReportSuggestionCheck = z.infer<typeof ReportSuggestionCheckSchema>;
+export type SuggestionStatus = ReportSuggestionCheck["status"];
+
+export const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
+  not_addressed: "Not done",
+  partially_addressed: "Partly done",
+  completed: "Done",
+};
+
+const OPTIONAL_EVALUATION_FIELDS = ["criterionScores", "suggestionChecks"] as const;
 
 /** Parses a stored evaluation; null for bad JSON. Tolerates older jobs
- * graded before per-criterion scores existed. */
+ * graded before per-criterion scores or suggestion checks existed. */
 export function parseReportEvaluation(json: string | null): ReportEvaluation | null {
   if (!json) return null;
   try {
     const parsed: unknown = JSON.parse(json);
-    if (parsed && typeof parsed === "object" && !("criterionScores" in parsed)) {
-      (parsed as Record<string, unknown>).criterionScores = null;
+    if (parsed && typeof parsed === "object") {
+      for (const field of OPTIONAL_EVALUATION_FIELDS) {
+        if (!(field in parsed)) (parsed as Record<string, unknown>)[field] = null;
+      }
     }
     const result = ReportEvaluationSchema.safeParse(parsed);
     return result.success ? result.data : null;

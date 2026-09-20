@@ -142,15 +142,20 @@ model ReportGradingJob {
   /// Last time staff emailed the AI feedback to the student, and where.
   feedbackSentAt  DateTime?
   feedbackSentTo  String?
+  /// The student's graded presentation whose AI report-topic suggestions this
+  /// report was checked against; set when grading starts, null when none existed.
+  presentationJobId String?
 
-  createdBy     User         @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
-  humanGradedBy User?        @relation("ReportJobHumanGradedBy", fields: [humanGradedById], references: [id])
-  rubric        ReportRubric @relation(fields: [rubricId], references: [id])
-  humanScores   ReportHumanScore[]
+  createdBy       User                    @relation("ReportJobCreatedBy", fields: [createdById], references: [id])
+  humanGradedBy   User?                   @relation("ReportJobHumanGradedBy", fields: [humanGradedById], references: [id])
+  rubric          ReportRubric            @relation(fields: [rubricId], references: [id])
+  presentationJob PresentationGradingJob? @relation(fields: [presentationJobId], references: [id], onDelete: SetNull)
+  humanScores     ReportHumanScore[]
 
   @@index([rubricId])
   @@index([status, createdAt])
   @@index([createdById, createdAt])
+  @@index([presentationJobId])
 }
 
 /// A TA's/professor's own score for one rubric criterion of a report, kept
@@ -267,6 +272,7 @@ model PresentationGradingJob {
   humanGradedBy User?              @relation("PresentationJobHumanGradedBy", fields: [humanGradedById], references: [id])
   rubric        PresentationRubric @relation(fields: [rubricId], references: [id])
   humanScores   PresentationHumanScore[]
+  reportJobs    ReportGradingJob[]
 
   @@index([rubricId])
   @@index([status, createdAt])

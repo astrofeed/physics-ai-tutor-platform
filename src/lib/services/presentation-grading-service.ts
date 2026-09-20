@@ -12,6 +12,7 @@ import {
   TRANSCRIPTION_MODEL,
   PresentationEvaluationSchema,
   parseEvaluation,
+  studentIdsOf,
   type PresentationEvaluation,
   type PresentationJobDetail,
   type PresentationJobSummary,
@@ -140,10 +141,6 @@ async function rubricVersionOf(rubricId: string): Promise<number | null> {
     select: { version: true },
   });
   return rubric?.version ?? null;
-}
-
-function studentIdsOf(job: { studentIds: string | null }): string[] {
-  return (job.studentIds ?? "").split(/[\s,;、]+/).filter((id) => /^\d{5,15}$/.test(id));
 }
 
 /** English name / group / date of the job's first rostered student, resolved at read time so re-imports stay in sync. */

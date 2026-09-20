@@ -8,7 +8,9 @@
 
 import {
   parseReportEvaluation,
+  SUGGESTION_STATUS_LABELS,
   type ReportJobDetail,
+  type ReportSuggestionCheck,
 } from "@/lib/report-grading";
 import {
   parseEvaluation,
@@ -71,10 +73,16 @@ export function downloadCsv(filename: string, content: string): void {
 /**
  * One row per report job: student ID, title, per-criterion AI score, human
  * score + AI reason (columns follow the first graded job's rubric order),
- * weighted totals, and the AI summary. Ungraded/legacy jobs get blank cells.
+ * weighted totals, the AI summary, and one status/evidence pair per
+ * presentation suggestion the report was checked against. Ungraded/legacy
+ * jobs get blank cells.
  */
 export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
   const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson));
+  const suggestionCount = Math.max(
+    0,
+    ...evaluations.map((e) => e?.suggestionChecks?.length ?? 0)
+  );
 
   const criteria: { criterion: string; weightPercent: number }[] = [];
   const seen = new Set<string>();
@@ -105,6 +113,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     "Human total (0-10)",
     ...HUMAN_AUDIT_HEADER,
     "Summary",
+    ...suggestionCheckHeader(suggestionCount),
   ];
 
   const rows = jobs.map((job, i) => {
@@ -136,10 +145,28 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       humanTotal === null ? "" : humanTotal.toFixed(2),
       ...humanAuditCells(job.human),
       evaluations[i]?.summary ?? "",
+      ...suggestionCheckCells(evaluations[i]?.suggestionChecks, suggestionCount),
     ];
   });
 
   return toCsv([header, ...rows]);
+}
+
+function suggestionCheckHeader(count: number): CsvValue[] {
+  return Array.from({ length: count }, (_, i) => i + 1).flatMap((n) => [
+    `Presentation suggestion ${n}`,
+    `Suggestion ${n} status`,
+    `Suggestion ${n} evidence`,
+  ]);
+}
+
+function suggestionCheckCells(
+  checks: ReportSuggestionCheck[] | null | undefined,
+  count: number
+): CsvValue[] {
+  return Array.from({ length: count }, (_, i) => checks?.[i]).flatMap((check) =>
+    check ? [check.suggestion, SUGGESTION_STATUS_LABELS[check.status], check.evidence] : ["", "", ""]
+  );
 }
 
 function topicSuggestionHeader(optionCount: number): CsvValue[] {

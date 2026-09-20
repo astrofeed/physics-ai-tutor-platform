@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { parseReportEvaluation, type ReportJobDetail } from "@/lib/report-grading";
 import { reportEvaluationToText } from "./report-job-format";
+import { ReportSuggestionChecks } from "./ReportSuggestionChecks";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -62,6 +63,13 @@ export function ReportJobResult({ job }: { job: ReportJobDetail }) {
         <Section title="Summary">
           <MarkdownContent content={evaluation.summary} className="text-sm" />
         </Section>
+
+        {evaluation.suggestionChecks && evaluation.suggestionChecks.length > 0 ? (
+          <ReportSuggestionChecks
+            checks={evaluation.suggestionChecks}
+            presentationJobId={job.presentationJobId}
+          />
+        ) : null}
 
         <Section title="Comments">
           {evaluation.comments.length === 0 ? (
