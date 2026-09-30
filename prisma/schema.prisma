@@ -225,6 +225,8 @@ model PresentationRosterEntry {
 
 model PresentationGradingJob {
   id         String                @id @default(cuid())
+  questionBankId String?
+  updatedAt DateTime @default(now()) @updatedAt
   topic      String
   /// Presenter names, free text — the TA searches by this right after a talk.
   presenters String?

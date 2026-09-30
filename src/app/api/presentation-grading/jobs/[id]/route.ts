@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { UpdatePresentationJobSchema } from "@/lib/validators/presentation-job";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
-import { PRESENTATION_STUDENT_IDS_MAX_CHARS } from "@/lib/presentation-grading";
 import {
   getPresentationJob,
   updatePresentationJob,
@@ -25,12 +24,6 @@ export async function GET(
   return NextResponse.json({ data: job });
 }
 
-const UpdateJobSchema = z.object({
-  topic: z.string().min(1).max(200).optional(),
-  presenters: z.string().max(200).nullable().optional(),
-  studentIds: z.string().max(PRESENTATION_STUDENT_IDS_MAX_CHARS).nullable().optional(),
-});
-
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -38,7 +31,7 @@ export async function PATCH(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
-  const body = UpdateJobSchema.safeParse(await request.json());
+  const body = UpdatePresentationJobSchema.safeParse(await request.json());
   if (!body.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
