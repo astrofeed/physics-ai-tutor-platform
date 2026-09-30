@@ -5,8 +5,7 @@
  */
 
 import { z } from "zod";
-import type { HumanGrading } from "@/lib/human-grading";
-import type { FeedbackEmailStatus } from "@/lib/feedback-email";
+export type { PresentationJobStatusValue, PresentationJobSummary, PresentationJobDetail } from "@/types/presentation-grading";
 
 export const PRESENTATION_AUDIO_MAX_BYTES = 25 * 1024 * 1024; // OpenAI transcription cap
 export const PRESENTATION_SLIDES_MAX_BYTES = 30 * 1024 * 1024;
@@ -43,45 +42,6 @@ export const PRESENTATION_STUDENT_IDS_MAX_CHARS = 200;
 
 export const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 export const PRESENTATION_GRADING_MODEL = "gpt-5.6-luna";
-
-export type PresentationJobStatusValue =
-  | "QUEUED"
-  | "TRANSCRIBING"
-  | "GRADING"
-  | "DONE"
-  | "FAILED";
-
-export interface PresentationJobSummary {
-  id: string;
-  topic: string;
-  presenters: string | null;
-  studentIds: string | null;
-  /** From the sign-up sheet for the first student ID; null when not rostered. */
-  englishName: string | null;
-  groupLabel: string | null;
-  presentationDate: string | null;
-  track: string | null;
-  status: PresentationJobStatusValue;
-  error: string | null;
-  totalScore: number | null;
-  model: string | null;
-  reasoningEffort: string;
-  gradingDurationMs: number | null;
-  rubricVersion: number | null;
-  createdByName: string | null;
-  createdAt: string;
-  completedAt: string | null;
-}
-
-export interface PresentationJobDetail extends PresentationJobSummary, FeedbackEmailStatus {
-  transcript: string | null;
-  slidesText: string | null;
-  slidesFilename: string | null;
-  partIOutput: string | null;
-  partIIOutput: string | null;
-  summaryJson: string | null;
-  human: HumanGrading;
-}
 
 /**
  * Report-topic guidance derived from the presentation: when the project has

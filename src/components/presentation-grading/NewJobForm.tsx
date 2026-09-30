@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useReducer } from "react";
 import { FileVideo, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/lib/chat-attachments";
+import { questionBankEntry } from "@/lib/question-bank";
+import { QUESTION_BANK_TEXT } from "@/lib/question-bank-strings";
+import type { PresentationFormState } from "@/types/presentation-grading";
+import { QuestionBankPicker } from "./QuestionBankPicker";
 import { FilePicker } from "./FilePicker";
 import { SubmissionImport, type ResolvedSubmission } from "./SubmissionImport";
 import { lookupRosterStudent } from "@/hooks/usePresentationRoster";
@@ -38,24 +42,22 @@ const PHASE_LABELS: Record<Exclude<JobSubmitPhase, null>, string> = {
 };
 
 export function NewJobForm({ onCreated }: { onCreated: () => void }) {
-  const [topic, setTopic] = useState("");
-  const [presenters, setPresenters] = useState("");
-  const [studentIds, setStudentIds] = useState("");
-  const [track, setTrack] = useState<"A" | "B" | "unknown">("unknown");
-  const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
-  const [source, setSource] = useState<"video" | "transcript">("video");
-  const [video, setVideo] = useState<File | null>(null);
-  const [transcript, setTranscript] = useState("");
-  const [slides, setSlides] = useState<File | null>(null);
+  const [form, setForm] = useReducer(
+    (state: PresentationFormState, patch: Partial<PresentationFormState>) => ({ ...state, ...patch }),
+    {
+      topic: "", questionBankId: null, presenters: "", studentIds: "", track: "unknown",
+      reasoningEffort: "high", source: "video", video: null, transcript: "", slides: null,
+    }
+  );
+  const { topic, questionBankId, presenters, studentIds, track, reasoningEffort, source, video, transcript, slides } = form;
+  const linkedQuestion = questionBankId ? questionBankEntry(questionBankId) : null;
   const { submit, phase } = useSubmitPresentationJob(onCreated);
 
   const applySubmission = (submission: ResolvedSubmission) => {
-    setSource("video");
-    setStudentIds(submission.studentId ?? "");
-    setPresenters(submission.presenters);
-    setTopic(submission.topic);
-    setVideo(submission.video);
-    setSlides(submission.slides);
+    setForm({
+      source: "video", studentIds: submission.studentId ?? "", presenters: submission.presenters,
+      topic: submission.topic, questionBankId: null, video: submission.video, slides: submission.slides,
+    });
     const slidesNote = submission.slides ? "" : " No slides in this archive — grading from the video only.";
     if (submission.topicFromRoster) {
       toast.success(`Filled from the sign-up sheet: ${submission.label}.${slidesNote}`);
@@ -69,8 +71,10 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const fillFromRoster = async () => {
     const entry = await lookupRosterStudent(studentIds.split(/[,\s]+/)[0] ?? "");
     if (!entry) return;
-    if (!presenters.trim() && entry.name) setPresenters(entry.name);
-    if (!topic.trim() && entry.topic) setTopic(entry.topic);
+    setForm({
+      ...(!presenters.trim() && entry.name ? { presenters: entry.name } : {}),
+      ...(!topic.trim() && entry.topic ? { topic: entry.topic, questionBankId: null } : {}),
+    });
   };
 
   const hasSource = source === "video" ? video !== null : transcript.trim().length > 0;
@@ -80,6 +84,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
   const handleSubmit = async () => {
     const input: NewJobInput = {
       topic: topic.trim(),
+      questionBankId,
       presenters: presenters.trim(),
       studentIds: studentIds.trim() || undefined,
       track: track === "unknown" ? undefined : track,
@@ -89,12 +94,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       reasoningEffort,
     };
     if (await submit(input)) {
-      setTopic("");
-      setPresenters("");
-      setStudentIds("");
-      setVideo(null);
-      setTranscript("");
-      setSlides(null);
+      setForm({ topic: "", questionBankId: null, presenters: "", studentIds: "", video: null, transcript: "", slides: null });
     }
   };
 
@@ -126,7 +126,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
               placeholder="e.g. QB-12 — Induced emf in a rotating loop"
               maxLength={200}
               value={topic}
-              onChange={(e) => setTopic(e.target.value)}
+              onChange={(e) => setForm({ topic: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
@@ -138,9 +138,24 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
               placeholder="e.g. 王小明"
               maxLength={200}
               value={presenters}
-              onChange={(e) => setPresenters(e.target.value)}
+              onChange={(e) => setForm({ presenters: e.target.value })}
             />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <QuestionBankPicker topic={topic} selectedId={questionBankId} disabled={phase !== null}
+            onConfirm={(question) => {
+              setForm({ questionBankId: question.id, ...(!topic.trim() ? { topic: question.title } : {}) });
+              return true;
+            }} />
+          {linkedQuestion ? (
+            <div className="rounded-md border border-border p-3 text-body">
+              <p className="font-medium">{linkedQuestion.title} · Track {linkedQuestion.track}</p>
+              <p className="mt-1">{QUESTION_BANK_TEXT.heading}: {linkedQuestion.whatToDo}</p>
+            </div>
+          ) : null}
+          <p className="text-caption text-muted-foreground">{QUESTION_BANK_TEXT.formHelp}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -150,16 +165,16 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             placeholder="e.g. 113012345 — used in CSV exports"
             maxLength={200}
             value={studentIds}
-            onChange={(e) => setStudentIds(e.target.value)}
+            onChange={(e) => setForm({ studentIds: e.target.value })}
             onBlur={() => void fillFromRoster()}
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Track</Label>
-            <Select value={track} onValueChange={(v) => setTrack(v as typeof track)}>
-              <SelectTrigger>
+            <Label htmlFor="job-track">Track</Label>
+            <Select value={track} onValueChange={(v) => { if (v === "A" || v === "B" || v === "unknown") setForm({ track: v }); }}>
+              <SelectTrigger id="job-track">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -170,12 +185,12 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Reasoning effort</Label>
+            <Label htmlFor="job-effort">Reasoning effort</Label>
             <Select
               value={reasoningEffort}
-              onValueChange={(v) => setReasoningEffort(v as typeof reasoningEffort)}
+              onValueChange={(v) => { if (v === "high" || v === "xhigh") setForm({ reasoningEffort: v }); }}
             >
-              <SelectTrigger>
+              <SelectTrigger id="job-effort">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -200,7 +215,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setSource(value)}
+                    onClick={() => setForm({ source: value })}
                     className={`rounded px-2 py-1 transition-colors ${
                       source === value
                         ? "bg-gray-100 dark:bg-gray-800 font-medium"
@@ -218,17 +233,19 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
                 hint={`MP4, MOV, WebM, WMV or AVI — max 3:30 and ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}`}
                 accept="video/*,.wmv,.avi,.mkv"
                 file={video}
-                onChange={setVideo}
+                onChange={(video) => setForm({ video })}
                 icon={FileVideo}
               />
             ) : (
               <div className="space-y-1">
+                <Label htmlFor="job-transcript" className="sr-only">Transcript</Label>
                 <Textarea
+                  id="job-transcript"
                   placeholder="Paste what was said in the presentation…"
                   maxLength={PRESENTATION_TRANSCRIPT_MAX_CHARS}
                   rows={4}
                   value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
+                  onChange={(e) => setForm({ transcript: e.target.value })}
                 />
                 <p className="text-xs text-gray-500 text-right">
                   {transcript.length.toLocaleString()} / {PRESENTATION_TRANSCRIPT_MAX_CHARS.toLocaleString()}
@@ -241,7 +258,7 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
             hint={`PDF or PPTX, up to ${formatBytes(PRESENTATION_SLIDES_MAX_BYTES)}`}
             accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             file={slides}
-            onChange={setSlides}
+            onChange={(slides) => setForm({ slides })}
             icon={FileText}
           />
         </div>
