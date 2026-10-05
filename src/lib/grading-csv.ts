@@ -28,7 +28,8 @@ import {
 type CsvValue = string | number | null | undefined;
 
 function csvEscape(value: CsvValue): string {
-  const text = value === null || value === undefined ? "" : String(value);
+  const raw = value === null || value === undefined ? "" : String(value);
+  const text = typeof value === "string" && /^\s*[=+@\-\t\r\n]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -43,6 +44,7 @@ const HUMAN_AUDIT_HEADER: CsvValue[] = [
   "Human grader",
   "AI revealed at",
   "Human graded blind",
+  "Human comments",
 ];
 
 function humanAuditCells(human: HumanGrading): CsvValue[] {
@@ -53,6 +55,7 @@ function humanAuditCells(human: HumanGrading): CsvValue[] {
     human.gradedByName ?? "",
     human.aiRevealedAt ?? "",
     blind === null ? "" : blind ? "yes" : "no",
+    human.comments ?? "",
   ];
 }
 
