@@ -22,14 +22,14 @@ const STEPS: HowToStep[] = [
       "The browser extracts the audio (a few seconds; WMV/AVI take longer the first time while ffmpeg downloads), uploads it and starts the job. Grading runs in the background for a few minutes — you can submit the next student or leave the page.",
   },
   {
-    title: "Open the job to read the AI result; add your own scores if you like.",
+    title: "Open the job to read the AI result; optionally add your scores and comments.",
     detail:
-      "The AI scorecard, mistakes and suggested questions show right away. The “Your scores” card underneath is optional — fill it in to compare your grade with the AI’s; scores can be edited later.",
+      "The AI scorecard, mistakes and suggested questions show right away. Use “Your scores and comments” to compare grades and note problems or improvements. Comments are optional, and both can be edited later.",
   },
   {
     title: "Export a CSV when you are done.",
     detail:
-      "Tick the jobs in the list and press Export CSV — it includes student ID, group, date, every category's AI and human score and the totals.",
+      "Tick the jobs in the list and press Export CSV — it includes student ID, group, date, every category's AI and human score, the totals and your comments.",
   },
 ];
 

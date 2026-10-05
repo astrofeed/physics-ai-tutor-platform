@@ -5,8 +5,11 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/lib/human-grading";
+import { HUMAN_COMMENTS_MAX_CHARS } from "@/lib/human-grading";
+import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
+import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "./human-score-items";
 
 export type ScoreMode = "total" | "items";
@@ -42,7 +45,7 @@ function parseItems(items: HumanScoreItem[], draft: Draft): HumanScoresInput | s
   const scores: HumanScoreEntry[] = [];
   for (const item of items) {
     const score = parseBounded(draft[item.name] ?? "", item.max);
-    if (score === null) return `"${item.name}" must be a number between 0 and ${item.max}`;
+    if (score === null) return HUMAN_GRADING_TEXT.scoreOutOfRange(`"${item.name}"`, item.max);
     scores.push({ name: item.name, score });
   }
   return { scores };
@@ -50,7 +53,7 @@ function parseItems(items: HumanScoreItem[], draft: Draft): HumanScoresInput | s
 
 function parseTotal(raw: string, max: number): HumanScoresInput | string {
   const total = parseBounded(raw, max);
-  return total === null ? `Total must be a number between 0 and ${max}` : { total };
+  return total === null ? HUMAN_GRADING_TEXT.scoreOutOfRange(HUMAN_GRADING_TEXT.total, max) : { total };
 }
 
 function ModeToggle({
@@ -63,13 +66,13 @@ function ModeToggle({
   disabled: boolean;
 }) {
   const options: { value: ScoreMode; label: string }[] = [
-    { value: "total", label: "Total only" },
-    { value: "items", label: "Per item" },
+    { value: "total", label: HUMAN_GRADING_TEXT.totalOnly },
+    { value: "items", label: HUMAN_GRADING_TEXT.perItem },
   ];
   return (
     <div
       role="radiogroup"
-      aria-label="Scoring mode"
+      aria-label={HUMAN_GRADING_TEXT.scoringMode}
       className="inline-flex rounded-md border border-gray-200 p-0.5 text-xs dark:border-gray-800"
     >
       {options.map((option) => (
@@ -110,6 +113,7 @@ export function HumanScoreForm({
   const [mode, setMode] = useState<ScoreMode>(human.scores.length > 0 ? "items" : "total");
   const [itemDraft, setItemDraft] = useState<Draft>(() => itemDraftFrom(items, human.scores));
   const [totalDraft, setTotalDraft] = useState(human.total === null ? "" : String(human.total));
+  const [comments, setComments] = useState(human.comments ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: React.FormEvent) => {
@@ -120,16 +124,14 @@ export function HumanScoreForm({
       return;
     }
     setError(null);
-    await onSave(parsed);
+    await onSave({ ...parsed, comments });
   };
 
   return (
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-gray-500">
-          {mode === "total"
-            ? "Enter one overall score to compare with the AI's total. Scores can be changed later."
-            : "Enter your own score per item to compare it with the AI's. Scores can be changed later."}
+          {mode === "total" ? HUMAN_GRADING_TEXT.totalHint : HUMAN_GRADING_TEXT.itemsHint}
         </p>
         <ModeToggle mode={mode} onChange={setMode} disabled={saving} />
       </div>
@@ -138,10 +140,10 @@ export function HumanScoreForm({
         <div className="max-w-xs space-y-1">
           <Label htmlFor="human-total" className="flex justify-between gap-2 text-sm">
             <span>
-              Total <span className="text-gray-500">/ {total.max}</span>
+              {HUMAN_GRADING_TEXT.total} <span className="text-gray-500">/ {total.max}</span>
             </span>
             {total.aiScore !== null ? (
-              <span className="text-gray-500">AI {formatScore(total.aiScore)}</span>
+              <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(total.aiScore)}</span>
             ) : null}
           </Label>
           <Input
@@ -168,7 +170,7 @@ export function HumanScoreForm({
                   <span>
                     {item.name} <span className="text-gray-500">/ {item.max}</span>
                   </span>
-                  <span className="text-gray-500">AI {formatScore(item.aiScore)}</span>
+                  <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(item.aiScore)}</span>
                 </Label>
                 <Input
                   id={id}
@@ -187,15 +189,33 @@ export function HumanScoreForm({
         </div>
       )}
 
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      <div className="space-y-2">
+        <Label htmlFor="human-comments">{HUMAN_GRADING_TEXT.comments}</Label>
+        <Textarea
+          id="human-comments"
+          value={comments}
+          onChange={(event) => setComments(event.target.value)}
+          rows={5}
+          maxLength={HUMAN_COMMENTS_MAX_CHARS}
+          disabled={saving}
+          aria-describedby="human-comments-hint human-comments-count"
+          placeholder={HUMAN_GRADING_TEXT.commentsPlaceholder}
+          className="resize-y rounded-md shadow-none"
+        />
+        <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+          <p id="human-comments-hint" className="max-w-prose">{HUMAN_GRADING_TEXT.commentsHint}</p>
+          <span id="human-comments-count" className="tabular-nums">{comments.length} / {HUMAN_COMMENTS_MAX_CHARS}</span>
+        </div>
+      </div>
+      {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={saving}>
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {mode === "total" ? "Save total" : "Save scores"}
+          {HUMAN_GRADING_TEXT.save}
         </Button>
         {onCancel ? (
           <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
-            Cancel
+            {HUMAN_GRADING_TEXT.cancel}
           </Button>
         ) : null}
       </div>

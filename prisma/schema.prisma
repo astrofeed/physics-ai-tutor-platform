@@ -139,6 +139,8 @@ model ReportGradingJob {
   humanGradedById String?
   /// Staff total entered directly (0-10) when they skip per-criterion scores.
   humanTotal      Decimal?  @db.Decimal(10, 2)
+  humanComments   String?   @db.Text
+  updatedAt       DateTime  @default(now()) @updatedAt
   /// Last time staff emailed the AI feedback to the student, and where.
   feedbackSentAt  DateTime?
   feedbackSentTo  String?
@@ -264,6 +266,8 @@ model PresentationGradingJob {
   humanGradedById String?
   /// Staff total entered directly (0-100) when they skip per-category scores.
   humanTotal      Decimal?  @db.Decimal(10, 2)
+  humanComments   String?   @db.Text
+  updatedAt       DateTime  @default(now()) @updatedAt
   /// Last time staff emailed the AI feedback to the student, and where.
   feedbackSentAt  DateTime?
   feedbackSentTo  String?

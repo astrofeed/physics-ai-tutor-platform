@@ -4,39 +4,32 @@
  * end-of-term analysis separate blind human grades from AI-informed ones.
  */
 
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { HumanGrading, HumanScoresInput } from "@/lib/human-grading";
+import type {
+  HumanGrading,
+  HumanGradingRow,
+  HumanScoreRow,
+  HumanScoresInput,
+  SaveHumanScoresResult,
+} from "@/types/human-grading";
 import { parseReportEvaluation, REPORT_CRITERION_MAX_SCORE } from "@/lib/report-grading";
 import { parseEvaluation } from "@/lib/presentation-grading";
 
-interface HumanGradingRow {
-  aiRevealedAt: Date | null;
-  humanGradedAt: Date | null;
-  humanTotal: Prisma.Decimal | null;
-  humanGradedBy: { name: string | null } | null;
-}
-
-interface ScoreRow {
-  score: Prisma.Decimal;
-}
+export type { SaveHumanScoresResult } from "@/types/human-grading";
 
 export function toHumanGrading(
   job: HumanGradingRow,
-  scores: Array<ScoreRow & { name: string }>
+  scores: HumanScoreRow[]
 ): HumanGrading {
   return {
     scores: scores.map((row) => ({ name: row.name, score: Number(row.score) })),
     total: job.humanTotal === null ? null : Number(job.humanTotal),
+    comments: job.humanComments,
     gradedAt: job.humanGradedAt?.toISOString() ?? null,
     gradedByName: job.humanGradedBy?.name ?? null,
     aiRevealedAt: job.aiRevealedAt?.toISOString() ?? null,
   };
 }
-
-export type SaveHumanScoresResult =
-  | { ok: true }
-  | { ok: false; status: 404 | 409 | 400; error: string };
 
 /**
  * Checks the submitted scores against the names and upper bounds the AI
@@ -81,6 +74,7 @@ function gradingUpdate(input: HumanScoresInput, graderId: string, gradedAt: Date
     humanGradedById: graderId,
     humanGradedAt: gradedAt ?? new Date(),
     humanTotal: "total" in input ? input.total : null,
+    humanComments: input.comments === undefined ? undefined : input.comments.trim() || null,
   };
 }
 
