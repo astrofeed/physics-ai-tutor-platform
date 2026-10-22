@@ -3,7 +3,9 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { humanTotalOf, type HumanGrading, type HumanScoreEntry, type HumanScoresInput } from "@/lib/human-grading";
+import { humanTotalOf } from "@/lib/human-grading";
+import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
+import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 import { formatTimestamp } from "@/components/presentation-grading/job-format";
 import { HumanScoreForm } from "./HumanScoreForm";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "./human-score-items";
@@ -36,10 +38,10 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-gray-500">
           <tr>
-            <th className="py-1 pr-3 font-medium">Item</th>
-            <th className="py-1 pr-3 text-right font-medium">You</th>
-            <th className="py-1 pr-3 text-right font-medium">AI</th>
-            <th className="py-1 text-right font-medium">Δ (you − AI)</th>
+            <th className="py-1 pr-3 font-medium">{HUMAN_GRADING_TEXT.item}</th>
+            <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.you}</th>
+            <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.ai}</th>
+            <th className="py-1 text-right font-medium">{HUMAN_GRADING_TEXT.difference}</th>
           </tr>
         </thead>
         <tbody>
@@ -93,7 +95,7 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
         }))
       : []),
     {
-      label: "Total",
+      label: HUMAN_GRADING_TEXT.total,
       max: total.max,
       mine: humanTotalOf(human, totalFromItems),
       ai: total.aiScore,
@@ -104,8 +106,8 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-base">Your scores</CardTitle>
-        <span className="text-xs text-gray-500">Optional</span>
+        <CardTitle className="text-base">{HUMAN_GRADING_TEXT.title}</CardTitle>
+        <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
       </CardHeader>
       <CardContent className="space-y-4">
         {editing ? (
@@ -125,10 +127,16 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
         ) : (
           <>
             <ComparisonTable rows={rows} />
+            {human.comments ? (
+              <section aria-label={HUMAN_GRADING_TEXT.savedComments} className="space-y-2 border-t border-border pt-4">
+                <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>
+                <p className="whitespace-pre-wrap break-words text-sm">{human.comments}</p>
+              </section>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
               <span>
-                {human.gradedAt ? `Saved ${formatTimestamp(human.gradedAt)}` : null}
-                {human.gradedByName ? ` by ${human.gradedByName}` : null}
+                {human.gradedAt ? HUMAN_GRADING_TEXT.savedAt(formatTimestamp(human.gradedAt)) : null}
+                {human.gradedByName ? HUMAN_GRADING_TEXT.savedBy(human.gradedByName) : null}
               </span>
               <Button
                 size="sm"
@@ -138,7 +146,7 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
                   setEditing(true);
                 }}
               >
-                Edit scores
+                {HUMAN_GRADING_TEXT.edit}
               </Button>
             </div>
           </>

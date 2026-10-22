@@ -5,26 +5,13 @@
  */
 
 import { z } from "zod";
-
-export interface HumanScoreEntry {
-  /** Rubric criterion (reports) or scorecard category (presentations). */
-  name: string;
-  score: number;
-}
-
-export interface HumanGrading {
-  /** Per-item scores; empty when staff entered only a total. */
-  scores: HumanScoreEntry[];
-  /** Total entered directly instead of per-item scores; null otherwise. */
-  total: number | null;
-  /** First time the scores were saved; later edits keep it. */
-  gradedAt: string | null;
-  gradedByName: string | null;
-  /** First time staff opened the AI result on this job. */
-  aiRevealedAt: string | null;
-}
+import type { HumanGrading, HumanScoreEntry } from "@/types/human-grading";
+export type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 
 export const HUMAN_SCORE_MAX_ENTRIES = 50;
+export const HUMAN_COMMENTS_MAX_CHARS = 10_000;
+
+const HumanCommentsSchema = z.string().max(HUMAN_COMMENTS_MAX_CHARS).optional();
 
 const HumanScoreEntrySchema = z.object({
   name: z.string().min(1).max(200),
@@ -38,11 +25,10 @@ const HumanScoreEntrySchema = z.object({
 export const HumanScoresInputSchema = z.union([
   z.object({
     scores: z.array(HumanScoreEntrySchema).min(1).max(HUMAN_SCORE_MAX_ENTRIES),
+    comments: HumanCommentsSchema,
   }),
-  z.object({ total: z.number().finite().min(0) }),
+  z.object({ total: z.number().finite().min(0), comments: HumanCommentsSchema }),
 ]);
-
-export type HumanScoresInput = z.infer<typeof HumanScoresInputSchema>;
 
 /**
  * The staff total to compare with the AI's: the directly entered one, else

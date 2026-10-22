@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { HumanScoresInput } from "@/lib/human-grading";
+import type { HumanScoresInput } from "@/types/human-grading";
+import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
 
 export type HumanGradingKind = "report" | "presentation";
 
@@ -53,15 +54,15 @@ export function useHumanGrading(
           body: JSON.stringify(input),
         });
         if (!res.ok) {
-          toast.error(await errorMessage(res, "Failed to save your scores"));
+          toast.error(await errorMessage(res, HUMAN_GRADING_TEXT.saveFailed));
           return false;
         }
-        toast.success("Your scores were saved");
+        toast.success(HUMAN_GRADING_TEXT.saved);
         onChanged();
         return true;
       } catch (error) {
         console.error(`[human-grading] saving scores for ${kind} job ${jobId} failed:`, error);
-        toast.error("Failed to save your scores");
+        toast.error(HUMAN_GRADING_TEXT.saveFailed);
         return false;
       } finally {
         setSaving(false);

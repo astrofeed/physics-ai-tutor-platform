@@ -22,14 +22,14 @@ const STEPS: HowToStep[] = [
       "Reports are uploaded and started one after another; grading runs in the background for a few minutes per report. You can leave the page — results appear in the list below.",
   },
   {
-    title: "Open a job to read the AI result; add your own scores if you like.",
+    title: "Open a job to read the AI result; optionally add your scores and comments.",
     detail:
-      "The summary, evidence-referenced comments and per-criterion scores show right away. The “Your scores” card underneath is optional and can be edited later.",
+      "The summary, evidence-referenced comments and per-criterion scores show right away. Use “Your scores and comments” to note problems or improvements alongside your grade. Comments are optional, and both can be edited later.",
   },
   {
     title: "Export a CSV when you are done.",
     detail:
-      "Tick the jobs and press Export CSV — it includes student ID, group, date, presentation topic, report question, every criterion's AI and human score and the totals.",
+      "Tick the jobs and press Export CSV — it includes student ID, group, date, presentation topic, report question, every criterion's AI and human score, the totals and your comments.",
   },
 ];
 

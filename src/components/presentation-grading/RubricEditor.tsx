@@ -13,7 +13,7 @@ export function RubricEditor() {
   const { rubric, loading, saving, save } = usePresentationRubric();
   const [draft, setDraft] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const history = useRubricHistory();
+  const history = useRubricHistory(showHistory);
 
   useEffect(() => {
     if (rubric) setDraft(rubric.content);
@@ -53,10 +53,7 @@ export function RubricEditor() {
         />
         <div className="flex items-center gap-3">
           <Button
-            onClick={async () => {
-              const saved = await save(draft);
-              if (saved && history.versions !== null) void history.load();
-            }}
+            onClick={() => void save(draft)}
             disabled={!dirty || saving}
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -69,11 +66,7 @@ export function RubricEditor() {
           ) : null}
           <Button
             variant="outline"
-            onClick={() => {
-              const next = !showHistory;
-              setShowHistory(next);
-              if (next && history.versions === null) void history.load();
-            }}
+            onClick={() => setShowHistory((visible) => !visible)}
           >
             <History className="mr-1.5 h-4 w-4" />
             {showHistory ? "Hide history" : "Version history"}

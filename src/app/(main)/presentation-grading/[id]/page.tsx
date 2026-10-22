@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { JobActions } from "@/components/presentation-grading/JobActions";
 import { PresentationGradedView } from "@/components/presentation-grading/PresentationGradedView";
+import { QuestionBankRequirements } from "@/components/presentation-grading/QuestionBankRequirements";
 import {
   STATUS_BADGE_VARIANTS,
   STATUS_LABELS,
@@ -44,17 +45,18 @@ function JobDetailContent({ id }: { id: string }) {
   const inProgress = job.status === "QUEUED" || job.status === "TRANSCRIBING" || job.status === "GRADING";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
             <Link href="/presentation-grading">
               <ArrowLeft className="mr-1 h-4 w-4" />
               All jobs
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{job.topic}</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="page-title break-words">{job.topic}</h1>
+          <QuestionBankRequirements jobId={job.id} topic={job.topic} questionBankId={job.questionBankId} />
+          <p className="mt-3 text-sm text-gray-500">
             {[
               job.presenters,
               job.studentIds,
