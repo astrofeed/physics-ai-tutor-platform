@@ -1,17 +1,24 @@
-version: "3.9"
-
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}"
       POSTGRES_DB: physics_tutor
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-local-postgres.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "physics_tutor"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
 volumes:
   pgdata:

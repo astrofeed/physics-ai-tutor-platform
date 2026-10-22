@@ -440,6 +440,19 @@ Do not re-check `isBanned` inside a route that already calls `requireApiAuth()` 
 
 ---
 
+### Local PostgreSQL Security
+
+- Docker development uses `postgres:16.15-alpine`, bound only to `127.0.0.1:5432`. Generate two distinct passwords with `openssl rand -hex 32` and set `POSTGRES_PASSWORD` (admin) and `POSTGRES_APP_PASSWORD` (runtime) in the untracked `.env`. Compose refuses missing or empty passwords.
+- Set `DATABASE_URL` to the `physics_app` connection using the app password, and `DIRECT_URL` to the `postgres` connection using the admin password. Replace the URL placeholders in `.env.example`; dotenv does not interpolate these variables. Hex passwords avoid URL-encoding ambiguity. Never put production credentials into these local Docker variables.
+- On a fresh volume, `scripts/init-local-postgres.sql` creates a non-superuser runtime role with table CRUD and sequence access, but no schema creation, role management or database creation. Prisma migrations use `DIRECT_URL`; objects created by `postgres` receive runtime grants through default privileges. Host and Unix-socket authentication use SCRAM. `make db-up` waits for readiness, and `make setup` applies committed migrations.
+- These initialization settings do **not** rotate credentials, change auth rules or add roles in an existing volume, and do not modify a Homebrew PostgreSQL server. Back up and explicitly migrate an existing cluster before switching credentials. Never remove its data volume to apply these settings. A Homebrew server already using port 5432 must not be stopped automatically.
+- `npx playwright test e2e/postgres-config.spec.ts --reporter=line` checks Compose configuration and fail-closed passwords; it needs the Docker Compose CLI but does not start a database.
+- `RUN_POSTGRES_SECURITY_TESTS=true npx playwright test e2e/postgres-security.spec.ts --reporter=line` creates its own temporary Docker container on a random loopback port, applies migrations, verifies runtime CRUD and rejected administrative operations, and checks password enforcement. It never uses `DATABASE_URL` to select a test target and stops only the container it created; its data is held in tmpfs.
+- The shared Homebrew development cluster was separately upgraded to 16.15 and hardened: Unix sockets use OS-identity `peer` authentication, loopback TCP uses SCRAM, and `physics_app` is restricted to `physics_tutor`. Existing application tables have CRUD grants, but `_prisma_migrations` is excluded. The main checkout's untracked `.env` uses this runtime role and a local socket `DIRECT_URL` for migrations. Local admin tools use `psql -h /tmp -U "$USER" -d postgres`, not passwordless TCP. Peer authentication is a local development convenience, not isolation from processes running as the same OS owner; do not copy this administration model to production.
+- A read-only migration-status check found existing local history drift, including `20260213220000_add_assignment_to_scheduled_email` records absent from the repository and later migrations still pending. Authentication hardening did not apply or resolve migrations. Inspect that history before running `make dev`, `make setup` or migration commands against this existing database; do not reset or automatically baseline it.
+
+---
+
 ### 4. API Layer
 
 #### 4.1 Use Zod for Input Validation
