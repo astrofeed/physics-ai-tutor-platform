@@ -992,6 +992,14 @@ The production build command in `package.json` must be:
 
 **Never use** `prisma db push` or `--accept-data-loss` in any build script, CI pipeline, or deployment process. These can silently drop tables/columns and cause irreversible data loss in production.
 
+#### 10.4 Node.js Runtime
+
+Use Node.js 24 LTS, at least 24.22.1 (the October 2026 security release). `.nvmrc` pins the local version; `package.json` limits supported runtimes to `>=24.22.1 <25`, matching Vercel's 24.x major version while excluding older, unpatched releases. Vercel manages its own patch versions.
+
+With nvm, run `nvm install && nvm use` before installing dependencies. Keep `@types/node` on major 24. Verify runtime changes with a fresh `npm ci`, `npm run typecheck`, `npm run lint`, and `npm run build`; the local build generates Prisma Client but does not apply migrations. Do not run `make dev` or the Vercel build command for a compatibility-only check: both apply database migrations.
+
+The database-free regression subset is `npx playwright test e2e/auto-grade.spec.ts e2e/attachments.spec.ts e2e/mc-options.spec.ts e2e/latex-import.spec.ts e2e/feedback-file.spec.ts e2e/notify-selection.spec.ts e2e/regrade.spec.ts --reporter=line`. For isolated builds and these tests, use a worktree without `.env` and set `DATABASE_URL` and `DIRECT_URL` to a dummy localhost URL rather than production credentials.
+
 ---
 
 ### 11. AI Code Cleanup & Clean Code
