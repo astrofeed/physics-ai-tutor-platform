@@ -21,11 +21,13 @@ AI-powered physics tutoring, assignment, and grading platform for NTHU General P
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24 LTS, at least 24.22.1
 - Docker Desktop (for PostgreSQL)
 - OpenAI API key and/or Anthropic API key
 
 ## Quick Start
+
+For a new local database, copy the example below and configure the passwords and connection URLs described in the manual setup before running `make setup`.
 
 ```bash
 cp .env.example .env   # then fill in your values
@@ -33,6 +35,8 @@ make setup             # install, generate Prisma client, migrate DB, start dev 
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+For an existing database, back it up and inspect its migration history before running setup. Docker initialization only applies to a fresh volume: changing `.env` does not rotate existing passwords or update existing roles. Do not delete a data volume to apply these settings.
 
 ## Setup (Manual)
 
@@ -46,16 +50,23 @@ Open [http://localhost:3000](http://localhost:3000).
    cp .env.example .env
    ```
    Edit `.env` and set:
-   - `DATABASE_URL` - Your PostgreSQL connection string
+   - `POSTGRES_PASSWORD` - Local Docker administrator password
+   - `POSTGRES_APP_PASSWORD` - A different local Docker application password
+   - `DATABASE_URL` - The `physics_app` connection URL, with `REPLACE_WITH_APP_PASSWORD` replaced by the application password
+   - `DIRECT_URL` - The `postgres` connection URL, with `REPLACE_WITH_ADMIN_PASSWORD` replaced by the administrator password; Prisma uses this for migrations
    - `NEXTAUTH_SECRET` - A random secret string (generate with `openssl rand -base64 32`)
    - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Google OAuth credentials (optional)
    - `OPENAI_API_KEY` - OpenAI API key
    - `ANTHROPIC_API_KEY` - Anthropic API key
 
+   Generate each database password separately with `openssl rand -hex 32`. Copy each value into its password variable and matching URL; dotenv does not substitute variables inside the URLs. Keep `.env` untracked. These Docker passwords are for local development, not your hosted database.
+
 3. **Set up the database**
    ```bash
    make db-setup
    ```
+
+   Docker binds PostgreSQL only to `127.0.0.1:5432` and waits for it to be ready. If Homebrew or another database already uses that port, resolve the conflict explicitly rather than stopping that service or deleting its data.
 
 4. **Run the development server**
    ```bash

@@ -27,7 +27,7 @@ start:
 
 # Start PostgreSQL in Docker
 db-up:
-	docker compose up -d
+	docker compose up -d --wait
 
 # Stop PostgreSQL container
 db-down:
@@ -68,4 +68,4 @@ clean:
 	rm -rf .next node_modules
 
 # First-time setup: install deps, start DB, generate prisma, sync schema, start dev
-setup: install db-up prisma-generate db-push dev
+setup: install db-up prisma-generate db-deploy dev
