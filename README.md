@@ -139,8 +139,11 @@ Things to address before letting students use the platform in production:
 - Update `src/app/api/upload/route.ts` to use the chosen provider instead of writing to disk.
 
 ### Database
-- Ensure your `DATABASE_URL` points to a production PostgreSQL instance (e.g., Neon, Supabase, Railway, or AWS RDS).
-- Run `npx prisma db push` or `npx prisma migrate deploy` against the production database before first launch.
+- Use a restricted runtime account for the production `DATABASE_URL`; Preview must use a separate database with synthetic test data.
+- Application builds, including Vercel builds, do not apply migrations. Before promoting a schema-changing release, review and test its migrations, verify a backup, and obtain approval to run the separate migration step.
+- Supply the direct administrator connection as `MIGRATION_DATABASE_URL` only to the approved migration-job/operator environment. Do not add it or other owner credentials to Vercel application variables. The command does not load `.env` or fall back to `DATABASE_URL`, `DIRECT_URL`, or `DATABASE_URL_UNPOOLED`.
+- Run `npm run db:migrate:deploy -- --approve-target <host:port/database>` outside Vercel, replacing the target with the exact host, port (5432 if omitted in the URL), and database in the approved connection. This runs committed Prisma migrations only; it does not reset or synchronize schemas using `db push`.
+- The confirmation flag prevents accidental targeting; it is not an authorization boundary. Keep credentials restricted and gate application rollout on migration success. Do not run migration and automatic application promotion concurrently. Existing local `make db-deploy` remains unchanged.
 
 ### Authentication
 - Set a strong, unique `NEXTAUTH_SECRET` in production.
@@ -152,7 +155,7 @@ All of these must be set in your hosting provider's environment:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string for the restricted runtime account |
 | `NEXTAUTH_SECRET` | Yes | Random secret for session encryption |
 | `NEXTAUTH_URL` | Yes | Production URL (e.g., `https://phystutor.example.com`) |
 | `GOOGLE_CLIENT_ID` | Optional | Google OAuth client ID |
@@ -162,7 +165,7 @@ All of these must be set in your hosting provider's environment:
 
 ### First-Time Setup Checklist
 1. Provision a PostgreSQL database and set `DATABASE_URL`
-2. Run database migrations (`npx prisma migrate deploy`)
+2. Review, approve and run migrations through the separate migration command above
 3. Set all required environment variables
 4. Deploy the app
 5. Register the first user and promote to ADMIN via Prisma Studio or direct DB update

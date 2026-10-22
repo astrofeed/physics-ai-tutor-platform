@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
 import { test, expect } from "@playwright/test";
@@ -8,6 +9,9 @@ test.skip(process.env.RUN_POSTGRES_SECURITY_TESTS !== "true", "Requires a dispos
 
 const adminPassword = randomBytes(32).toString("hex");
 const appPassword = randomBytes(32).toString("hex");
+const unusedDatabaseUrl = "postgresql://unused:unused@127.0.0.1:1/unused";
+const migrationCount = readdirSync("prisma/migrations", { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
 let containerId = "";
 let port = 0;
 
@@ -45,8 +49,7 @@ async function queryAs(user: "postgres" | "physics_app", sql: string) {
   }
 }
 
-test.beforeAll(async () => {
-  test.setTimeout(120_000);
+function startDatabase() {
   containerId = docker([
     "run", "--detach", "--rm",
     "--tmpfs", "/var/lib/postgresql/data:rw",
@@ -59,16 +62,44 @@ test.beforeAll(async () => {
     "postgres:16.15-alpine",
   ]);
   port = Number(docker(["port", containerId, "5432/tcp"]).split(":").at(-1));
+}
+
+function migrationEnvironment() {
+  return {
+    ...process.env,
+    VERCEL: undefined,
+    VERCEL_ENV: undefined,
+    VERCEL_TARGET_ENV: undefined,
+    MIGRATION_DATABASE_URL: `postgresql://postgres:${adminPassword}@127.0.0.1:${port}/physics_tutor`,
+    DATABASE_URL: unusedDatabaseUrl,
+    DIRECT_URL: unusedDatabaseUrl,
+    DATABASE_URL_UNPOOLED: unusedDatabaseUrl,
+  };
+}
+
+function runApprovedMigrations() {
+  const output = execFileSync(process.execPath, [
+    "scripts/deploy-migrations.mjs", "--approve-target", `127.0.0.1:${port}/physics_tutor`,
+  ], {
+    timeout: 60_000,
+    stdio: "pipe",
+    encoding: "utf8",
+    env: migrationEnvironment(),
+  });
+  expect(output).not.toContain(adminPassword);
+}
+
+test.beforeAll(async () => {
+  test.setTimeout(120_000);
+  startDatabase();
   await expect(async () => {
     expect(await queryAs("physics_app", "SELECT 1 AS connected")).toEqual([{ connected: 1 }]);
   }).toPass({ timeout: 45_000 });
-
-  const adminUrl = `postgresql://postgres:${adminPassword}@127.0.0.1:${port}/physics_tutor`;
-  execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], {
-    timeout: 60_000,
-    stdio: "pipe",
-    env: { ...process.env, DATABASE_URL: adminUrl, DIRECT_URL: adminUrl },
-  });
+  runApprovedMigrations();
+  expect(await queryAs("postgres", `
+    SELECT COUNT(*)::int AS completed FROM "_prisma_migrations"
+    WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
+  `)).toEqual([{ completed: migrationCount }]);
   await queryAs("postgres", "CREATE TABLE security_probe (id SERIAL PRIMARY KEY, value TEXT NOT NULL)");
 });
 
@@ -113,4 +144,13 @@ test("TCP rejects a wrong password and Unix sockets require authentication", asy
   ], { encoding: "utf8", timeout: 10_000 });
   expect(socket.status).not.toBe(0);
   expect(socket.stderr).toContain("no password supplied");
+});
+
+test("re-running approved migrations preserves existing data and migration history", async () => {
+  await queryAs("physics_app", "INSERT INTO security_probe (value) VALUES ('keep-existing-data')");
+  const before = await queryAs("physics_app", "SELECT * FROM security_probe ORDER BY id");
+  const history = await queryAs("postgres", 'SELECT * FROM "_prisma_migrations" ORDER BY id');
+  runApprovedMigrations();
+  expect(await queryAs("physics_app", "SELECT * FROM security_probe ORDER BY id")).toEqual(before);
+  expect(await queryAs("postgres", 'SELECT * FROM "_prisma_migrations" ORDER BY id')).toEqual(history);
 });

@@ -9,6 +9,7 @@
     "dev": "next dev --turbo",
     "dev:warmup": "bash scripts/warmup.sh",
     "build": "prisma generate && next build",
+    "db:migrate:deploy": "node scripts/deploy-migrations.mjs",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint && tsc --noEmit",

@@ -4,6 +4,21 @@
 
 Whenever you make changes to the codebase, update this file to reflect the changes.
 
+### Production Migration Isolation
+
+Vercel's build command is `npm run build`, which generates Prisma Client and builds Next.js without applying migrations. The independent operator command is `npm run db:migrate:deploy -- --approve-target <host:port/database>`. Supply `MIGRATION_DATABASE_URL` through a restricted migration-job/operator environment, not Vercel application variables or a committed file. The command requires a PostgreSQL URL with credentials, an exact host/port/database acknowledgement, a direct public-schema connection, and no Vercel environment markers. It uses `prisma/deploy.config.ts`, which has no dotenv import or runtime/legacy URL fallback. Connection passwords are redacted from child output and failed migrations remain failures.
+
+The acknowledgement flag is an operator mistake-prevention check, not authentication or enforced reviewer approval. Existing local `make db-deploy` / `make dev` behavior and `prisma.config.ts` remain unchanged. Do not treat this code change as the completed production cutover: Preview database isolation, restricted runtime credentials, removal of all owner credentials from runtime environments, and an enforced release approval process still require separate configuration. Automatic Preview branching was disabled when inspected; enabling it against production copies real data by default, so use schema plus synthetic test data instead.
+
+For every schema-changing release, review the exact migration SQL/commit, test against a disposable database, verify a current backup, and obtain approval before running the separate migration command. Deploy/promote the matching application only after migrations succeed; do not race automatic deployment against a separate migration job. A failure blocks rollout and needs inspection, never automatic reset, resolve, or schema rollback. Application rollback must remain compatible with the migrated schema; restoring a database backup requires separate approval.
+
+Verification: `RUN_POSTGRES_SECURITY_TESTS=true npx playwright test e2e/migration-deployment.spec.ts e2e/postgres-config.spec.ts e2e/postgres-security.spec.ts --reporter=line`. These tests create their own random-port, tmpfs Docker database, apply the repository migrations with runtime/legacy URLs pointing at an unused endpoint, verify restricted runtime access, and verify replay preserves probe data and migration history. They stop only their own container. No native or cloud database is needed.
+
+Verified with Node.js 24.22.1: the focused tests plus the documented database-free regression subset passed 93 tests; typecheck, targeted ESLint, full lint and production build passed. Full lint retains existing warnings. The build ran with `VERCEL=1`, `VERCEL_ENV=preview` and dummy database URLs targeting an unused loopback port. No migration SQL, application schema or dependency versions changed.
+
+On 2026-10-23 (Asia/Taipei), the user-approved Neon `phystutor-db/main` branch protection was enabled and verified after reload. The existing backup configuration remains a seven-day history window, daily 04:00 Asia/Taipei snapshots retained for 14 days, and a manual no-expiry snapshot. Branch protection does not prevent SQL-level data deletion; permissions and backups remain necessary.
+
+Security follow-up: `npm audit --omit=dev` on this lockfile reported 34 affected dependency entries, including four critical entries, involving Next.js/Auth.js among others. These are not necessarily distinct or reachable vulnerabilities. Dependency upgrades are separate from this migration-isolation change; package versions have not been changed here.
 
 ## Coding Standards & Rules
 
@@ -324,7 +339,7 @@ The Next.js middleware matcher in `src/middleware.ts` must include `/api/:path*`
 
 #### 3.1 Use Prisma Migrations, Never `db push`
 
-The build/deploy script must use `prisma migrate deploy` for applying schema changes. **Never** use `prisma db push`, especially with `--accept-data-loss`, in any script, CI pipeline, or production build. The `--accept-data-loss` flag can silently drop columns or tables.
+Schema changes must use `prisma migrate deploy` from a separately approved migration step, never from an application build. **Never** use `prisma db push`, especially with `--accept-data-loss`, in any script, CI pipeline, or production build. The `--accept-data-loss` flag can silently drop columns or tables.
 
 **❌ Bad — in `package.json` build script:**
 ```json
@@ -333,7 +348,8 @@ The build/deploy script must use `prisma migrate deploy` for applying schema cha
 
 **✅ Good:**
 ```json
-"build": "prisma generate && prisma migrate deploy && next build"
+"build": "prisma generate && next build",
+"db:migrate:deploy": "node scripts/deploy-migrations.mjs"
 ```
 
 To create new migrations locally:
@@ -1000,8 +1016,10 @@ The project uses `next-auth@5.0.0-beta.30` — a beta dependency with no stabili
 
 The production build command in `package.json` must be:
 ```json
-"build": "prisma generate && prisma migrate deploy && next build"
+"build": "prisma generate && next build"
 ```
+
+Vercel must use the same `npm run build` command. Run reviewed migrations separately with the explicit-target command described in Production Migration Isolation, using credentials unavailable to the application runtime. Coordinate migration success before promoting schema-dependent application changes.
 
 **Never use** `prisma db push` or `--accept-data-loss` in any build script, CI pipeline, or deployment process. These can silently drop tables/columns and cause irreversible data loss in production.
 
@@ -1009,7 +1027,7 @@ The production build command in `package.json` must be:
 
 Use Node.js 24 LTS, at least 24.22.1 (the October 2026 security release). `.nvmrc` pins the local version; `package.json` limits supported runtimes to `>=24.22.1 <25`, matching Vercel's 24.x major version while excluding older, unpatched releases. Vercel manages its own patch versions.
 
-With nvm, run `nvm install && nvm use` before installing dependencies. Keep `@types/node` on major 24. Verify runtime changes with a fresh `npm ci`, `npm run typecheck`, `npm run lint`, and `npm run build`; the local build generates Prisma Client but does not apply migrations. Do not run `make dev` or the Vercel build command for a compatibility-only check: both apply database migrations.
+With nvm, run `nvm install && nvm use` before installing dependencies. Keep `@types/node` on major 24. Verify runtime changes with a fresh `npm ci`, `npm run typecheck`, `npm run lint`, and `npm run build`; both local and Vercel builds generate Prisma Client without applying migrations. Do not run `make dev` for a compatibility-only check: it applies database migrations.
 
 The database-free regression subset is `npx playwright test e2e/auto-grade.spec.ts e2e/attachments.spec.ts e2e/mc-options.spec.ts e2e/latex-import.spec.ts e2e/feedback-file.spec.ts e2e/notify-selection.spec.ts e2e/regrade.spec.ts --reporter=line`. For isolated builds and these tests, use a worktree without `.env` and set `DATABASE_URL` and `DIRECT_URL` to a dummy localhost URL rather than production credentials.
 
