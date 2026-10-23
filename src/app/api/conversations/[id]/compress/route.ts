@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { compressAndContinueConversation } from "@/lib/services/conversation-compress-service";
 import { logger } from "@/lib/logger";
@@ -8,8 +9,9 @@ const ParamsSchema = z.object({ id: z.string().min(1).max(100) });
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;

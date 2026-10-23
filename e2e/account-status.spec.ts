@@ -8,10 +8,18 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 const EMAIL = `e2e-account-status-${Date.now()}@e2e.local`;
+const MODERATOR_EMAIL = `moderator-${EMAIL}`;
+const TARGET_EMAIL = `target-${EMAIL}`;
 
 test.describe("API auth re-reads account state", () => {
   test.afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: EMAIL } });
+    const users = await prisma.user.findMany({
+      where: { email: { in: [EMAIL, MODERATOR_EMAIL, TARGET_EMAIL] } },
+      select: { id: true },
+      take: 3,
+    });
+    await prisma.auditLog.deleteMany({ where: { userId: { in: users.map((user) => user.id) } } });
+    await prisma.user.deleteMany({ where: { id: { in: users.map((user) => user.id) } } });
     await prisma.$disconnect();
   });
 
@@ -54,5 +62,29 @@ test.describe("API auth re-reads account state", () => {
     });
     expect(uploadToken.status()).toBe(401);
     expect((await uploadToken.json()).error).toContain("no longer active");
+  });
+
+  test("moderation validates actions and requires a strictly higher role", async ({ page }) => {
+    const moderator = await prisma.user.create({
+      data: { email: MODERATOR_EMAIL, role: "TA", name: "E2E Moderator" },
+    });
+    const target = await prisma.user.create({
+      data: { email: TARGET_EMAIL, role: "TA", name: "E2E Moderation Target" },
+    });
+    await loginAsTestUser(page.context(), moderator.email);
+    const url = `/api/admin/users/${target.id}/moderate`;
+
+    expect((await page.request.post(url, { data: { action: ["ban"] } })).status()).toBe(400);
+    expect((await page.request.post(url, { data: { action: "ban" } })).status()).toBe(403);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).isBanned).toBe(false);
+
+    await prisma.user.update({ where: { id: target.id }, data: { role: "PROFESSOR" } });
+    expect((await page.request.post(url, { data: { action: "restrict" } })).status()).toBe(403);
+
+    await prisma.user.update({ where: { id: target.id }, data: { role: "STUDENT" } });
+    expect((await page.request.post(url, { data: { action: "ban" } })).status()).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).isBanned).toBe(true);
+    expect((await page.request.post(url, { data: { action: "unban" } })).status()).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).isBanned).toBe(false);
   });
 });

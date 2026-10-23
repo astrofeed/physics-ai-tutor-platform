@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;

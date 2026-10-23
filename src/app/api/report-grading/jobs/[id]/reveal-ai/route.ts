@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
 import { revealReportAi } from "@/lib/services/human-grading-service";
@@ -6,8 +7,9 @@ import { revealReportAi } from "@/lib/services/human-grading-service";
 /** Marks the moment staff opened the AI result (idempotent). */
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 

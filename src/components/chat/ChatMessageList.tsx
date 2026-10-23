@@ -30,8 +30,8 @@ const SUGGESTED_TOPICS = [
 interface ChatMessageListProps {
   messages: Message[];
   copiedMessageId: string | null;
-  scrollContainerRef: React.RefObject<HTMLDivElement>;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onSuggestedTopic: (topic: string) => void;
   onCopyMessage: (messageId: string, content: string) => void;
   showJumpToLatest: boolean;

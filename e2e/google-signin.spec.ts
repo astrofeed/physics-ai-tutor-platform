@@ -1,4 +1,14 @@
 import { test, expect } from "@playwright/test";
+import { getToken } from "next-auth/jwt";
+
+test("malformed Bearer headers are rejected without throwing", async () => {
+  for (const token of ["%", "%FF", "%ZZ"]) {
+    const req = new Request("http://localhost/api/assignments", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await expect(getToken({ req, secret: "isolated-auth-regression" })).resolves.toBeNull();
+  }
+});
 
 /**
  * Google sign-in is optional: without GOOGLE_CLIENT_ID/SECRET the button must

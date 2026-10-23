@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
+import { ROLE_HIERARCHY } from "@/lib/constants";
+import type { RouteContext } from "@/types/route";
+
+const ModerateUserSchema = z.object({
+  action: z.enum(["ban", "unban", "restrict", "unrestrict"]),
+});
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: RouteContext
 ) {
   try {
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
@@ -12,14 +19,13 @@ export async function POST(
     const userRole = auth.user.role;
     const adminId = auth.user.id;
 
-    const { action } = await req.json();
-    const targetUserId = (await params).id;
-
-    if (!["ban", "unban", "restrict", "unrestrict"].includes(action)) {
+    const parsed = ModerateUserSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
+    const { action } = parsed.data;
+    const targetUserId = (await params).id;
 
-    // Role hierarchy: prevent moderating higher-ranked users
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
       select: { role: true },
@@ -28,11 +34,11 @@ export async function POST(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     const targetRole = targetUser.role;
-    if (userRole === "TA" && (targetRole === "ADMIN" || targetRole === "PROFESSOR")) {
-      return NextResponse.json({ error: "Forbidden: TAs cannot moderate professors or admins" }, { status: 403 });
-    }
-    if (userRole === "PROFESSOR" && targetRole === "ADMIN") {
-      return NextResponse.json({ error: "Forbidden: Professors cannot moderate admins" }, { status: 403 });
+    if (ROLE_HIERARCHY[userRole] <= ROLE_HIERARCHY[targetRole]) {
+      return NextResponse.json(
+        { error: "Forbidden: you cannot moderate users with an equal or higher role" },
+        { status: 403 }
+      );
     }
 
     const updateData: Record<string, unknown> = {};

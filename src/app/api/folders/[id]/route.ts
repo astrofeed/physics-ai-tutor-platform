@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { z } from "zod";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { deleteFolder, renameFolder } from "@/lib/services/conversation-folder-service";
@@ -7,7 +8,8 @@ const RenameFolderSchema = z.object({
   name: z.string().trim().min(1).max(200),
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params: routeParams }: RouteContext) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
@@ -28,7 +30,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params: routeParams }: RouteContext) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;

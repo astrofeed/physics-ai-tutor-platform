@@ -117,9 +117,7 @@ test.describe("TA: LaTeX in grading & image attachments", () => {
     await page.goto("/grading");
     await page.waitForLoadState("networkidle");
 
-    // Select the E2E test assignment from the dropdown
-    // The select trigger shows current value or placeholder
-    const selectTrigger = page.locator('[role="combobox"]').first();
+    const selectTrigger = page.getByRole("button", { name: "Select an assignment to grade" });
     await expect(selectTrigger).toBeVisible({ timeout: 5000 });
     await selectTrigger.click();
     const option = page.getByText("E2E LaTeX & Images Test").first();

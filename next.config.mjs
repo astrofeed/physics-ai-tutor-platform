@@ -1,17 +1,23 @@
+import { fileURLToPath } from "node:url";
+
+const projectRoot = fileURLToPath(new URL(".", import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: projectRoot,
+  turbopack: { root: projectRoot },
+  serverExternalPackages: [
+    "bcryptjs",
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+    "@anthropic-ai/sdk",
+    "jszip",
+    "nodemailer",
+    "resend",
+    "openai",
+  ],
   experimental: {
-    serverComponentsExternalPackages: [
-      "bcryptjs",
-      "@prisma/client",
-      "@prisma/adapter-pg",
-      "pg",
-      "@anthropic-ai/sdk",
-      "jszip",
-      "nodemailer",
-      "resend",
-      "openai",
-    ],
     optimizePackageImports: [
       "lucide-react",
       "@radix-ui/react-icons",

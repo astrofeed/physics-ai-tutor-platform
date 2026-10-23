@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { UpdatePresentationJobSchema } from "@/lib/validators/presentation-job";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
@@ -11,8 +12,9 @@ import { refreshRosterIfStale } from "@/lib/services/presentation-roster-service
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
@@ -26,8 +28,9 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
@@ -44,8 +47,9 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 

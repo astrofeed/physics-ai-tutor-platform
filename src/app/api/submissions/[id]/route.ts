@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import { humanGradingStarted } from "@/lib/services/submission-service";
@@ -6,8 +7,9 @@ import { humanGradingStarted } from "@/lib/services/submission-service";
 // Convert a submission back to draft for editing
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
@@ -58,8 +60,9 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiAuth();
     if (isErrorResponse(auth)) return auth;
