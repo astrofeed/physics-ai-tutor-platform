@@ -27,7 +27,7 @@ make start              # Start production server
 
 # Testing (see AGENTS.md for details)
 npx tsx e2e/seed-test-data.ts          # Seed test users and data
-E2E_TEST_MODE=true npm run dev         # Start dev server in test mode
+E2E_TEST_MODE=true E2E_TEST_SECRET="$(openssl rand -hex 32)" npm run dev
 npx playwright test                     # Run E2E tests
 npx playwright test --headed            # Run with visible browser
 npx playwright show-report              # View test results
@@ -39,7 +39,7 @@ npm run lint            # Run Next.js linter
 ## Architecture Overview
 
 ### Tech Stack
-- **Framework**: Next.js 14 (App Router, TypeScript)
+- **Framework**: Next.js 15 (App Router, TypeScript) with React 19
 - **Database**: PostgreSQL + Prisma ORM
 - **Auth**: NextAuth.js v5 with custom `auth()` helper
 - **AI**: Dual provider system (OpenAI + Anthropic) with admin-switchable backend
@@ -156,7 +156,8 @@ prisma/
 
 ### E2E Testing
 - Uses Playwright for end-to-end tests
-- **Special E2E mode**: Set `E2E_TEST_MODE=true` to bypass NextAuth (uses cookie-based fake sessions)
+- **Special E2E mode**: Set both `E2E_TEST_MODE=true` and `E2E_TEST_SECRET` on an isolated development server (uses cookie-based fake sessions).
+- Set `E2E_BASE_URL` for Playwright when that server uses a port other than 3000.
 - ⚠️ **Never set `E2E_TEST_MODE=true` in production**
 - Test users seeded via `e2e/seed-test-data.ts`: `test-student@e2e.local`, `test-ta@e2e.local`
 - Cookie-based auth helpers in `e2e/helpers.ts`: `loginAsTestUser()`, `loginAndGoto()`

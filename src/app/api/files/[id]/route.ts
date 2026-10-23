@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { requireApiAuth, isErrorResponse } from "@/lib/api-auth";
 import {
   canReadUploadedFile,
@@ -8,8 +9,9 @@ import {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiAuth();
   if (isErrorResponse(auth)) return auth;
 

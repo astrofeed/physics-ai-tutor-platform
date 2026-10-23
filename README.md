@@ -13,7 +13,7 @@ AI-powered physics tutoring, assignment, and grading platform for NTHU General P
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router, TypeScript)
+- **Framework**: Next.js 15 (App Router, TypeScript) with React 19
 - **Styling**: TailwindCSS + shadcn/ui components
 - **Database**: PostgreSQL + Prisma ORM
 - **Auth**: NextAuth.js v5 (credentials + Google OAuth for @gapp.nthu.edu.tw)
@@ -24,6 +24,21 @@ AI-powered physics tutoring, assignment, and grading platform for NTHU General P
 - Node.js 24 LTS, at least 24.22.1
 - Docker Desktop (for PostgreSQL)
 - OpenAI API key and/or Anthropic API key
+
+## Browser Tests
+
+Use a disposable local database with synthetic test users for Playwright. Point
+`DATABASE_URL` at that database before seeding `e2e/seed-test-data.ts` or starting
+the test server. Both `E2E_TEST_MODE=true` and `E2E_TEST_SECRET` are required;
+never enable them on a production deployment.
+
+```bash
+E2E_TEST_MODE=true E2E_TEST_SECRET="$(openssl rand -hex 32)" npm run dev -- --port 3015 --hostname 127.0.0.1
+```
+
+In another terminal, use the same test database and
+`E2E_BASE_URL=http://localhost:3015 npx playwright test`. The default base URL
+remains `http://localhost:3000`.
 
 ## Quick Start
 

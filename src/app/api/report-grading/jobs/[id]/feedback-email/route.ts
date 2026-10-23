@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
 import { FeedbackEmailInputSchema } from "@/lib/feedback-email";
@@ -6,7 +7,8 @@ import { draftReportFeedback } from "@/lib/services/feedback-draft-service";
 import { sendReportFeedback } from "@/lib/services/feedback-email-service";
 
 /** Editable draft of the AI feedback, written as a letter and signed with the caller's name. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, { params: routeParams }: RouteContext) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
@@ -19,8 +21,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 

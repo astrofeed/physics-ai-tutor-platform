@@ -4,6 +4,20 @@
 
 Whenever you make changes to the codebase, update this file to reflect the changes.
 
+### Framework Security Upgrade
+
+The framework is Next.js 15.5.28 with React/ReactDOM 19.1.10. NextAuth is pinned to 5.0.0-beta.32 and the Prisma adapter resolves Auth Core 0.41.3. Next's bundled PostCSS dependency is overridden to the patched direct PostCSS dependency. Keep `eslint-config-next` aligned with Next and React types on the React 19.1 line. Build tracing and Turbopack use the config directory as their root, including in worktrees.
+
+Dynamic API handlers use the Promise-based `RouteContext` from `src/types/route.ts`; await params before accessing their fields. Server pages also await params/searchParams, while client pages use `useParams`. Assignment detail, updates, submissions and LaTeX export delegate to focused services, preserving the existing response contracts and unpublished-grade protections.
+
+`SessionQueryProvider` resets its cache when the effective user or role changes. Both the assignment editor and presentation grading use it. `useAssignmentEdit` keeps a stable form snapshot while editing (`staleTime: Infinity`) and discards it on unmount (`gcTime: 0`), so focus/refetches do not erase unsaved input and a later visit reads fresh data. Load failures show an error and retry action instead of an editable blank form.
+
+User moderation validates actions with Zod and requires the actor to strictly outrank the target. Equal-role moderation is forbidden. Regression coverage includes malformed Bearer tokens, current account state and moderation hierarchy, assignment deletion/restoration and autosaves, chat scrolling, LaTeX/image feedback and persisted grading comments. Browser tests must wait for confirmed saves before reloading.
+
+The upgrade was exercised with 104 selected regression tests and production-mode credentials login against a disposable PostgreSQL database with synthetic users and a restricted application role. Existing JWT formats remain decodable; no production secret rotation or database migration is part of this dependency update.
+
+The production dependency audit still reports 27 affected package entries (0 critical, 14 high, 9 moderate, 4 low). These counts are not a reachability assessment. DOMPurify, Nodemailer and Prisma/transitive dependency updates remain follow-up work; Nodemailer 10 conflicts with Auth.js's declared optional peer range and needs separate compatibility validation. Existing complete question/appeal collections also require coordinated API/client pagination; do not silently cap them and omit student work.
+
 ### Production Migration Isolation
 
 Vercel's build command is `npm run build`, which generates Prisma Client and builds Next.js without applying migrations. The independent operator command is `npm run db:migrate:deploy -- --approve-target <host:port/database>`. Supply `MIGRATION_DATABASE_URL` through a restricted migration-job/operator environment, not Vercel application variables or a committed file. The command requires a PostgreSQL URL with credentials, an exact host/port/database acknowledgement, a direct public-schema connection, and no Vercel environment markers. It uses `prisma/deploy.config.ts`, which has no dotenv import or runtime/legacy URL fallback. Connection passwords are redacted from child output and failed migrations remain failures.
@@ -18,7 +32,7 @@ Verified with Node.js 24.22.1: the focused tests plus the documented database-fr
 
 On 2026-10-23 (Asia/Taipei), the user-approved Neon `phystutor-db/main` branch protection was enabled and verified after reload. The existing backup configuration remains a seven-day history window, daily 04:00 Asia/Taipei snapshots retained for 14 days, and a manual no-expiry snapshot. Branch protection does not prevent SQL-level data deletion; permissions and backups remain necessary.
 
-Security follow-up: `npm audit --omit=dev` on this lockfile reported 34 affected dependency entries, including four critical entries, involving Next.js/Auth.js among others. These are not necessarily distinct or reachable vulnerabilities. Dependency upgrades are separate from this migration-isolation change; package versions have not been changed here.
+Before the framework security upgrade, `npm audit --omit=dev` reported 34 affected dependency entries, including four critical entries. See Framework Security Upgrade for the updated versions and audit counts.
 
 ## Coding Standards & Rules
 
@@ -1234,11 +1248,11 @@ Before committing AI-generated code, verify:
 
 ## Project Overview
 
-Next.js 14 app with Prisma (PostgreSQL), NextAuth credentials + Google OAuth, OpenAI/Anthropic AI grading, and LaTeX rendering via `react-markdown` + `remark-math` + `rehype-katex`.
+Next.js 15 app with React 19, Prisma (PostgreSQL), NextAuth credentials + Google OAuth, OpenAI/Anthropic AI grading, and LaTeX rendering via `react-markdown` + `remark-math` + `rehype-katex`.
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 15 (App Router), React 19
 - **Database**: PostgreSQL via Prisma ORM (`@prisma/adapter-pg`)
 - **Auth**: NextAuth v5 (credentials + Google)
 - **AI**: chat runs on DeepSeek (`DEEPSEEK_CHAT_MODEL = "deepseek-v4-flash"`) when `DEEPSEEK_API_KEY` is set, otherwise on OpenAI (`OPENAI_CHAT_MODEL = "gpt-5.6-luna"`); see `getActiveChatModel()` in `src/lib/ai.ts`. Anthropic code paths remain for problem generation/grading fallback but are unused without `ANTHROPIC_API_KEY`
@@ -1308,7 +1322,7 @@ Shared activity contracts live in `src/lib/activity.ts` (categories, filter grou
 
 The app supports an `E2E_TEST_MODE` environment variable that bypasses NextAuth for Playwright tests:
 
-- **Middleware** (`src/middleware.ts`): Skips JWT auth redirect when `E2E_TEST_MODE=true`
+- **Middleware** (`src/middleware.ts`): Skips JWT auth only when `E2E_TEST_MODE=true`, `E2E_TEST_SECRET` is set and `NODE_ENV` is not production.
 - **Session** (`src/lib/impersonate.ts`): `getEffectiveSession()` reads a `e2e-test-user-email` cookie and builds a fake session from the DB instead of using NextAuth
 
 **⚠️ Never set `E2E_TEST_MODE=true` in production.**
@@ -1320,7 +1334,7 @@ The app supports an `E2E_TEST_MODE` environment variable that bypasses NextAuth 
 npx tsx e2e/seed-test-data.ts
 
 # 2. Start the dev server with E2E test mode enabled
-E2E_TEST_MODE=true npm run dev
+E2E_TEST_MODE=true E2E_TEST_SECRET="$(openssl rand -hex 32)" npm run dev
 
 # 3. Run Playwright tests (in a separate terminal)
 npx playwright test

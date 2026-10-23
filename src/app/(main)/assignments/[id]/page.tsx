@@ -21,6 +21,7 @@ import {
 import { isStaff as isStaffRole } from "@/lib/constants";
 import { SaveStatusIndicator } from "@/components/ui/save-status";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
 import { QuestionRenderer } from "@/components/assignments/QuestionRenderer";
 import { SubmissionView } from "@/components/assignments/SubmissionView";
@@ -32,12 +33,9 @@ import { StaffAppealsSection } from "./components/StaffAppealsSection";
 import { useAssignmentDetail } from "@/hooks/useAssignmentDetail";
 import { SideChatLayout } from "@/components/chat/SideChatLayout";
 
-export default function AssignmentDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const s = useAssignmentDetail(params.id);
+export default function AssignmentDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const s = useAssignmentDetail(id);
 
   if (s.loading) {
     return (

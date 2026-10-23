@@ -107,6 +107,7 @@ for (const kind of ["presentation", "report"] as const) {
     await page.locator('[id="human-score-Physics"]').fill(itemScore);
     await input.fill(`${comments}\nExplain the limiting case.`);
     await save.click();
+    await expect(edit).toBeVisible();
     await page.reload();
     await expect(page.getByRole("region", { name: "Your comments" })).toContainText("Explain the limiting case.");
     await edit.click();
@@ -118,6 +119,7 @@ for (const kind of ["presentation", "report"] as const) {
     }
     await input.fill("");
     await save.click();
+    await expect(edit).toBeVisible();
     await page.reload();
     await expect(edit).toBeVisible();
     await expect(page.getByRole("region", { name: "Your comments" })).toHaveCount(0);

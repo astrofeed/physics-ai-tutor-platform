@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { RegradeError, regradeAssignment } from "@/lib/services/regrade-service";
 import { logger } from "@/lib/logger";
 
 export async function POST(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params: routeParams }: RouteContext
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;

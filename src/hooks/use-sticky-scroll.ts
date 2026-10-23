@@ -9,7 +9,7 @@ const PINNED_THRESHOLD_PX = 80;
  * and reports when they have scrolled away so a "jump to latest" affordance can be shown.
  */
 export function useStickyScroll(
-  containerRef: React.RefObject<HTMLElement>,
+  containerRef: React.RefObject<HTMLElement | null>,
   contentKey: unknown
 ) {
   const [isPinned, setIsPinned] = useState(true);

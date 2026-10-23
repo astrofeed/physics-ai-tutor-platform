@@ -1,17 +1,14 @@
 "use client";
 
 import { StaffOnly } from "@/components/auth/StaffOnly";
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AssignmentForm } from "@/components/assignments/AssignmentForm";
-import type {
-  AssignmentFormData,
-  AssignmentQuestion,
-  QuestionFormData,
-} from "@/types/assignment";
+import type { AssignmentFormData } from "@/types/assignment";
+import { useAssignmentEdit } from "@/hooks/useAssignmentEdit";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,59 +27,13 @@ interface DestructiveSave {
   confirm: () => Promise<void>;
 }
 
-function EditAssignmentPageContent({
-  params,
-}: {
-  params: { id: string };
-}) {
+function EditAssignmentPageContent() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [initialData, setInitialData] = useState<Partial<AssignmentFormData> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: initialData, isPending: loading, error, refetch } = useAssignmentEdit(params.id);
   const [saving, setSaving] = useState(false);
   const [exportingLatex, setExportingLatex] = useState(false);
   const [pendingDestructive, setPendingDestructive] = useState<DestructiveSave | null>(null);
-
-  useEffect(() => {
-    fetch(`/api/assignments/${params.id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const a = data.assignment;
-        if (!a) {
-          toast.error(data?.error || "Failed to load assignment");
-          return;
-        }
-        setInitialData({
-          title: a.title,
-          description: a.description || "",
-          dueDate: a.dueDate ? new Date(a.dueDate).toISOString().slice(0, 16) : "",
-          type: a.type,
-          totalPoints: a.totalPoints,
-          lockAfterSubmit: a.lockAfterSubmit || false,
-          pdfUrl: a.pdfUrl || null,
-          questions: ((a.questions || []) as AssignmentQuestion[]).map(
-            (q): QuestionFormData => ({
-              id: q.id,
-              questionText: q.questionText,
-              questionType: q.questionType,
-              options: q.options || ["", "", "", ""],
-              correctAnswer: q.correctAnswer || "",
-              alsoAcceptedAnswers: q.alsoAcceptedAnswers ?? [],
-              points: q.points,
-              diagram: q.diagram || null,
-              imageUrl: q.imageUrl || null,
-              tolerance: q.tolerance ?? null,
-              toleranceUnit: q.toleranceUnit ?? "ABSOLUTE",
-            })
-          ),
-        });
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("[assignment-edit] Failed to load assignment:", err);
-        toast.error("Failed to load assignment");
-        setLoading(false);
-      });
-  }, [params.id]);
 
   const handleSave = async (
     formData: AssignmentFormData,
@@ -150,6 +101,15 @@ function EditAssignmentPageContent({
 
   if (loading) {
     return <LoadingSpinner />;
+  }
+
+  if (error) {
+    return (
+      <div role="alert" className="space-y-3">
+        <p>{error.message}</p>
+        <Button onClick={() => void refetch()}>Retry</Button>
+      </div>
+    );
   }
 
   return (
@@ -252,10 +212,10 @@ function EditAssignmentPageContent({
   );
 }
 
-export default function EditAssignmentPage(props: React.ComponentProps<typeof EditAssignmentPageContent>) {
+export default function EditAssignmentPage() {
   return (
     <StaffOnly>
-      <EditAssignmentPageContent {...props} />
+      <EditAssignmentPageContent />
     </StaffOnly>
   );
 }

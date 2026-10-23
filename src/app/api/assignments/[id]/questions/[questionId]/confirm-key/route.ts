@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { AssignmentError } from "@/lib/services/assignment-service";
@@ -9,8 +10,9 @@ const ConfirmKeySchema = z.object({ confirmed: z.boolean() });
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string; questionId: string } }
+  { params: routeParams }: RouteContext<{ id: string; questionId: string }>
 ) {
+  const params = await routeParams;
   try {
     const auth = await requireApiRole(["TA", "PROFESSOR", "ADMIN"]);
     if (isErrorResponse(auth)) return auth;

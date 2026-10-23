@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { RouteContext } from "@/types/route";
 import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
@@ -8,8 +9,9 @@ const StudentIdSchema = z.string().regex(/^\d{5,15}$/);
 
 export async function GET(
   _request: Request,
-  { params }: { params: { studentId: string } }
+  { params: routeParams }: RouteContext<{ studentId: string }>
 ) {
+  const params = await routeParams;
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
