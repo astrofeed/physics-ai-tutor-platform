@@ -142,4 +142,52 @@ test.describe("Report grading: problems stay on screen", () => {
     await page.getByRole("button", { name: "Dismiss: Not everything could be imported" }).click();
     await expect(problem).toBeHidden();
   });
+
+  test("a batch that fails part-way keeps only the reports that were not submitted", async ({ page }) => {
+    const dropZone = await openReportForm(page);
+    const smallPdf = (name: string) => ({ name, mimeType: PDF_MIME_TYPE, buffer: Buffer.from("%PDF-1.4") });
+
+    // Stand in for Vercel Blob and the jobs API: the first report is accepted, the second refused.
+    await page.route("**/api/report-grading/upload", (route) =>
+      route.fulfill({ json: { type: "blob.generate-client-token", clientToken: "vercel_blob_client_e2estore_token" } })
+    );
+    await page.route(/vercel\.com\/api\/blob/, (route) =>
+      route.fulfill({
+        headers: { "access-control-allow-origin": "*" },
+        json: {
+          url: "https://e2estore.public.blob.vercel-storage.com/report.pdf",
+          downloadUrl: "https://e2estore.public.blob.vercel-storage.com/report.pdf?download=1",
+          pathname: "report.pdf",
+          contentType: PDF_MIME_TYPE,
+          contentDisposition: 'inline; filename="report.pdf"',
+        },
+      })
+    );
+    const createdTitles: string[] = [];
+    await page.route("**/api/report-grading/jobs", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      createdTitles.push(route.request().postDataJSON().reportFilename);
+      return createdTitles.length === 1
+        ? route.fulfill({ status: 201, json: { data: { id: "e2e-notice-job" } } })
+        : route.fulfill({ status: 429, json: { error: "Too many grading jobs this hour." } });
+    });
+    await page.route("**/api/report-grading/jobs/*/process", (route) => route.fulfill({ json: { data: null } }));
+
+    await dropZone.setInputFiles([
+      smallPdf("900000001_first.pdf"),
+      smallPdf("900000002_second.pdf"),
+      smallPdf("900000003_third.pdf"),
+    ]);
+    await page.getByRole("button", { name: "Start grading 3 reports" }).click();
+
+    const problem = page.getByRole("alert").filter({ hasText: "Could not start grading" });
+    await expect(problem).toContainText(
+      "Too many grading jobs this hour. — 1 of 3 reports were already submitted and taken off the list."
+    );
+    await expect(page.getByRole("button", { name: "Remove 900000001_first.pdf" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Remove 900000002_second.pdf" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove 900000003_third.pdf" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start grading 2 reports" })).toBeVisible();
+    expect(createdTitles).toEqual(["900000001_first.pdf", "900000002_second.pdf"]);
+  });
 });

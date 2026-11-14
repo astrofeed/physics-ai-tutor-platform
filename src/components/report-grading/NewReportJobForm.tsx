@@ -74,6 +74,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
     setSubmitProblem(null);
     const result = await submit(input);
     if (!result.ok) {
+      batch.removeSubmitted(result.submitted);
       setSubmitProblem(result.problem);
       return;
     }

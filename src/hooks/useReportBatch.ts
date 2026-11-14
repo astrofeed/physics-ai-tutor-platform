@@ -178,6 +178,10 @@ export function useReportBatch() {
     setFiles((current) => current.filter((_, i) => i !== index));
   }, []);
 
+  const removeSubmitted = useCallback((submitted: File[]) => {
+    setFiles((current) => current.filter((row) => !submitted.includes(row.file)));
+  }, []);
+
   const clear = useCallback(() => {
     setFiles([]);
     setProblems([]);
@@ -186,6 +190,7 @@ export function useReportBatch() {
   const dismissProblems = useCallback(() => setProblems([]), []);
 
   return {
-    files, reading, problems, addFiles, updateFile, refillFromRoster, removeFile, clear, dismissProblems,
+    files, reading, problems, addFiles, updateFile, refillFromRoster, removeFile, removeSubmitted, clear,
+    dismissProblems,
   };
 }

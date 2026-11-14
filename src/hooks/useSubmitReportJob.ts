@@ -11,7 +11,6 @@ import {
   filenameStem,
   type ReportReasoningEffort,
 } from "@/lib/report-grading";
-import type { JobSubmitResult } from "@/types/job-submit";
 
 const UPLOAD_ENDPOINT = "/api/report-grading/upload";
 
@@ -23,6 +22,18 @@ export interface NewReportJobInput {
   files: ReportBatchFile[];
   reportText: string | null;
   reasoningEffort: ReportReasoningEffort;
+}
+
+/**
+ * `submitted` holds the reports whose jobs were created before the failure, so
+ * the form can take them off the batch and a retry does not grade them twice.
+ */
+export type ReportSubmitResult =
+  | { ok: true }
+  | { ok: false; problem: string; submitted: File[] };
+
+function failure(problem: string, submitted: File[] = []): ReportSubmitResult {
+  return { ok: false, problem, submitted };
 }
 
 export interface ReportSubmitProgress {
@@ -65,22 +76,20 @@ export function useSubmitReportJob(onCreated: () => void) {
   const [progress, setProgress] = useState<ReportSubmitProgress | null>(null);
 
   const submit = useCallback(
-    async (input: NewReportJobInput): Promise<JobSubmitResult> => {
+    async (input: NewReportJobInput): Promise<ReportSubmitResult> => {
       if (input.files.length === 0 && !input.reportText) {
-        return { ok: false, problem: "Choose report PDFs or paste the report text first." };
+        return failure("Choose report PDFs or paste the report text first.");
       }
       const oversized = input.files.find((f) => f.file.size > REPORT_FILE_MAX_BYTES);
       if (oversized) {
-        return {
-          ok: false,
-          problem: `"${oversized.file.name}" is ${formatBytes(oversized.file.size)}; the maximum is ${formatBytes(REPORT_FILE_MAX_BYTES)}.`,
-        };
+        return failure(
+          `"${oversized.file.name}" is ${formatBytes(oversized.file.size)}; the maximum is ${formatBytes(REPORT_FILE_MAX_BYTES)}.`
+        );
       }
       if (input.reportText && input.reportText.length > REPORT_TEXT_MAX_CHARS) {
-        return {
-          ok: false,
-          problem: `The report text is ${input.reportText.length.toLocaleString()} characters; the maximum is ${REPORT_TEXT_MAX_CHARS.toLocaleString()}.`,
-        };
+        return failure(
+          `The report text is ${input.reportText.length.toLocaleString()} characters; the maximum is ${REPORT_TEXT_MAX_CHARS.toLocaleString()}.`
+        );
       }
 
       if (input.reportText) {
@@ -96,17 +105,14 @@ export function useSubmitReportJob(onCreated: () => void) {
           onCreated();
           return { ok: true };
         } catch (error) {
-          return {
-            ok: false,
-            problem: (error as Error).message || "Something went wrong while submitting the job",
-          };
+          return failure((error as Error).message || "Something went wrong while submitting the job");
         } finally {
           setProgress(null);
         }
       }
 
       const total = input.files.length;
-      let started = 0;
+      const submitted: File[] = [];
       try {
         for (let index = 0; index < input.files.length; index += 1) {
           const row = input.files[index];
@@ -131,7 +137,7 @@ export function useSubmitReportJob(onCreated: () => void) {
             reportFilename: file.name,
             reasoningEffort: input.reasoningEffort,
           });
-          started += 1;
+          submitted.push(file);
         }
         toast.success(
           total === 1
@@ -141,13 +147,15 @@ export function useSubmitReportJob(onCreated: () => void) {
         onCreated();
         return { ok: true };
       } catch (error) {
-        if (started > 0) onCreated();
-        return {
-          ok: false,
-          problem: `${(error as Error).message || "Something went wrong while submitting"}${
-            started > 0 ? ` — ${started} of ${total} reports were already submitted` : ""
+        if (submitted.length > 0) onCreated();
+        return failure(
+          `${(error as Error).message || "Something went wrong while submitting"}${
+            submitted.length > 0
+              ? ` — ${submitted.length} of ${total} reports were already submitted and taken off the list. Start grading again to submit the rest.`
+              : ""
           }`,
-        };
+          submitted
+        );
       } finally {
         setProgress(null);
       }
