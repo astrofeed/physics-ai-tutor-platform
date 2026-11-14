@@ -26,6 +26,7 @@ import {
   type NewReportJobInput,
   type ReportSubmitProgress,
 } from "@/hooks/useReportGrading";
+import { FormNotice } from "@/components/grading/FormNotice";
 import { ReportBatchFileList } from "./ReportBatchFileList";
 import { ReportDropZone } from "./ReportDropZone";
 
@@ -44,8 +45,23 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
   const [source, setSource] = useState<Source>("pdf");
   const [reportText, setReportText] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState<"high" | "xhigh">("high");
+  const [submitProblem, setSubmitProblem] = useState<string | null>(null);
   const batch = useReportBatch();
   const { submit, progress } = useSubmitReportJob(onCreated);
+
+  // A problem with the old files or text says nothing about the new ones.
+  const changeSource = (next: Source) => {
+    setSource(next);
+    setSubmitProblem(null);
+  };
+  const addFiles = (files: File[]) => {
+    setSubmitProblem(null);
+    void batch.addFiles(files);
+  };
+  const removeFile = (index: number) => {
+    setSubmitProblem(null);
+    batch.removeFile(index);
+  };
 
   const handleSubmit = async () => {
     const input: NewReportJobInput = {
@@ -55,13 +71,16 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
       reportText: source === "text" ? reportText.trim() || null : null,
       reasoningEffort,
     };
-    const created = await submit(input);
-    if (created) {
-      setTitle("");
-      setAuthors("");
-      setReportText("");
-      batch.clear();
+    setSubmitProblem(null);
+    const result = await submit(input);
+    if (!result.ok) {
+      setSubmitProblem(result.problem);
+      return;
     }
+    setTitle("");
+    setAuthors("");
+    setReportText("");
+    batch.clear();
   };
 
   const busy = progress !== null;
@@ -98,7 +117,7 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
                 variant={source === value ? "default" : "outline"}
                 size="sm"
                 disabled={busy}
-                onClick={() => setSource(value)}
+                onClick={() => changeSource(value)}
               >
                 {label}
               </Button>
@@ -112,14 +131,20 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
               reading={batch.reading}
               disabled={batch.reading || busy}
               hasFiles={batch.files.length > 0}
-              onFiles={(files) => void batch.addFiles(files)}
+              onFiles={addFiles}
+            />
+            <FormNotice
+              tone="error"
+              title="Not everything could be imported"
+              messages={batch.problems}
+              onDismiss={batch.dismissProblems}
             />
             <ReportBatchFileList
               files={batch.files}
               disabled={busy}
               onChange={batch.updateFile}
               onStudentIdBlur={(index) => void batch.refillFromRoster(index)}
-              onRemove={batch.removeFile}
+              onRemove={removeFile}
             />
             <p className="text-xs text-gray-500">
               {`PDF only, up to ${formatBytes(REPORT_FILE_MAX_BYTES)} each and ${REPORT_BATCH_MAX_FILES} per batch; `}
@@ -189,6 +214,12 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
           </Select>
         </div>
 
+        <FormNotice
+          tone="error"
+          title="Could not start grading"
+          messages={submitProblem ? [submitProblem] : []}
+          onDismiss={() => setSubmitProblem(null)}
+        />
         <div className="flex items-center gap-3">
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             {progress ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -48,7 +48,7 @@ const FAQ: HowToFaq[] = [
   },
   {
     q: "The video is longer than 3:30 or has no audio.",
-    a: "It is rejected with a clear message before anything is uploaded — ask the student for a compliant recording, or paste a transcript instead of the video.",
+    a: "It is rejected before anything is uploaded, and the reason stays on screen — above the Start grading button, or under the student’s row in a queue — so you have time to read it. Ask the student for a compliant recording, or paste a transcript instead of the video.",
   },
   {
     q: "I need to find a student for the live session.",

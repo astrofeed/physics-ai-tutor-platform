@@ -90,16 +90,40 @@ async function resolveRows(rows: ReportBatchFile[]): Promise<ReportBatchFile[]> 
   );
 }
 
-async function rowsFromArchive(archive: File): Promise<ReportBatchFile[]> {
+interface PickedRows {
+  rows: ReportBatchFile[];
+  /** One sentence per picked file that was skipped. */
+  problems: string[];
+}
+
+async function rowsFromArchive(archive: File): Promise<PickedRows> {
   try {
     const packages = await parseReportZip(archive);
-    if (packages.length === 0) toast.error(`No PDF found in ${archive.name}.`);
-    return packages.map(fromPackage);
+    return {
+      rows: packages.map(fromPackage),
+      problems: packages.length === 0 ? [`No PDF found in ${archive.name}.`] : [],
+    };
   } catch (error) {
     console.error(`Failed to read the report archive ${archive.name}:`, error);
-    toast.error(`Could not read ${archive.name} as a .zip file.`);
-    return [];
+    return { rows: [], problems: [`Could not read ${archive.name} as a .zip file.`] };
   }
+}
+
+async function rowsFromPicked(picked: File[]): Promise<PickedRows> {
+  const rows: ReportBatchFile[] = [];
+  const problems: string[] = [];
+  for (const file of picked) {
+    if (isZip(file)) {
+      const archive = await rowsFromArchive(file);
+      rows.push(...archive.rows);
+      problems.push(...archive.problems);
+    } else if (isPdf(file)) {
+      rows.push(fromPdf(file));
+    } else {
+      problems.push(`"${file.name}" is not a PDF or .zip and was skipped.`);
+    }
+  }
+  return { rows: await resolveRows(rows), problems };
 }
 
 /**
@@ -110,29 +134,27 @@ async function rowsFromArchive(archive: File): Promise<ReportBatchFile[]> {
 export function useReportBatch() {
   const [files, setFiles] = useState<ReportBatchFile[]>([]);
   const [reading, setReading] = useState(false);
+  /** Why some picked files are not in the batch; shown until dismissed or the next pick. */
+  const [problems, setProblems] = useState<string[]>([]);
 
   const addFiles = useCallback(async (picked: File[]) => {
     setReading(true);
     try {
-      const rows: ReportBatchFile[] = [];
-      for (const file of picked) {
-        if (isZip(file)) rows.push(...(await rowsFromArchive(file)));
-        else if (isPdf(file)) rows.push(fromPdf(file));
-        else toast.error(`"${file.name}" is not a PDF or .zip and was skipped.`);
-      }
-      const resolved = await resolveRows(rows);
-      setFiles((current) => {
-        const next = [...current, ...resolved];
-        if (next.length > REPORT_BATCH_MAX_FILES) {
-          toast.error(`At most ${REPORT_BATCH_MAX_FILES} reports per batch.`);
-          next.length = REPORT_BATCH_MAX_FILES;
-        }
-        return next;
-      });
+      const { rows, problems: skipped } = await rowsFromPicked(picked);
+      const dropped = files.length + rows.length - REPORT_BATCH_MAX_FILES;
+      setFiles((current) => [...current, ...rows].slice(0, REPORT_BATCH_MAX_FILES));
+      setProblems(
+        dropped > 0
+          ? [
+              ...skipped,
+              `At most ${REPORT_BATCH_MAX_FILES} reports per batch — the last ${dropped} ${dropped === 1 ? "was" : "were"} left out.`,
+            ]
+          : skipped
+      );
     } finally {
       setReading(false);
     }
-  }, []);
+  }, [files.length]);
 
   const updateFile = useCallback((index: number, patch: Partial<ReportBatchFile>) => {
     setFiles((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -156,7 +178,14 @@ export function useReportBatch() {
     setFiles((current) => current.filter((_, i) => i !== index));
   }, []);
 
-  const clear = useCallback(() => setFiles([]), []);
+  const clear = useCallback(() => {
+    setFiles([]);
+    setProblems([]);
+  }, []);
 
-  return { files, reading, addFiles, updateFile, refillFromRoster, removeFile, clear };
+  const dismissProblems = useCallback(() => setProblems([]), []);
+
+  return {
+    files, reading, problems, addFiles, updateFile, refillFromRoster, removeFile, clear, dismissProblems,
+  };
 }

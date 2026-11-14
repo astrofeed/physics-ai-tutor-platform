@@ -97,4 +97,8 @@ export interface PresentationFormState {
   video: File | null;
   transcript: string;
   slides: File | null;
+  /** Why the last "Start grading" did not start a job. */
+  submitProblem: string | null;
+  /** What to check about the archive the form was filled from. */
+  importWarnings: string[];
 }

@@ -2,15 +2,17 @@
 
 import React, { useRef, useState } from "react";
 import { Archive, Check, Loader2, X } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FormNotice } from "@/components/grading/FormNotice";
 import { lookupRosterStudent } from "@/hooks/usePresentationRoster";
 import type { JobSubmitPhase, NewJobInput } from "@/hooks/usePresentationGrading";
+import type { JobSubmitResult } from "@/types/job-submit";
 import type { PresentationReasoningEffort } from "@/lib/presentation-grading";
 import { parseSubmissionZip, type SubmissionPackage } from "@/lib/submission-zip";
 
 const ZIP_ACCEPT = ".zip,application/zip,application/x-zip-compressed";
+const NOT_A_ZIP_PROBLEM = "Only .zip exports go here. Single videos and slides go in the pickers below.";
 
 function isZip(file: File): boolean {
   return /\.zip$/i.test(file.name) || file.type.includes("zip");
@@ -29,12 +31,7 @@ function ArchiveDropZone({ reading, disabled, onFiles }: ArchiveDropZoneProps) {
 
   const pick = (list: FileList | null) => {
     const files = Array.from(list ?? []);
-    if (files.length === 0) return;
-    const zips = files.filter(isZip);
-    if (zips.length < files.length) {
-      toast.error("Only .zip exports go here. Single videos and slides go in the pickers below.");
-    }
-    if (zips.length > 0) onFiles(zips);
+    if (files.length > 0) onFiles(files);
   };
 
   return (
@@ -108,6 +105,8 @@ type RowStatus = "pending" | "running" | "done" | "failed" | "no-video";
 
 interface BatchRow extends ResolvedSubmission {
   status: RowStatus;
+  /** Why a failed row was not submitted. */
+  problem?: string;
 }
 
 const STATUS_LABELS: Record<RowStatus, string> = {
@@ -121,26 +120,32 @@ const STATUS_LABELS: Record<RowStatus, string> = {
 interface SubmissionImportProps {
   /** Called with a resolved package when the archive holds exactly one student. */
   onSingle: (submission: ResolvedSubmission) => void;
-  submit: (input: NewJobInput) => Promise<boolean>;
+  submit: (input: NewJobInput) => Promise<JobSubmitResult>;
   phase: JobSubmitPhase;
   track: "A" | "B" | undefined;
   reasoningEffort: PresentationReasoningEffort;
 }
 
+interface ParsedArchives {
+  packages: SubmissionPackage[];
+  problems: string[];
+}
+
 /** Packages from every readable archive; unreadable or empty ones are reported and skipped. */
-async function parseArchives(files: File[]): Promise<SubmissionPackage[]> {
+async function parseArchives(files: File[]): Promise<ParsedArchives> {
   const packages: SubmissionPackage[] = [];
+  const problems: string[] = [];
   for (const file of files) {
     try {
       const found = await parseSubmissionZip(file);
-      if (found.length === 0) toast.error(`No video or slides found in ${file.name}.`);
+      if (found.length === 0) problems.push(`No video or slides found in ${file.name}.`);
       packages.push(...found);
     } catch (error) {
       console.error(`Failed to read the submission archive ${file.name}:`, error);
-      toast.error(`Could not read ${file.name} as a .zip file.`);
+      problems.push(`Could not read ${file.name} as a .zip file.`);
     }
   }
-  return packages;
+  return { packages, problems };
 }
 
 /**
@@ -152,18 +157,21 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
   const [reading, setReading] = useState(false);
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [runningBatch, setRunningBatch] = useState(false);
+  const [importProblems, setImportProblems] = useState<string[]>([]);
 
-  const handleArchives = async (files: File[]) => {
+  const handleDroppedFiles = async (files: File[]) => {
+    const archives = files.filter(isZip);
     setReading(true);
     try {
-      const resolved = await Promise.all((await parseArchives(files)).map(resolveSubmission));
-      if (resolved.length === 0) return;
+      const { packages, problems } = await parseArchives(archives);
+      setImportProblems(archives.length < files.length ? [NOT_A_ZIP_PROBLEM, ...problems] : problems);
+      const resolved = await Promise.all(packages.map(resolveSubmission));
       if (resolved.length === 1) {
         onSingle(resolved[0]);
-        return;
+      } else if (resolved.length > 1) {
+        setArchiveNames(archives.map((file) => file.name));
+        setRows(resolved.map((pkg) => ({ ...pkg, status: pkg.video ? "pending" : "no-video" })));
       }
-      setArchiveNames(files.map((file) => file.name));
-      setRows(resolved.map((pkg) => ({ ...pkg, status: pkg.video ? "pending" : "no-video" })));
     } finally {
       setReading(false);
     }
@@ -181,7 +189,7 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
       const row = rows[index];
       if (!isReady(row) || !row.video) continue;
       updateRow(index, { status: "running" });
-      const ok = await submit({
+      const result = await submit({
         topic: row.topic.trim(),
         presenters: row.presenters.trim() || undefined,
         studentIds: row.studentId ?? undefined,
@@ -191,7 +199,7 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
         slides: row.slides,
         reasoningEffort,
       });
-      updateRow(index, { status: ok ? "done" : "failed" });
+      updateRow(index, result.ok ? { status: "done" } : { status: "failed", problem: result.problem });
     }
     setRunningBatch(false);
   };
@@ -199,10 +207,20 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
   const clearBatch = () => {
     setRows([]);
     setArchiveNames([]);
+    setImportProblems([]);
   };
 
   const readyCount = rows.filter(isReady).length;
   const incompleteCount = rows.filter((row) => row.status === "pending" && !isReady(row)).length;
+
+  const importProblemNotice = (
+    <FormNotice
+      tone="error"
+      title="Not everything could be imported"
+      messages={importProblems}
+      onDismiss={() => setImportProblems([])}
+    />
+  );
 
   if (rows.length === 0) {
     return (
@@ -210,8 +228,9 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
         <ArchiveDropZone
           reading={reading}
           disabled={reading || phase !== null}
-          onFiles={(files) => void handleArchives(files)}
+          onFiles={(files) => void handleDroppedFiles(files)}
         />
+        {importProblemNotice}
         <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-gray-400">
           <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
           or fill in by hand
@@ -238,6 +257,7 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
           </Button>
         </div>
       </div>
+      {importProblemNotice}
       {incompleteCount > 0 ? (
         <p className="text-xs text-amber-600 dark:text-amber-400">
           {incompleteCount} {incompleteCount === 1 ? "row needs" : "rows need"} a topic and a name
@@ -278,6 +298,11 @@ export function SubmissionImport({ onSingle, submit, phase, track, reasoningEffo
               ) : null}
               {STATUS_LABELS[row.status]}
             </span>
+            {row.problem ? (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400 sm:col-span-4">
+                {row.problem}
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>
