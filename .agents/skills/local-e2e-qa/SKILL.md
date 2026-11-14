@@ -270,7 +270,7 @@ containers Chrome can't decode (WMV/AVI/MKV). The mock/stub recipe above extends
 - Multi-student fixtures: `mkdir -p "fixture/113062113 (名字)"` folders with an mp4 and optional
   pdf, `zip -r`. A folder without a video becomes a `No video in folder` row that is excluded from
   `Grade all (N)`. A student ID absent from the sheet keeps the folder name and falls back to the
-  video filename as topic (info toast); present IDs get name/topic/group/date from the sheet.
+  video filename as topic (amber "Check before grading" notice in the form, not a toast); present IDs get name/topic/group/date from the sheet.
 - `Grade all` submits sequentially through `usePresentationGrading.submit` — with the mock
   OpenAI the whole queue finishes in seconds, so screenshot the `Submitting…`/`Started` mix
   quickly or rely on the CDP `net.log` ordering (WAV PUT → `/jobs` 201 → `/process`, repeated).

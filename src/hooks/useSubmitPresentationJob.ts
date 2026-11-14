@@ -11,6 +11,7 @@ import {
   PRESENTATION_VIDEO_MAX_BYTES,
   PRESENTATION_VIDEO_MAX_SECONDS,
 } from "@/lib/presentation-grading";
+import type { JobSubmitResult } from "@/types/job-submit";
 import type { NewJobInput, JobSubmitPhase } from "@/types/presentation-grading";
 
 const UPLOAD_ENDPOINT = "/api/presentation-grading/upload";
@@ -35,38 +36,37 @@ export function useSubmitPresentationJob(onCreated: () => void) {
   const [phase, setPhase] = useState<JobSubmitPhase>(null);
 
   const submit = useCallback(
-    async (input: NewJobInput): Promise<boolean> => {
+    async (input: NewJobInput): Promise<JobSubmitResult> => {
       if (!input.video && !input.transcript) {
-        toast.error("Choose a video or paste the transcript first.");
-        return false;
+        return { ok: false, problem: "Choose a video or paste the transcript first." };
       }
       if (input.video && input.video.size > PRESENTATION_VIDEO_MAX_BYTES) {
-        toast.error(
-          `The video is ${formatBytes(input.video.size)}; the maximum is ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}.`
-        );
-        return false;
+        return {
+          ok: false,
+          problem: `The video is ${formatBytes(input.video.size)}; the maximum is ${formatBytes(PRESENTATION_VIDEO_MAX_BYTES)}.`,
+        };
       }
       if (input.transcript && input.transcript.length > PRESENTATION_TRANSCRIPT_MAX_CHARS) {
-        toast.error(
-          `The transcript is ${input.transcript.length.toLocaleString()} characters; the maximum is ${PRESENTATION_TRANSCRIPT_MAX_CHARS.toLocaleString()}.`
-        );
-        return false;
+        return {
+          ok: false,
+          problem: `The transcript is ${input.transcript.length.toLocaleString()} characters; the maximum is ${PRESENTATION_TRANSCRIPT_MAX_CHARS.toLocaleString()}.`,
+        };
       }
       if (input.slides && input.slides.size > PRESENTATION_SLIDES_MAX_BYTES) {
-        toast.error(
-          `The slides file is ${formatBytes(input.slides.size)}; the maximum is ${formatBytes(PRESENTATION_SLIDES_MAX_BYTES)}.`
-        );
-        return false;
+        return {
+          ok: false,
+          problem: `The slides file is ${formatBytes(input.slides.size)}; the maximum is ${formatBytes(PRESENTATION_SLIDES_MAX_BYTES)}.`,
+        };
       }
       try {
         let audioBlobUrl: string | undefined;
         if (input.video) {
           const { wav, durationSeconds } = await extractAudioFromVideo(input.video, setPhase);
           if (durationSeconds > PRESENTATION_VIDEO_MAX_SECONDS) {
-            toast.error(
-              `The video is ${Math.floor(durationSeconds / 60)}:${String(Math.round(durationSeconds % 60)).padStart(2, "0")} long; presentations must be at most 3:30.`
-            );
-            return false;
+            return {
+              ok: false,
+              problem: `The video is ${Math.floor(durationSeconds / 60)}:${String(Math.round(durationSeconds % 60)).padStart(2, "0")} long; presentations must be at most 3:30.`,
+            };
           }
           setPhase("uploading");
           audioBlobUrl = await uploadToBlob("audio", "presentation-audio.wav", wav, "audio/wav");
@@ -105,8 +105,7 @@ export function useSubmitPresentationJob(onCreated: () => void) {
         });
         const body = await res.json();
         if (!res.ok) {
-          toast.error(body.error ?? "Failed to create the grading job");
-          return false;
+          return { ok: false, problem: body.error ?? "Failed to create the grading job" };
         }
 
         // Fire-and-forget: the serverless function keeps processing even if
@@ -119,20 +118,23 @@ export function useSubmitPresentationJob(onCreated: () => void) {
         }).catch((error) => {
           // The job list will show it as QUEUED; retry restarts it.
           console.error("[presentation-grading:process]", { jobId: body.data.id, error });
-          toast.error("Could not start processing. Check the job status before retrying.");
+          toast.error("Could not start processing. Check the job status before retrying.", {
+            duration: Infinity,
+          });
         });
 
         toast.success(`Grading job for "${input.topic}" started`);
         onCreated();
-        return true;
+        return { ok: true };
       } catch (error) {
         console.error("[presentation-grading:submit]", { error });
-        toast.error(
-          error instanceof AudioExtractionError
-            ? error.message
-            : "Something went wrong while submitting the job"
-        );
-        return false;
+        return {
+          ok: false,
+          problem:
+            error instanceof AudioExtractionError
+              ? error.message
+              : "Something went wrong while submitting the job",
+        };
       } finally {
         setPhase(null);
       }

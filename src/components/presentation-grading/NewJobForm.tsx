@@ -18,10 +18,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/lib/chat-attachments";
 import { questionBankEntry } from "@/lib/question-bank";
 import { QUESTION_BANK_TEXT } from "@/lib/question-bank-strings";
-import type { PresentationFormState } from "@/types/presentation-grading";
+import { FormNotice } from "@/components/grading/FormNotice";
 import { QuestionBankPicker } from "./QuestionBankPicker";
 import { FilePicker } from "./FilePicker";
 import { SubmissionImport, type ResolvedSubmission } from "./SubmissionImport";
+import { INITIAL_JOB_FORM, jobFormReducer, submissionWarnings } from "./new-job-form-state";
 import { lookupRosterStudent } from "@/hooks/usePresentationRoster";
 import {
   PRESENTATION_SLIDES_MAX_BYTES,
@@ -42,13 +43,7 @@ const PHASE_LABELS: Record<Exclude<JobSubmitPhase, null>, string> = {
 };
 
 export function NewJobForm({ onCreated }: { onCreated: () => void }) {
-  const [form, setForm] = useReducer(
-    (state: PresentationFormState, patch: Partial<PresentationFormState>) => ({ ...state, ...patch }),
-    {
-      topic: "", questionBankId: null, presenters: "", studentIds: "", track: "unknown",
-      reasoningEffort: "high", source: "video", video: null, transcript: "", slides: null,
-    }
-  );
+  const [form, setForm] = useReducer(jobFormReducer, INITIAL_JOB_FORM);
   const { topic, questionBankId, presenters, studentIds, track, reasoningEffort, source, video, transcript, slides } = form;
   const linkedQuestion = questionBankId ? questionBankEntry(questionBankId) : null;
   const { submit, phase } = useSubmitPresentationJob(onCreated);
@@ -57,14 +52,10 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
     setForm({
       source: "video", studentIds: submission.studentId ?? "", presenters: submission.presenters,
       topic: submission.topic, questionBankId: null, video: submission.video, slides: submission.slides,
+      importWarnings: submissionWarnings(submission),
     });
-    const slidesNote = submission.slides ? "" : " No slides in this archive — grading from the video only.";
     if (submission.topicFromRoster) {
-      toast.success(`Filled from the sign-up sheet: ${submission.label}.${slidesNote}`);
-    } else {
-      toast.info(
-        `${submission.label} is not in the sign-up sheet — the topic was taken from the video filename. Please check it.${slidesNote}`
-      );
+      toast.success(`Filled from the sign-up sheet: ${submission.label}.`);
     }
   };
 
@@ -93,8 +84,15 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
       slides,
       reasoningEffort,
     };
-    if (await submit(input)) {
-      setForm({ topic: "", questionBankId: null, presenters: "", studentIds: "", video: null, transcript: "", slides: null });
+    setForm({ submitProblem: null });
+    const result = await submit(input);
+    if (result.ok) {
+      setForm({
+        topic: "", questionBankId: null, presenters: "", studentIds: "", video: null, transcript: "", slides: null,
+        importWarnings: [],
+      });
+    } else {
+      setForm({ submitProblem: result.problem });
     }
   };
 
@@ -115,6 +113,12 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
           phase={phase}
           track={track === "unknown" ? undefined : track}
           reasoningEffort={reasoningEffort}
+        />
+        <FormNotice
+          tone="warning"
+          title="Check before grading"
+          messages={form.importWarnings}
+          onDismiss={() => setForm({ importWarnings: [] })}
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -266,6 +270,12 @@ export function NewJobForm({ onCreated }: { onCreated: () => void }) {
           Using Google Slides? Export it as PDF first (File → Download → PDF).
         </p>
 
+        <FormNotice
+          tone="error"
+          title="Could not start grading"
+          messages={form.submitProblem ? [form.submitProblem] : []}
+          onDismiss={() => setForm({ submitProblem: null })}
+        />
         <div className="flex items-center gap-3">
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             {phase !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
