@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useQueryErrorToast } from "@/hooks/useQueryErrorToast";
 import { api } from "@/lib/api-client";
 import type {
   PresentationJobDetail,
@@ -22,21 +23,13 @@ const RUBRIC_KEY = ["presentation-grading", "rubric"];
 
 export const presentationJobKey = (id: string) => ["presentation-grading", "job", id];
 
-function useQueryError(error: Error | null, message: string) {
-  useEffect(() => {
-    if (!error) return;
-    console.error("[presentation-grading:query]", { message, error });
-    toast.error(message);
-  }, [error, message]);
-}
-
 export function usePresentationRubric() {
   const client = useQueryClient();
   const query = useQuery({
     queryKey: RUBRIC_KEY,
     queryFn: async () => (await api.get<{ data: RubricState }>("/api/presentation-grading/rubric")).data,
   });
-  useQueryError(query.error, "Failed to load the rubric");
+  useQueryErrorToast(query.error, "Failed to load the rubric");
   const mutation = useMutation({
     mutationFn: (content: string) => api.put<{ data: RubricState }>("/api/presentation-grading/rubric", { content }),
     onSuccess: async ({ data }) => {
@@ -65,7 +58,7 @@ export function useRubricHistory(enabled: boolean) {
     queryFn: async () => (await api.get<{ data: RubricState[] }>("/api/presentation-grading/rubric/history")).data,
     enabled,
   });
-  useQueryError(query.error, "Failed to load rubric history");
+  useQueryErrorToast(query.error, "Failed to load rubric history");
   return { versions: query.data ?? null, loading: query.isFetching };
 }
 
@@ -96,7 +89,7 @@ export function usePresentationJobs() {
     refetchInterval: (current) => current.state.data?.jobs.some((job) => ACTIVE_STATUSES.has(job.status))
       ? ACTIVE_POLL_MS : false,
   });
-  useQueryError(query.error, "Failed to load grading jobs");
+  useQueryErrorToast(query.error, "Failed to load grading jobs");
   const setGroup = useCallback((value: number | null) => {
     setGroupState(value);
     setPage(1);
@@ -118,7 +111,7 @@ export function usePresentationJob(id: string) {
       ? ACTIVE_POLL_MS : false,
   });
   const notFound = query.error !== null && "status" in query.error && query.error.status === 404;
-  useQueryError(notFound ? null : query.error, "Failed to load the job");
+  useQueryErrorToast(notFound ? null : query.error, "Failed to load the job");
   return { job: query.data ?? null, loading: query.isPending, notFound, refresh: query.refetch };
 }
 
