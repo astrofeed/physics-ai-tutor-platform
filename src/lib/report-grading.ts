@@ -155,9 +155,9 @@ export type ReportSuggestionCheck = z.infer<typeof ReportSuggestionCheckSchema>;
 export type SuggestionStatus = ReportSuggestionCheck["status"];
 
 export const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
-  not_addressed: "Not done",
-  partially_addressed: "Partly done",
-  completed: "Done",
+  not_addressed: "Not pursued",
+  partially_addressed: "Explored in part",
+  completed: "Developed",
 };
 
 const OPTIONAL_EVALUATION_FIELDS = ["criterionScores", "suggestionChecks"] as const;

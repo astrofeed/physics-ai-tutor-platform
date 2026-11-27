@@ -70,15 +70,16 @@ const REPORT_GRADING_GUARD =
   "that question; when it says no additional question was set, judge the " +
   "report against the topic alone and never penalise it for a missing " +
   "question. " +
-  "When REPORT INFORMATION lists PRESENTATION SUGGESTIONS (report-topic " +
-  "suggestions the AI made after grading this student's talk), the report was " +
-  "expected to act on them. Return suggestionChecks with exactly one entry per " +
-  "listed suggestion, in the same order, copying its title into `suggestion`; " +
+  "PRESENTATION SUGGESTIONS are optional directions, distinct from the assigned " +
+  "question. Apply the job's rubric to the quality of the work, including " +
+  "student-chosen extensions. Do not use the number pursued to award points, " +
+  "deduct points, or cap a score. Return suggestionChecks with one descriptive " +
+  "entry per listed direction, in order, copying its title into `suggestion`; " +
   "status is `completed` when the report does the substance of what the " +
   "suggestion asks (not merely mentions it), `partially_addressed` when it " +
   "makes a real but incomplete attempt, `not_addressed` when nothing in the " +
-  "report does it; `evidence` names the section/page/equation that shows this " +
-  "and, for partial work, what is still missing. When no suggestions are " +
+  "report pursues it. Cite the section/page/equation for work found; when a " +
+  "direction is not pursued, say so without framing it as a defect. When no suggestions are " +
   "listed, return suggestionChecks as null. " +
   "Ground every remark in the report's own text; never invent content " +
   "that is not there. Every text field is plain prose (markdown/LaTeX " +

@@ -89,7 +89,10 @@ const sampleEvaluation: ReportEvaluation = {
       reason: "High-resistance limit is mentioned but needs a time constant check.",
     },
   ],
-  suggestionChecks: null,
+  suggestionChecks: [
+    { suggestion: "Compare coil geometries", status: "not_addressed", evidence: "Not pursued." },
+    { suggestion: "Investigate the resistance limit", status: "completed", evidence: "Section 2 derives the limiting case." },
+  ],
 };
 
 let jobAId = "";
@@ -214,6 +217,16 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.getByText("Hidden by default so AI scores do not anchor your grading.")).toBeVisible();
   await expect(page.getByText("TA Alpha: solid work")).toHaveCount(0);
   await expect(page.getByText("TA Beta: missing time constant")).toHaveCount(0);
+
+  const directions = page.locator("details").filter({ has: page.getByText("Optional presentation directions", { exact: true }) });
+  await expect(directions.getByText("Compare coil geometries")).not.toBeVisible();
+  await directions.locator("summary").click();
+  await expect(directions.getByText("Not pursued", { exact: true })).toBeVisible();
+  await expect(directions.getByText("Developed", { exact: true })).toBeVisible();
+  await expect(directions.getByText(/\d+\s*\/\s*\d+ done/i)).toHaveCount(0);
+  await directions.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("optional-report-directions.png") });
+  await directions.locator("summary").click();
 
   // AI-style notes are toggled off by default and can be toggled on.
   await expect(page.getByText("Uniform textbook phrasing")).toHaveCount(0);

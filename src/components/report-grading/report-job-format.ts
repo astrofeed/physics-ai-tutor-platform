@@ -34,7 +34,7 @@ export function reportEvaluationToText(e: ReportEvaluation): string {
     const checks = e.suggestionChecks
       .map((c) => `- ${c.suggestion} — ${SUGGESTION_STATUS_LABELS[c.status]}\n  ${c.evidence}`)
       .join("\n");
-    sections.push(`## Presentation suggestions\n${checks}`);
+    sections.push(`## Presentation directions (observations)\n${checks}`);
   }
   sections.push(`## Comments\n${comments}`);
   if (e.criterionScores) {
