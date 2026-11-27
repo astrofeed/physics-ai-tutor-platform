@@ -21,9 +21,9 @@ import {
   gradedBlind,
   humanTotalOf,
   sumScores,
-  weightedAverage,
   type HumanGrading,
 } from "@/lib/human-grading";
+import { reportWeightedTotal } from "@/lib/report-score-scale";
 
 type CsvValue = string | number | null | undefined;
 
@@ -120,16 +120,16 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       `${criterion} (${weightPercent}%) human score`,
       `${criterion} AI reason`,
     ]),
-    "AI weighted total (0-10)",
-    "Human total (0-10)",
+    "AI weighted total (0-100)",
+    "Human total (0-100)",
     ...HUMAN_AUDIT_HEADER,
     ...(maxMultiGraders > 0
       ? [
           "Human grader count",
-          "Human average total (0-10)",
+          "Human average total (0-100)",
           ...Array.from({ length: maxMultiGraders }, (_, idx) => idx + 1).flatMap((n) => [
             `Grader ${n} name`,
-            `Grader ${n} total (0-10)`,
+            `Grader ${n} total (0-100)`,
             `Grader ${n} blind`,
             `Grader ${n} comments`,
           ]),
@@ -145,15 +145,16 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     const humanByCriterion = humanScoresByName(job.human);
     const weightOf = (criterion: string) => byCriterion.get(criterion)?.weightPercent;
     const aiTotal = scores
-      ? weightedAverage(
+      ? reportWeightedTotal(
           scores.map((s) => ({ name: s.criterion, score: s.score })),
           weightOf
         )
       : null;
-    const humanTotal = humanTotalOf(job.human, (scores) => weightedAverage(scores, weightOf));
+    const fromItems = (entries: HumanGrading["scores"]) => reportWeightedTotal(entries, weightOf);
+    const humanTotal = humanTotalOf(job.human, fromItems);
     const gradedReviews = gradedReviewsPerJob[i];
     const reviewTotals = gradedReviews
-      .map((r) => humanTotalOf(r, (s) => weightedAverage(s, weightOf)))
+      .map((r) => humanTotalOf(r, fromItems))
       .filter((v): v is number => v !== null);
     const avgHumanTotal =
       reviewTotals.length > 0
@@ -167,7 +168,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
             ...Array.from({ length: maxMultiGraders }, (_, idx) => gradedReviews[idx]).flatMap(
               (review) => {
                 if (!review) return ["", "", "", ""];
-                const t = humanTotalOf(review, (s) => weightedAverage(s, weightOf));
+                const t = humanTotalOf(review, fromItems);
                 const b = gradedBlind(review);
                 return [
                   review.gradedByName ?? "",

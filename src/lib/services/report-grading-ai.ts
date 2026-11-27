@@ -57,7 +57,15 @@ const REPORT_GRADING_GUARD =
   "report, the comment itself, the 1-based PDF `page` number where it applies " +
   "or null for overall/non-PDF remarks, a short verbatim `quote` of 5-15 words " +
   "copied directly from that page so the grading viewer can highlight it — or " +
-  "null when pointing at a figure or display equation — and a `category` of " +
+  "null when no unique readable text is available. For visual evidence quote a unique caption or nearby heading " +
+  "if available; identify the actual equation, figure, table row or hand-written step in `reference`. " +
+  "Use the physical PDF page index, including cover pages, not printed page labels. " +
+  "Set evidenceKind to Text, Equation, Figure, Table or Source as appropriate (null for general notes). " +
+  "Name the exact applicable rubric criterion in criterion, or null for non-scoring notes. " +
+  "Check the assigned answer, physical assumptions, derivation, figures and notation, " +
+  "units and limiting cases, sources and presentation where evidenced; do not invent findings to fill a quota. " +
+  "Set needsStaffCheck when evidence is illegible or ambiguous, naming exactly what to inspect; " +
+  "this is a review request, not a deduction. Give each note a `category` of " +
   "`strength`, `issue`, `note`, or `ai_style` — use `ai_style` only on specific " +
   "passages that show notable AI-generated writing cues such as uniform " +
   "boilerplate phrasing, abrupt tone shifts, or overly polished prose paired " +

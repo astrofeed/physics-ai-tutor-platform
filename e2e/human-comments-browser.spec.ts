@@ -76,7 +76,7 @@ test.beforeEach(async ({ context }) => {
 for (const kind of ["presentation", "report"] as const) {
   test(`${kind}: optional comments persist, edit, cancel and clear`, async ({ page }, testInfo) => {
     test.setTimeout(90_000);
-    const total = kind === "presentation" ? "85" : "8.5";
+    const total = "85";
     const itemScore = kind === "presentation" ? "80" : "8";
     await page.goto(`/${kind}-grading/${jobs[kind]}`);
     if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
@@ -135,7 +135,7 @@ for (const kind of ["presentation", "report"] as const) {
   test(`${kind}: API retains omitted comments and CSV round-trips text`, async ({ context }) => {
     const request = context.request;
     const url = `/api/${kind}-grading/jobs/${jobs[kind]}`;
-    const total = kind === "presentation" ? 86 : 8.6;
+    const total = 86;
     expect((await request.put(`${url}/human-scores`, { data: { total, comments } })).ok()).toBe(true);
     const initial = await readJob(request, url);
     expect(initial.human.comments).toBe(comments);
@@ -165,7 +165,7 @@ for (const kind of ["presentation", "report"] as const) {
   });
 
   test(`${kind}: downloaded CSV includes professor comments`, async ({ page, context }) => {
-    const total = kind === "presentation" ? 85 : 8.5;
+    const total = 85;
     const response = await context.request.put(`/api/${kind}-grading/jobs/${jobs[kind]}/human-scores`, {
       data: { total, comments },
     });

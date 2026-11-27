@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { DEFAULT_REPORT_RUBRIC } from "../src/lib/default-report-rubric";
 import { canManageReview } from "../src/lib/human-score-validation";
+import { reportTotalFromStorage, reportTotalToStorage, reportWeightedTotal } from "../src/lib/report-score-scale";
 import { parseReportEvaluation, reportRubricCriteria } from "../src/lib/report-grading";
 
 test("only the complete bound rubric can produce an AI total", () => {
@@ -30,4 +31,23 @@ test("review edits and deletes share the same ownership policy", () => {
   expect(canManageReview("first", "second", "TA")).toBe(false);
   expect(canManageReview("first", "second")).toBe(false);
   for (const role of ["PROFESSOR", "ADMIN"]) expect(canManageReview("first", "second", role)).toBe(true);
+});
+
+test("historical and new totals use the same unambiguous /100 scale", () => {
+  expect(reportTotalFromStorage(8)).toBe(80);
+  for (const points of [0, 8, 80, 89.7, 100]) {
+    expect(reportTotalFromStorage(reportTotalToStorage(points))).toBe(points);
+  }
+  const entries = [{ name: "physics", score: 6 }, { name: "checks", score: 10 }];
+  const weightOf = (name: string) => name === "physics" ? 75 : 25;
+  expect(reportWeightedTotal(entries, weightOf)).toBe(70);
+  expect(reportWeightedTotal(entries.slice(1), weightOf)).toBeNull();
+});
+
+test("legacy comments still load; invalid criterion links do not imply rubric coverage", () => {
+  const comments = [{ reference: "Section 1", comment: "A clear assumption." },
+    { reference: "Figure", comment: "Check the axes.", evidenceKind: "Figure", criterion: "Invented", needsStaffCheck: true }];
+  const evaluation = parseReportEvaluation(JSON.stringify({ summary: "Review", comments }), "### Physics (100%)");
+  expect(evaluation?.comments[0]).toMatchObject({ evidenceKind: null, criterion: null, needsStaffCheck: null });
+  expect(evaluation?.comments[1]).toMatchObject({ evidenceKind: "Figure", criterion: null, needsStaffCheck: true });
 });

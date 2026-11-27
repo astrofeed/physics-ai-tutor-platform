@@ -59,6 +59,7 @@ const sampleEvaluation: ReportEvaluation = {
       page: 1,
       quote: "induced EMF from Faraday law",
       category: "strength",
+      evidenceKind: "Text", criterion: "Physics correctness", needsStaffCheck: false,
     },
     {
       reference: "Section 2, p. 2",
@@ -66,6 +67,7 @@ const sampleEvaluation: ReportEvaluation = {
       page: 2,
       quote: "magnetic flux decays exponentially",
       category: "issue",
+      evidenceKind: "Text", criterion: "Sanity checks", needsStaffCheck: false,
     },
     {
       reference: "Section 1, p. 1",
@@ -73,6 +75,12 @@ const sampleEvaluation: ReportEvaluation = {
       page: 1,
       quote: "General Physics II: Faraday Induction Report",
       category: "ai_style",
+      evidenceKind: null, criterion: null, needsStaffCheck: false,
+    },
+    {
+      reference: "Page 2, hand-written limiting case", page: 2, quote: null, category: "note",
+      comment: "Check the sign of the exponent against the original.",
+      evidenceKind: "Equation", criterion: "Sanity checks", needsStaffCheck: true,
     },
   ],
   criterionScores: [
@@ -163,13 +171,33 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await ctx1.addCookies([{ name: "e2e-test-user-email", value: ta1Email, url: baseURL }]);
   await ctx2.addCookies([{ name: "e2e-test-user-email", value: ta2Email, url: baseURL }]);
 
+  const jobUrl = `/api/report-grading/jobs/${jobAId}`;
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: ta1Email } });
+  await prisma.reportHumanReview.create({ data: {
+    jobId: jobAId, graderId: owner.id, slotKey: `user:${owner.id}`, total: 8, gradedAt: new Date(),
+  } });
+  const readMine = async () => ((await (await ctx1.request.get(jobUrl)).json()).data as ReportJobDetail);
+  expect((await readMine()).human.total).toBe(80);
+  for (const total of [0, 8, 89.7, 100]) {
+    expect((await ctx1.request.put(`${jobUrl}/human-scores`, { data: { total } })).ok()).toBe(true);
+    expect((await readMine()).human.total).toBe(total);
+  }
+  for (const total of [-1, 100.1, 89.74]) {
+    expect((await ctx1.request.put(`${jobUrl}/human-scores`, { data: { total } })).status()).toBe(400);
+  }
+  expect((await ctx1.request.put(`${jobUrl}/human-scores`, { data: { scores: [
+    { name: "Physics correctness", score: 6 }, { name: "Sanity checks", score: 10 },
+  ] } })).ok()).toBe(true);
+  const [itemsHeader, itemsRow] = parseCsv(reportJobsToCsv([await readMine()]).replace(/^\uFEFF/, ""));
+  expect(itemsRow[itemsHeader.indexOf("Human total (0-100)")]).toBe("76.00");
+
   // 1. Concurrent API writes from TA 1 and TA 2 never overwrite each other.
   const [res1, res2] = await Promise.all([
     ctx1.request.put(`/api/report-grading/jobs/${jobAId}/human-scores`, {
-      data: { total: 8.5, comments: "TA Alpha: solid work" },
+      data: { total: 85, comments: "TA Alpha: solid work" },
     }),
     ctx2.request.put(`/api/report-grading/jobs/${jobAId}/human-scores`, {
-      data: { total: 7.0, comments: "TA Beta: missing time constant" },
+      data: { total: 70, comments: "TA Beta: missing time constant" },
     }),
   ]);
   expect(res1.ok()).toBe(true);
@@ -178,14 +206,15 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   const detailRes = await ctx2.request.get(`/api/report-grading/jobs/${jobAId}`);
   expect(detailRes.ok()).toBe(true);
   const detail: ReportJobDetail = (await detailRes.json()).data;
-  expect(detail.human.total).toBe(7);
+  expect(detail.human.total).toBe(70);
   expect(detail.humanReviews?.length).toBe(2);
 
   // CSV includes both graders and their average.
   const csv = reportJobsToCsv([detail]);
   const [headers, row] = parseCsv(csv.replace(/^\uFEFF/, ""));
   expect(row[headers.indexOf("Human grader count")]).toBe("2");
-  expect(row[headers.indexOf("Human average total (0-10)")]).toBe("7.75");
+  expect(row[headers.indexOf("Human average total (0-100)")]).toBe("77.50");
+  expect(row[headers.indexOf("AI weighted total (0-100)")]).toBe("81.00");
 
   // 2. Open as Professor (who has not graded yet) to verify blind-by-default, PDF viewer, and nav.
   const ctxProf = await browser.newContext({ baseURL, permissions: ["clipboard-read", "clipboard-write"], viewport: { width: 1440, height: 900 } });
@@ -243,12 +272,24 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.getByText("Uniform textbook phrasing")).toBeVisible();
 
   // Clicking AI Note #2 highlights text on page 2.
+  const pageTwo = page.locator("#report-page-2");
+  await page.getByRole("button", { name: "Next page" }).first().click();
+  await expect(pageTwo).toBeFocused();
+  await page.getByRole("button", { name: "Previous page" }).last().click();
+  await expect(page.locator("#report-page-1")).toBeFocused();
   const noteTwo = page.locator("#report-note-1");
   await noteTwo.focus();
   await noteTwo.press("Enter");
   await expect(page.locator('[aria-label="Jump to note #2"]').first()).toBeVisible();
   await page.locator('[aria-label="Jump to note #2"]').first().click();
   await expect(noteTwo).toBeFocused();
+  await expect(page.getByRole("region", { name: "Page 2 notes" })).toContainText("Equation · Sanity checks · Page only · Needs staff review");
+  await expect(pageTwo.getByRole("button", { name: "Jump to note #4" })).toHaveCount(0);
+  await expect.poll(async () => {
+    const mark = await pageTwo.getByRole("button", { name: "Jump to note #2" }).first().boundingBox();
+    const note = await noteTwo.boundingBox();
+    return mark && note ? Math.abs(mark.y - note.y) : Infinity;
+  }).toBeLessThan(12);
   await page.screenshot({ path: testInfo.outputPath("desktop-split-blind.png") });
 
   // Unfold other graders and AI scores.
@@ -260,13 +301,13 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
 
   await page.getByRole("button", { name: "Rubric & scoring" }).click();
   await page.getByRole("button", { name: "Show AI scores" }).click();
-  await expect(page.getByText("Weighted total: 8.10 / 10")).toBeVisible();
+  await expect(page.getByText("Weighted total: 81.00 / 100")).toBeVisible();
 
   // Add an extra flexible grader slot.
   await page.getByRole("button", { name: "Add another grader score" }).click();
   const extraForm = page.getByTestId("extra-grader-card");
   await extraForm.locator("#extra-grader-label").fill("Guest Grader");
-  await extraForm.locator("#extra-human-total").fill("9");
+  await extraForm.locator("#extra-human-total").fill("90");
   await extraForm.getByRole("button", { name: "Save scores and comments" }).click();
   await expect(page.getByRole("table").getByText("Guest Grader")).toBeVisible();
 
@@ -287,7 +328,7 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
 
   // Bottom navigation jumps straight to next ungraded report (job B) without going back to list.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator("#human-total").fill("7.3");
+  await page.locator("#human-total").fill("73");
   await page.locator("#human-comments").fill("Independent draft");
   const modes = page.getByRole("group", { name: "Review mode" });
   await expect(modes).toBeInViewport();

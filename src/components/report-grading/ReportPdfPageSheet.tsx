@@ -29,6 +29,7 @@ export interface PdfPageLike {
   };
   render: (opts: {
     canvasContext: CanvasRenderingContext2D;
+    transform: number[];
     viewport: { width: number; height: number; transform: number[] };
   }) => { promise: Promise<void>; cancel: () => void };
   getTextContent: () => Promise<{ items: unknown[] }>;
@@ -101,6 +102,7 @@ interface ReportPdfPageSheetProps {
   activeCommentIndex: number | null;
   onSelectComment: (index: number) => void;
   onReady: (pageNumber: number) => void;
+  onAnchors: (offsets: Map<number, number>) => void;
 }
 
 export function ReportPdfPageSheet({
@@ -112,9 +114,29 @@ export function ReportPdfPageSheet({
   activeCommentIndex,
   onSelectComment,
   onReady,
+  onAnchors,
 }: ReportPdfPageSheetProps) {
+  const sheetRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [highlights, setHighlights] = useState<HighlightBox[]>([]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const sheet = sheetRef.current;
+    if (!canvas || !sheet) return;
+    const measure = () => {
+      const rect = canvas.getBoundingClientRect();
+      const top = rect.top - sheet.getBoundingClientRect().top;
+      const offsets = new Map<number, number>();
+      for (const { commentIndex, topPct } of highlights) {
+        if (!offsets.has(commentIndex)) offsets.set(commentIndex, top + topPct * rect.height / 100);
+      }
+      onAnchors(offsets);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    observer.observe(sheet);
+    return () => observer.disconnect();
+  }, [highlights, onAnchors]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,9 +153,7 @@ export function ReportPdfPageSheet({
       canvas.height = Math.floor(viewport.height * dpr);
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      renderTask = page.render({ canvasContext: ctx, viewport });
+      renderTask = page.render({ canvasContext: ctx, viewport, transform: [dpr, 0, 0, dpr, 0, 0] });
       try {
         await renderTask.promise;
       } catch (error) {
@@ -175,7 +195,7 @@ export function ReportPdfPageSheet({
   }, [doc, pageNumber, scale, multiplyTransform, pageComments, onReady]);
 
   return (
-    <div id={`report-page-${pageNumber}`} tabIndex={-1} data-pdf-page={pageNumber} className="space-y-1.5 rounded bg-muted/60 p-2">
+    <div ref={sheetRef} id={`report-page-${pageNumber}`} tabIndex={-1} data-pdf-page={pageNumber} className="scroll-mt-14 space-y-1.5 rounded bg-muted/60 p-2">
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-gray-500">
         <span className="tabular-nums">Page {pageNumber}</span>
         {pageComments.length > 0 ? (

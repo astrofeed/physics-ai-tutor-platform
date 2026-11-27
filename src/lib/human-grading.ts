@@ -78,19 +78,3 @@ export function gradedBlind(human: HumanGrading): boolean | null {
 export function sumScores(entries: HumanScoreEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.score, 0);
 }
-
-/** Weighted mean of scores whose weights are given by `weightOf`; null when nothing is weighted. */
-export function weightedAverage(
-  entries: HumanScoreEntry[],
-  weightOf: (name: string) => number | undefined
-): number | null {
-  let weightSum = 0;
-  let total = 0;
-  for (const entry of entries) {
-    const weight = weightOf(entry.name);
-    if (weight === undefined) continue;
-    weightSum += weight;
-    total += entry.score * weight;
-  }
-  return weightSum > 0 ? total / weightSum : null;
-}

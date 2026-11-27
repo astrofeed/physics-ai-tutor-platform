@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { REPORT_CRITERION_MAX_SCORE } from "./report-score-scale";
 import type { HumanGrading, ReportHumanReviewDetail } from "@/types/human-grading";
 import type { FeedbackEmailStatus } from "@/lib/feedback-email";
 
@@ -92,7 +93,7 @@ export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
  * structured outputs): a summary, evidence-referenced comments, and a score
  * with its reason for each rubric criterion.
  */
-export const REPORT_CRITERION_MAX_SCORE = 10;
+export { REPORT_CRITERION_MAX_SCORE };
 
 export const ReportCriterionScoreSchema = z.object({
   criterion: z.string(),
@@ -121,6 +122,9 @@ export const ReportCommentSchema = z.object({
   quote: z.string().nullable(),
   /** Quick visual category for graders: strength, issue, note, or ai_style. */
   category: z.enum(COMMENT_CATEGORIES).nullable(),
+  evidenceKind: z.enum(["Text", "Equation", "Figure", "Table", "Source"]).nullable(),
+  criterion: z.string().nullable(),
+  needsStaffCheck: z.boolean().nullable(),
 });
 
 export const ReportEvaluationSchema = z.object({
@@ -183,12 +187,21 @@ export function parseReportEvaluation(json: string | null, rubric?: string): Rep
             page: "page" in item ? item.page : null,
             quote: "quote" in item ? item.quote : null,
             category: "category" in item ? item.category : null,
+            evidenceKind: item.evidenceKind ?? null,
+            criterion: item.criterion ?? null,
+            needsStaffCheck: item.needsStaffCheck ?? null,
           };
         });
       }
     }
     const result = ReportEvaluationSchema.safeParse(parsed);
     if (!result.success) return null;
+    if (rubric !== undefined) {
+      const names = new Set(reportRubricCriteria(rubric).map((item) => item.name));
+      for (const comment of result.data.comments) {
+        if (comment.criterion && !names.has(comment.criterion)) comment.criterion = null;
+      }
+    }
     if (result.data.criterionScores && !validReportScores(result.data.criterionScores, rubric)) {
       return { ...result.data, criterionScores: null };
     }

@@ -22,6 +22,7 @@ import type {
 import { parseReportEvaluation, REPORT_CRITERION_MAX_SCORE } from "@/lib/report-grading";
 import { parseEvaluation } from "@/lib/presentation-grading";
 import { canManageReview, validateAgainst } from "@/lib/human-score-validation";
+import { reportTotalFromStorage, reportTotalToStorage, REPORT_TOTAL_MAX_SCORE } from "@/lib/report-score-scale";
 
 export type { SaveHumanScoresResult } from "@/types/human-grading";
 
@@ -87,7 +88,7 @@ export function toReportHumanReviewDetail(
     isMine: Boolean(viewerUserId && row.slotKey === personalSlotKey(viewerUserId)),
     isExtraSlot,
     scores: row.scores.map((s) => ({ name: s.criterion, score: Number(s.score) })),
-    total: row.total === null ? null : Number(row.total),
+    total: row.total === null ? null : reportTotalFromStorage(Number(row.total)),
     comments: row.comments,
     gradedAt: row.gradedAt?.toISOString() ?? null,
     gradedByName: displayName,
@@ -118,10 +119,16 @@ async function loadAndValidateReportCriteria(
   if (job.status !== "DONE" || !criteria) {
     return { ok: false, status: 409, error: "The AI review must finish first" };
   }
+  if ("total" in input && !Number.isInteger(input.total * 10)) {
+    return { ok: false, status: 400, error: "Use at most one decimal place for the report total." };
+  }
+  if ("scores" in input && input.scores.length !== criteria.length) {
+    return { ok: false, status: 400, error: "Score every rubric item or enter a total instead." };
+  }
   return validateAgainst(
     input,
     new Map(criteria.map((c) => [c.criterion, REPORT_CRITERION_MAX_SCORE])),
-    REPORT_CRITERION_MAX_SCORE
+    REPORT_TOTAL_MAX_SCORE
   );
 }
 
@@ -129,6 +136,10 @@ export interface SaveReportReviewOptions {
   requesterRole?: string;
   reviewId?: string;
   graderLabel?: string;
+}
+
+function toStoredReportScores(input: HumanScoresInput): HumanScoresInput {
+  return "total" in input ? { ...input, total: reportTotalToStorage(input.total) } : input;
 }
 
 /**
@@ -139,11 +150,12 @@ export interface SaveReportReviewOptions {
 export async function saveReportHumanScores(
   jobId: string,
   graderId: string,
-  input: HumanScoresInput,
+  points: HumanScoresInput,
   options: SaveReportReviewOptions = {}
 ): Promise<SaveHumanScoresResult & { reviewId?: string }> {
-  const valid = await loadAndValidateReportCriteria(jobId, input);
+  const valid = await loadAndValidateReportCriteria(jobId, points);
   if (!valid.ok) return valid;
+  const input = toStoredReportScores(points);
 
   const trimmedComments =
     input.comments === undefined ? undefined : input.comments.trim() || null;
@@ -242,11 +254,12 @@ export async function saveReportHumanScores(
 export async function createExtraReportHumanReview(
   jobId: string,
   graderId: string,
-  input: HumanScoresInput,
+  points: HumanScoresInput,
   graderLabel?: string
 ): Promise<SaveHumanScoresResult & { reviewId?: string }> {
-  const valid = await loadAndValidateReportCriteria(jobId, input);
+  const valid = await loadAndValidateReportCriteria(jobId, points);
   if (!valid.ok) return valid;
+  const input = toStoredReportScores(points);
 
   const trimmedComments =
     input.comments === undefined ? null : input.comments.trim() || null;

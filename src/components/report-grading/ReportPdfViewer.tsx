@@ -13,7 +13,8 @@ import {
   type ReportCommentCategory,
 } from "@/lib/report-grading";
 import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categories";
-import { ReportPdfPageSheet, type PdfDocLike } from "./ReportPdfPageSheet";
+import type { PdfDocLike } from "./ReportPdfPageSheet";
+import { ReportPdfRow } from "./ReportPdfRow";
 
 interface ReportPdfViewerProps {
   sidebar: React.ReactNode;
@@ -218,7 +219,7 @@ export function ReportPdfViewer({
       <div className="grid gap-y-4 lg:grid-cols-[var(--report-width)_minmax(0,1fr)]">
         <div className="min-w-0 lg:col-start-1 lg:pr-4">{toolbar}</div>
         <aside className="min-w-0 lg:col-start-2 lg:row-[var(--sidebar-rows)] lg:pl-4"
-          style={{ "--sidebar-rows": `1 / span ${showNotes ? 1 : numPages + 1}` } as React.CSSProperties}>
+          style={{ "--sidebar-rows": `1 / span ${showNotes ? 1 : numPages * (numPages > 1 ? 2 : 1) + 1}` } as React.CSSProperties}>
           <div className={showNotes ? "" : "lg:sticky lg:top-12"}>{sidebar}</div>
         </aside>
         {pdfError ? (
@@ -232,8 +233,7 @@ export function ReportPdfViewer({
         ) : doc && multiplyTransform ? (
           Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => {
             const notes = commentsByPage.get(pageNumber) ?? EMPTY_NOTES;
-            return <React.Fragment key={pageNumber}>
-              <div className="min-w-0 lg:col-start-1 lg:pr-4"><ReportPdfPageSheet
+            return <ReportPdfRow key={pageNumber} showNotes={showNotes} onSelectNote={selectNote}
               doc={doc}
               pageNumber={pageNumber}
               scale={scale}
@@ -242,12 +242,7 @@ export function ReportPdfViewer({
               activeCommentIndex={activeCommentIndex}
               onSelectComment={selectFromPdf}
               onReady={pageReady}
-              /></div>
-              {showNotes && <div className="min-w-0 lg:col-start-2 lg:pl-4">
-                <ReportNotes notes={notes} active={activeCommentIndex}
-                  onSelect={selectNote} title={`Page ${pageNumber} notes`} />
-              </div>}
-            </React.Fragment>;
+              />;
           })
         ) : null}
       </div>

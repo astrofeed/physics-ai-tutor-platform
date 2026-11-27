@@ -5,9 +5,10 @@ export interface HumanScoreItem {
   aiScore: number;
 }
 
-/** The overall scale (report 0-10, presentation 0-100) and the AI's total on it. */
+/** The overall points scale and the AI's total on it. */
 export interface HumanTotalItem {
   max: number;
+  step?: number;
   aiScore: number | null;
 }
 

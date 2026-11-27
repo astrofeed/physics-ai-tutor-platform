@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { weightedAverage } from "@/lib/human-grading";
+import { reportWeightedTotal, REPORT_TOTAL_MAX_SCORE } from "@/lib/report-score-scale";
 import type { ReportEvaluation, ReportJobDetail, ReportCommentCategory } from "@/lib/report-grading";
 import { reportEvaluationToText } from "./report-job-format";
 import { ReportSuggestionChecks } from "./ReportSuggestionChecks";
@@ -22,7 +22,7 @@ export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
   onToggleAiScores, visibleCategories }: Props) {
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const scores = evaluation.criterionScores;
-  const aiTotal = scores && weightedAverage(scores.map((c) => ({ name: c.criterion, score: c.score })),
+  const aiTotal = scores && reportWeightedTotal(scores.map((c) => ({ name: c.criterion, score: c.score })),
     (name) => scores.find((c) => c.criterion === name)?.weightPercent);
   async function copy() {
     const text = reportEvaluationToText(evaluation, {
@@ -44,6 +44,7 @@ export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
         <Button variant="ghost" size="sm" onClick={copy}>Copy visible</Button>
       </div>
       {rubricMode ? <>
+        <p className="text-xs text-muted-foreground">Rubric items are scored out of 10. The weighted report total is out of 100.</p>
         {job.rubricContent && (
           <div tabIndex={0} aria-label="Grading instructions" className="max-h-72 overflow-y-auto py-2">
             <MarkdownContent content={job.rubricContent} className="text-sm" />
@@ -54,7 +55,7 @@ export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
             {aiScoresVisible ? "Hide AI scores" : "Show AI scores"}
           </Button>
           {aiScoresVisible ? <>
-            {aiTotal !== null && <p className="text-sm font-medium">Weighted total: {aiTotal.toFixed(2)} / 10</p>}
+            {aiTotal !== null && <p className="text-sm font-medium">Weighted total: {aiTotal.toFixed(2)} / {REPORT_TOTAL_MAX_SCORE}</p>}
             <ol className="divide-y">{scores.map((s) => (
               <li key={s.criterion} className="space-y-1 py-2 text-sm">
                 <strong>{s.criterion} ({s.weightPercent}%) · {s.score}/10</strong>

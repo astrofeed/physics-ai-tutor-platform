@@ -169,7 +169,7 @@ export function HumanScoreForm({
             inputMode="decimal"
             min={0}
             max={total.max}
-            step="any"
+            step={total.step ?? "any"}
             autoFocus={focusOnOpen}
             value={totalDraft}
             onChange={(e) => change({ totalDraft: e.target.value })}

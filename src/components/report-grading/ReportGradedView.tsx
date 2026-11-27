@@ -13,7 +13,7 @@ import { ReportJobResult } from "@/components/report-grading/ReportJobResult";
 import { ReportMultiGraderPanel } from "@/components/report-grading/ReportMultiGraderPanel";
 import { DEFAULT_VISIBLE_CATEGORIES } from "@/components/report-grading/report-comment-categories";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
-import { weightedAverage } from "@/lib/human-grading";
+import { reportWeightedTotal, REPORT_TOTAL_MAX_SCORE } from "@/lib/report-score-scale";
 import {
   parseReportEvaluation,
   REPORT_CRITERION_MAX_SCORE,
@@ -116,13 +116,14 @@ export function ReportGradedView({ job, onChanged }: Props) {
                 aiScore: entry.score,
               }))}
               total={{
-                max: REPORT_CRITERION_MAX_SCORE,
-                aiScore: weightedAverage(
+                max: REPORT_TOTAL_MAX_SCORE,
+                step: 0.1,
+                aiScore: reportWeightedTotal(
                   criterionScores.map((c) => ({ name: c.criterion, score: c.score })),
                   weightOf
                 ),
               }}
-              totalFromItems={(scores) => weightedAverage(scores, weightOf)}
+              totalFromItems={(scores) => reportWeightedTotal(scores, weightOf)}
               myReview={job.human}
               allReviews={job.humanReviews ?? []}
               aiScoresVisible={rubricMode && aiScoresVisible}
