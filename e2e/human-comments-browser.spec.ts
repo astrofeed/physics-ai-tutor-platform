@@ -50,7 +50,7 @@ test.beforeAll(async () => {
     version: (presentationVersion._max.version ?? 0) + 1, content: "Comments QA rubric", updatedById: professor.id,
   } });
   const reportRubric = await prisma.reportRubric.create({ data: {
-    version: (reportVersion._max.version ?? 0) + 1, content: "Comments QA rubric", updatedById: professor.id,
+    version: (reportVersion._max.version ?? 0) + 1, content: "### Physics (100%)", updatedById: professor.id,
   } });
   await prisma.presentationRoster.create({ data: { sourceUrl: DEFAULT_ROSTER_SHEET_URL, importedById: professor.id } });
   const presentationJob = await prisma.presentationGradingJob.create({ data: {
@@ -59,7 +59,7 @@ test.beforeAll(async () => {
   } });
   const reportJob = await prisma.reportGradingJob.create({ data: {
     title: `Comments QA ${runId}`, authors: "QA Student", status: "DONE", rubricId: reportRubric.id,
-    createdById: professor.id, resultJson: JSON.stringify(report),
+    createdById: professor.id, resultJson: JSON.stringify(report), reportText: "A synthetic report on limiting cases.",
   } });
   jobs.presentation = presentationJob.id;
   jobs.report = reportJob.id;
@@ -79,6 +79,7 @@ for (const kind of ["presentation", "report"] as const) {
     const total = kind === "presentation" ? "85" : "8.5";
     const itemScore = kind === "presentation" ? "80" : "8";
     await page.goto(`/${kind}-grading/${jobs[kind]}`);
+    if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
     const input = page.getByLabel("Comments (optional)");
     const save = page.getByRole("button", { name: "Save scores and comments" });
     const edit = page.getByRole("button", { name: "Edit scores and comments" });
@@ -89,12 +90,14 @@ for (const kind of ["presentation", "report"] as const) {
     await save.click();
     await expect(edit).toBeVisible();
     await page.reload();
+    if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
     await edit.click();
     await expect(input).toHaveValue("");
     await input.fill(comments);
     await save.click();
     await expect(page.getByRole("region", { name: "Your comments" })).toContainText(comments);
     await page.reload();
+    if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("region", { name: "Your comments" })).toContainText(comments);
     await edit.click();
     await expect(input).toHaveValue(comments);
@@ -109,6 +112,7 @@ for (const kind of ["presentation", "report"] as const) {
     await save.click();
     await expect(edit).toBeVisible();
     await page.reload();
+    if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("region", { name: "Your comments" })).toContainText("Explain the limiting case.");
     await edit.click();
     for (const width of [1280, 768, 375]) {
@@ -121,6 +125,7 @@ for (const kind of ["presentation", "report"] as const) {
     await save.click();
     await expect(edit).toBeVisible();
     await page.reload();
+    if (kind === "report") await page.getByText("End of report", { exact: true }).scrollIntoViewIfNeeded();
     await expect(edit).toBeVisible();
     await expect(page.getByRole("region", { name: "Your comments" })).toHaveCount(0);
     await edit.click();

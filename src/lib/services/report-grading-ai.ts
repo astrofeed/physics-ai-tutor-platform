@@ -7,6 +7,8 @@ import {
   REPORT_GRADING_MODEL,
   ReportEvaluationSchema,
   parseReportEvaluation,
+  reportRubricCriteria,
+  hasWeightedReportCriteria, RUBRIC_WEIGHT_HINT,
   type ReportEvaluation,
 } from "@/lib/report-grading";
 import type { JobRecord } from "@/lib/services/report-grading-service";
@@ -60,7 +62,8 @@ const REPORT_GRADING_GUARD =
   "passages that show notable AI-generated writing cues such as uniform " +
   "boilerplate phrasing, abrupt tone shifts, or overly polished prose paired " +
   "with skipped derivation steps; AI use is permitted in this course so keep " +
-  "`ai_style` remarks neutral and informational for TAs), and criterionScores " +
+  "`ai_style` remarks neutral and informational for TAs; never adjust scores based on writing style " +
+  "or suspected AI use). Flag illegible symbols or figures for staff to check, not as missing work. Return criterionScores " +
   "(one entry per rubric criterion, with the criterion name, its weight in " +
   "percent from the rubric, a score from 0 to 10, and the evidence-based " +
   "reason for that score). " +
@@ -166,6 +169,10 @@ export async function gradeReport(
     where: { id: job.rubricId },
   });
   if (!rubric) throw new Error("Rubric version no longer exists");
+  const criteria = reportRubricCriteria(rubric.content);
+  if (!hasWeightedReportCriteria(rubric.content)) {
+    throw new Error(`Cannot verify this rubric's scores. ${RUBRIC_WEIGHT_HINT}`);
+  }
 
   const response = await getOpenAI().responses.create({
     model: job.model ?? REPORT_GRADING_MODEL,
@@ -173,11 +180,11 @@ export async function gradeReport(
     text: {
       format: zodTextFormat(ReportEvaluationSchema, "report_evaluation"),
     },
-    input: buildGradingInput(rubric.content, job, report, suggestions),
+    input: buildGradingInput(`${rubric.content}\n\nUse these exact criterion names and weights:\n${JSON.stringify(criteria)}`, job, report, suggestions),
   });
-  const evaluation = parseReportEvaluation(response.output_text);
-  if (!evaluation) {
-    throw new Error("The model returned an evaluation in an unexpected format");
+  const evaluation = parseReportEvaluation(response.output_text, rubric.content);
+  if (!evaluation?.criterionScores) {
+    throw new Error("The AI review did not return all criteria with the names and weights in this job's rubric. Retry the review.");
   }
   return { json: response.output_text, evaluation };
 }

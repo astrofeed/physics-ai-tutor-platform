@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ReportSplit } from "./ReportSplit";
+import { ReportLeaveGuard } from "./ReportLeaveGuard";
+import { Button } from "@/components/ui/button";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { FeedbackEmailCard } from "@/components/grading/FeedbackEmailCard";
 import { ReportDocumentPane } from "@/components/report-grading/ReportDocumentPane";
 import { ReportGradingNavBar } from "@/components/report-grading/ReportGradingNavBar";
@@ -27,6 +32,11 @@ interface Props {
  * navigation on the right.
  */
 export function ReportGradedView({ job, onChanged }: Props) {
+  const router = useRouter();
+  const [read, setRead] = useState(false);
+  const onRead = useCallback(() => setRead(true), []);
+  const [rubricMode, setRubricMode] = useState(false);
+  const nextUngraded = job.navigation?.nextUngradedId;
   const { saveScores, addExtraReview, deleteReview, revealAi, saving } = useHumanGrading(
     "report",
     job.id,
@@ -40,17 +50,14 @@ export function ReportGradedView({ job, onChanged }: Props) {
     () => new Set(DEFAULT_VISIBLE_CATEGORIES)
   );
 
-  const evaluation = parseReportEvaluation(job.resultJson);
+  const evaluation = useMemo(() => parseReportEvaluation(job.resultJson, job.rubricContent), [job.resultJson, job.rubricContent]);
   const criterionScores = evaluation?.criterionScores ?? null;
   const weightByCriterion = new Map(criterionScores?.map((c) => [c.criterion, c.weightPercent]));
   const weightOf = (criterion: string) => weightByCriterion.get(criterion);
 
   const toggleAiScores = () => {
-    setAiScoresVisible((prev) => {
-      const next = !prev;
-      if (next) revealAi();
-      return next;
-    });
+    if (!aiScoresVisible) revealAi();
+    setAiScoresVisible(!aiScoresVisible);
   };
 
   const toggleCategory = (category: ReportCommentCategory) => {
@@ -63,9 +70,21 @@ export function ReportGradedView({ job, onChanged }: Props) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-8 border-t border-gray-200 pt-5 dark:border-gray-800 lg:grid-cols-12 lg:items-start">
-      <div className="lg:col-span-6 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] min-h-[420px]">
+    <div className="space-y-6 border-t pt-4">
+      <ReportLeaveGuard />
+      <div role="group" aria-label="Review mode"
+        className="sticky top-0 z-20 flex gap-1 border-b bg-background py-1 lg:justify-end">
+        <Button variant={rubricMode ? "ghost" : "secondary"} size="sm" aria-pressed={!rubricMode}
+          onClick={() => setRubricMode(false)}>Page notes</Button>
+        <Button variant={rubricMode ? "secondary" : "ghost"} size="sm" aria-pressed={rubricMode}
+          onClick={() => setRubricMode(true)}>Rubric &amp; scoring</Button>
+      </div>
+      <ReportSplit>
         <ReportDocumentPane
+          onRead={onRead} showNotes={!rubricMode}
+          sidebar={evaluation ? <ReportJobResult key={rubricMode ? "rubric" : "notes"} job={job} evaluation={evaluation} rubricMode={rubricMode}
+            aiScoresVisible={aiScoresVisible} onToggleAiScores={toggleAiScores}
+            visibleCategories={visibleCategories} /> : <p>The AI review could not be read.</p>}
           job={job}
           comments={evaluation?.comments ?? []}
           activeCommentIndex={activeCommentIndex}
@@ -73,22 +92,24 @@ export function ReportGradedView({ job, onChanged }: Props) {
           visibleCategories={visibleCategories}
           onToggleCategory={toggleCategory}
         />
-      </div>
+      </ReportSplit>
 
-      <div className="lg:col-span-6 space-y-7 min-w-0 pb-8">
-        <ReportJobResult
-          job={job}
-          activeCommentIndex={activeCommentIndex}
-          onSelectComment={setActiveCommentIndex}
-          aiScoresVisible={aiScoresVisible}
-          onToggleAiScores={toggleAiScores}
-          visibleCategories={visibleCategories}
-          onToggleCategory={toggleCategory}
-        />
-
-        {criterionScores ? (
+      <div className="mx-auto max-w-4xl space-y-6">
+        {evaluation && <details><summary className="cursor-pointer text-sm font-medium">Feedback email</summary>
+          <FeedbackEmailCard kind="report" jobId={job.id} status={job} onChanged={onChanged} />
+        </details>}
+        {criterionScores && !read && <p role="status">Read to the end of the report to enter scores.</p>}
+        {criterionScores && read ? (
           <div className="border-t border-gray-200 pt-6 dark:border-gray-800">
+            {rubricMode && job.rubricContent && <details className="mb-4">
+              <summary className="cursor-pointer text-sm font-medium">Consult rubric while scoring</summary>
+              <div className="max-h-64 overflow-auto py-2" tabIndex={0}>
+                <MarkdownContent content={job.rubricContent} className="text-sm" />
+              </div>
+            </details>}
             <ReportMultiGraderPanel
+              jobId={job.id}
+              onNext={nextUngraded ? () => router.push(`/report-grading/${nextUngraded}`) : undefined}
               items={criterionScores.map((entry) => ({
                 name: entry.criterion,
                 max: REPORT_CRITERION_MAX_SCORE,
@@ -104,7 +125,7 @@ export function ReportGradedView({ job, onChanged }: Props) {
               totalFromItems={(scores) => weightedAverage(scores, weightOf)}
               myReview={job.human}
               allReviews={job.humanReviews ?? []}
-              aiScoresVisible={aiScoresVisible}
+              aiScoresVisible={rubricMode && aiScoresVisible}
               saving={saving}
               onSaveMine={saveScores}
               onAddExtra={addExtraReview}
@@ -115,14 +136,6 @@ export function ReportGradedView({ job, onChanged }: Props) {
 
         <ReportGradingNavBar navigation={job.navigation} />
 
-        {evaluation ? (
-          <FeedbackEmailCard
-            kind="report"
-            jobId={job.id}
-            status={job}
-            onChanged={onChanged}
-          />
-        ) : null}
       </div>
     </div>
   );

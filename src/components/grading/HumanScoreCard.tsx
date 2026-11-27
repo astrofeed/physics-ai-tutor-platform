@@ -8,6 +8,7 @@ import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
 import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 import { formatTimestamp } from "@/components/presentation-grading/job-format";
 import { HumanScoreForm } from "./HumanScoreForm";
+import { useScoreDraftCache } from "./use-score-draft";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "./human-score-items";
 
 interface Props {
@@ -24,6 +25,8 @@ interface Props {
   title?: string;
   /** Render without an outer Card border/box for flat split-pane layouts. */
   borderless?: boolean;
+  draftKey?: string;
+  onNext?: () => void;
 }
 
 interface Row {
@@ -102,9 +105,12 @@ export function HumanScoreCard({
   hideAiScores = false,
   title,
   borderless = false,
+  draftKey,
+  onNext,
 }: Props) {
   const graded = human.scores.length > 0 || human.total !== null;
-  const [editing, setEditing] = useState(!graded);
+  const cache = useScoreDraftCache();
+  const [editing, setEditing] = useState(!graded || (!!draftKey && cache.has(draftKey)));
   const [openedByGrader, setOpenedByGrader] = useState(false);
 
   const savedByName = new Map(human.scores.map((entry) => [entry.name, entry.score]));
@@ -129,6 +135,8 @@ export function HumanScoreCard({
 
   const body = editing ? (
     <HumanScoreForm
+      draftKey={draftKey}
+      onNext={onNext}
       items={items}
       total={total}
       human={human}

@@ -24,6 +24,7 @@ export async function PUT(
   }
   const { reviewId, graderLabel, ...scoresInput } = body.data;
   const result = await saveReportHumanScores(params.id, auth.user.id, scoresInput, {
+    requesterRole: auth.user.role,
     reviewId,
     graderLabel,
   });

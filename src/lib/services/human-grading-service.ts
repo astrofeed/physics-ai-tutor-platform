@@ -21,6 +21,7 @@ import type {
 } from "@/types/human-grading";
 import { parseReportEvaluation, REPORT_CRITERION_MAX_SCORE } from "@/lib/report-grading";
 import { parseEvaluation } from "@/lib/presentation-grading";
+import { canManageReview, validateAgainst } from "@/lib/human-score-validation";
 
 export type { SaveHumanScoresResult } from "@/types/human-grading";
 
@@ -94,43 +95,6 @@ export function toReportHumanReviewDetail(
   };
 }
 
-/**
- * Checks the submitted scores against the names and upper bounds the AI
- * result defines (so human and AI scores pair up one-to-one), or a directly
- * entered total against the scale's maximum.
- */
-function validateAgainst(
-  input: HumanScoresInput,
-  maxByName: Map<string, number>,
-  maxTotal: number
-): SaveHumanScoresResult {
-  if ("total" in input) {
-    if (input.total > maxTotal) {
-      return { ok: false, status: 400, error: `Total must be between 0 and ${maxTotal}` };
-    }
-    return { ok: true };
-  }
-  const seen = new Set<string>();
-  for (const entry of input.scores) {
-    const max = maxByName.get(entry.name);
-    if (max === undefined) {
-      return { ok: false, status: 400, error: `Unknown item: ${entry.name}` };
-    }
-    if (seen.has(entry.name)) {
-      return { ok: false, status: 400, error: `Duplicate item: ${entry.name}` };
-    }
-    if (entry.score > max) {
-      return {
-        ok: false,
-        status: 400,
-        error: `"${entry.name}" must be between 0 and ${max}`,
-      };
-    }
-    seen.add(entry.name);
-  }
-  return { ok: true };
-}
-
 /** A total replaces any per-item scores and vice versa; `humanGradedAt` keeps its first value. */
 function gradingUpdate(input: HumanScoresInput, graderId: string, gradedAt: Date | null) {
   return {
@@ -147,10 +111,10 @@ async function loadAndValidateReportCriteria(
 ): Promise<SaveHumanScoresResult> {
   const job = await prisma.reportGradingJob.findUnique({
     where: { id: jobId },
-    select: { status: true, resultJson: true },
+    select: { status: true, resultJson: true, rubric: { select: { content: true } } },
   });
   if (!job) return { ok: false, status: 404, error: "Job not found" };
-  const criteria = parseReportEvaluation(job.resultJson)?.criterionScores;
+  const criteria = parseReportEvaluation(job.resultJson, job.rubric.content)?.criterionScores;
   if (job.status !== "DONE" || !criteria) {
     return { ok: false, status: 409, error: "The AI review must finish first" };
   }
@@ -162,6 +126,7 @@ async function loadAndValidateReportCriteria(
 }
 
 export interface SaveReportReviewOptions {
+  requesterRole?: string;
   reviewId?: string;
   graderLabel?: string;
 }
@@ -188,12 +153,15 @@ export async function saveReportHumanScores(
 
   const savedId = await prisma.$transaction(async (tx) => {
     let reviewId: string;
+    let ownerId = graderId;
     if (options.reviewId) {
       const existing = await tx.reportHumanReview.findFirst({
         where: { id: options.reviewId, jobId },
-        select: { id: true, gradedAt: true },
+        select: { id: true, gradedAt: true, graderId: true },
       });
       if (!existing) return null;
+      ownerId = existing.graderId;
+      if (!canManageReview(ownerId, graderId, options.requesterRole)) return false;
       await tx.reportHumanReview.update({
         where: { id: existing.id },
         data: {
@@ -256,13 +224,14 @@ export async function saveReportHumanScores(
     if (jobRow) {
       await tx.reportGradingJob.update({
         where: { id: jobId },
-        data: gradingUpdate(input, graderId, jobRow.humanGradedAt),
+        data: gradingUpdate(input, ownerId, jobRow.humanGradedAt),
       });
     }
 
     return reviewId;
   });
 
+  if (savedId === false) return { ok: false, status: 403, error: "You can only edit your own review" };
   if (!savedId) {
     return { ok: false, status: 404, error: "Review slot not found" };
   }
@@ -326,11 +295,7 @@ export async function deleteReportHumanReview(
   if (!existing) {
     return { ok: false, status: 404, error: "Review not found" };
   }
-  const canDelete =
-    existing.graderId === requesterId ||
-    requesterRole === "PROFESSOR" ||
-    requesterRole === "ADMIN";
-  if (!canDelete) {
+  if (!canManageReview(existing.graderId, requesterId, requesterRole)) {
     return { ok: false, status: 403, error: "You can only delete your own review" };
   }
   await prisma.reportHumanReview.delete({ where: { id: existing.id } });

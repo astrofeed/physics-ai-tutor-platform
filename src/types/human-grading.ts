@@ -46,4 +46,4 @@ export interface HumanScoreRow {
 
 export type SaveHumanScoresResult =
   | { ok: true }
-  | { ok: false; status: 404 | 409 | 400; error: string };
+  | { ok: false; status: 403 | 404 | 409 | 400; error: string };

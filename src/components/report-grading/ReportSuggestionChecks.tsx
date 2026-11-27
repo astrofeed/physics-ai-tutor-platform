@@ -10,11 +10,12 @@ import {
 interface Props {
   checks: ReportSuggestionCheck[];
   presentationJobId: string | null;
+  onToggle: (open: boolean) => void;
 }
 
-export function ReportSuggestionChecks({ checks, presentationJobId }: Props) {
+export function ReportSuggestionChecks({ checks, presentationJobId, onToggle }: Props) {
   return (
-    <details className="space-y-2 text-sm">
+    <details className="space-y-2 text-sm" onToggle={(e) => onToggle(e.currentTarget.open)}>
       <summary className="cursor-pointer font-medium">Optional presentation directions</summary>
       <p className="text-muted-foreground">
         A student’s own direction counts just as much. Skipping a suggestion does not lower

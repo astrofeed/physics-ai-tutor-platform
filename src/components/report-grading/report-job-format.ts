@@ -1,9 +1,11 @@
 import {
   SUGGESTION_STATUS_LABELS,
   type ReportEvaluation,
+  type ReportCommentCategory,
   type ReportJobStatusValue,
 } from "@/lib/report-grading";
 import type { BadgeVariant } from "@/components/presentation-grading/job-format";
+import { effectiveCategory } from "./report-comment-categories";
 
 export {
   formatDuration,
@@ -24,20 +26,22 @@ export const REPORT_STATUS_BADGE_VARIANTS: Record<ReportJobStatusValue, BadgeVar
   FAILED: "destructive",
 };
 
-/** Markdown rendering of the whole review, for the copy button. */
-export function reportEvaluationToText(e: ReportEvaluation): string {
+export function reportEvaluationToText(e: ReportEvaluation, options: {
+  categories: Set<ReportCommentCategory>; includeSummary: boolean; includeDirections: boolean; includeScores: boolean;
+}): string {
   const comments = e.comments
-    .map((c, i) => `${i + 1}. [${c.reference}] ${c.comment}`)
+    .flatMap((c, i) => options.categories.has(effectiveCategory(c.category))
+      ? [`#${i + 1}${c.page ? ` · p. ${c.page}` : ""} [${c.reference}] ${c.comment}`] : [])
     .join("\n");
-  const sections = [`## Summary\n${e.summary}`];
-  if (e.suggestionChecks && e.suggestionChecks.length > 0) {
+  const sections = options.includeSummary ? [`## Summary\n${e.summary}`] : [];
+  if (options.includeDirections && e.suggestionChecks?.length) {
     const checks = e.suggestionChecks
       .map((c) => `- ${c.suggestion} — ${SUGGESTION_STATUS_LABELS[c.status]}\n  ${c.evidence}`)
       .join("\n");
     sections.push(`## Presentation directions (observations)\n${checks}`);
   }
-  sections.push(`## Comments\n${comments}`);
-  if (e.criterionScores) {
+  if (comments) sections.push(`## Comments\n${comments}`);
+  if (options.includeScores && e.criterionScores) {
     const scores = e.criterionScores
       .map((s) => `- ${s.criterion} (${s.weightPercent}%): ${s.score}/10\n  ${s.reason}`)
       .join("\n");

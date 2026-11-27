@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
 import { HumanScoreForm } from "@/components/grading/HumanScoreForm";
+import { useScoreDraftCache } from "@/components/grading/use-score-draft";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "@/components/grading/human-score-items";
 import { formatTimestamp } from "@/components/presentation-grading/job-format";
 import { GRADER_LABEL_MAX_CHARS, humanTotalOf } from "@/lib/human-grading";
@@ -19,6 +20,8 @@ import type {
 } from "@/types/human-grading";
 
 interface Props {
+  jobId: string;
+  onNext?: () => void;
   items: HumanScoreItem[];
   total: HumanTotalItem;
   totalFromItems: (scores: HumanScoreEntry[]) => number | null;
@@ -45,6 +48,8 @@ function graderDisplayName(review: ReportHumanReviewDetail, fallbackIndex: numbe
 }
 
 export function ReportMultiGraderPanel({
+  jobId,
+  onNext,
   items,
   total,
   totalFromItems,
@@ -57,7 +62,8 @@ export function ReportMultiGraderPanel({
   onDeleteReview,
 }: Props) {
   const [showOthers, setShowOthers] = useState(false);
-  const [addingSlot, setAddingSlot] = useState(false);
+  const draftCache = useScoreDraftCache();
+  const [addingSlot, setAddingSlot] = useState(() => draftCache.has(`${jobId}:extra`));
   const [extraLabel, setExtraLabel] = useState("");
 
   const gradedReviews = allReviews.filter(
@@ -76,6 +82,8 @@ export function ReportMultiGraderPanel({
   return (
     <div className="space-y-6">
       <HumanScoreCard
+        draftKey={`${jobId}:mine`}
+        onNext={addingSlot || draftCache.has(`${jobId}:extra`) || extraLabel ? undefined : onNext}
         items={items}
         total={total}
         totalFromItems={totalFromItems}
@@ -86,7 +94,7 @@ export function ReportMultiGraderPanel({
         borderless
       />
 
-      <div className="space-y-3">
+      <div className="space-y-3" data-unsaved-review={!!extraLabel || (!addingSlot && draftCache.has(`${jobId}:extra`)) || undefined}>
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
@@ -125,6 +133,8 @@ export function ReportMultiGraderPanel({
               />
             </div>
             <HumanScoreForm
+              draftKey={`${jobId}:extra`}
+              idPrefix="extra-human"
               items={items}
               total={total}
               human={EMPTY_REVIEW}

@@ -81,7 +81,7 @@ export function downloadCsv(filename: string, content: string): void {
  * jobs get blank cells.
  */
 export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
-  const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson));
+  const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson, job.rubricContent));
   const suggestionCount = Math.max(
     0,
     ...evaluations.map((e) => e?.suggestionChecks?.length ?? 0)

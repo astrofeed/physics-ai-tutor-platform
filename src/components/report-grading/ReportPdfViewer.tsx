@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useReportPdfBytes } from "@/hooks/useReportPdfBytes";
+import { ReportEnd } from "./ReportEnd";
+import { ReportNotes, type IndexedNote } from "./ReportNotes";
 import { Download, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,6 +16,9 @@ import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categ
 import { ReportPdfPageSheet, type PdfDocLike } from "./ReportPdfPageSheet";
 
 interface ReportPdfViewerProps {
+  sidebar: React.ReactNode;
+  showNotes: boolean;
+  onRead: () => void;
   pdfUrl: string;
   filename: string | null;
   comments: ReportComment[];
@@ -30,7 +36,11 @@ export function ReportPdfViewer({
   onSelectComment,
   visibleCategories,
   onToggleCategory,
+  sidebar,
+  showNotes,
+  onRead,
 }: ReportPdfViewerProps) {
+  const bytes = useReportPdfBytes(pdfUrl);
   const [doc, setDoc] = useState<PdfDocLike | null>(null);
   const [multiplyTransform, setMultiplyTransform] = useState<
     ((m1: number[], m2: number[]) => number[]) | null
@@ -39,30 +49,24 @@ export function ReportPdfViewer({
   const [scale, setScale] = useState(1.05);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [readyPages, setReadyPages] = useState<Set<number>>(() => new Set());
+  const pageReady = useCallback((page: number) =>
+    setReadyPages((prev) => prev.has(page) ? prev : new Set(prev).add(page)), []);
 
   useEffect(() => {
+    const buffer = bytes.data;
+    if (!buffer) return;
     let cancelled = false;
     let loadedDoc: PdfDocLike | null = null;
 
-    async function load() {
+    async function load(buffer: ArrayBuffer) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(pdfUrl, { credentials: "include" });
-        if (!res.ok) {
-          throw new Error(
-            res.status === 404
-              ? "Report PDF is no longer stored."
-              : `Failed to load PDF (${res.status}).`
-          );
-        }
-        const buffer = await res.arrayBuffer();
-        if (cancelled) return;
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         const loadingTask = pdfjs.getDocument({
-          data: new Uint8Array(buffer),
+          data: new Uint8Array(buffer.slice(0)),
           cMapUrl: "/pdfjs/cmaps/",
           cMapPacked: true,
           standardFontDataUrl: "/pdfjs/standard_fonts/",
@@ -86,14 +90,14 @@ export function ReportPdfViewer({
       }
     }
 
-    void load();
+    void load(buffer);
     return () => {
       cancelled = true;
       if (loadedDoc) {
         void loadedDoc.destroy();
       }
     };
-  }, [pdfUrl]);
+  }, [bytes.data]);
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<ReportCommentCategory, number>();
@@ -118,21 +122,23 @@ export function ReportPdfViewer({
     return map;
   }, [comments, visibleCategories]);
 
-  useEffect(() => {
-    if (activeCommentIndex === null) return;
-    const page = comments[activeCommentIndex]?.page;
+  const selectNote = (index: number) => {
+    onSelectComment(index);
+    const page = comments[index].page;
     if (!page) return;
-    const target = pageRefs.current.get(page);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [activeCommentIndex, comments]);
-
-  const registerRef = (pageNumber: number, el: HTMLDivElement | null) => {
-    if (el) pageRefs.current.set(pageNumber, el);
-    else pageRefs.current.delete(pageNumber);
+    const sheet = document.getElementById(`report-page-${page}`);
+    const target = sheet?.querySelector<HTMLButtonElement>(`[aria-label="Jump to note #${index + 1}"]`) ?? sheet;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center", inline: "nearest" });
+  };
+  const selectFromPdf = (index: number) => {
+    onSelectComment(index);
+    const note = document.getElementById(`report-note-${index}`);
+    note?.focus({ preventScroll: true });
+    note?.scrollIntoView({ block: "nearest" });
   };
 
-  return (
-    <div className="flex h-full flex-col bg-gray-100/80 dark:bg-gray-900/50 rounded-lg overflow-hidden">
+  const toolbar = (
       <div className="space-y-2 border-b border-gray-200 bg-white/95 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/95">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1 flex items-baseline gap-2">
@@ -173,7 +179,7 @@ export function ReportPdfViewer({
           </div>
         </div>
 
-        {comments.length > 0 ? (
+        {showNotes && comments.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1 text-xs">
             <span className="text-[11px] text-gray-500 mr-1">Highlights:</span>
             {COMMENT_CATEGORIES.map((cat) => {
@@ -202,30 +208,53 @@ export function ReportPdfViewer({
         ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {loading ? (
+  );
+  const pdfError = bytes.error?.message ?? error;
+  const unplaced = comments.map((comment, index) => ({ comment, index })).filter(({ comment }) =>
+    visibleCategories.has(effectiveCategory(comment.category)) &&
+    (pdfError || !comment.page || comment.page > numPages));
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-y-4 lg:grid-cols-[var(--report-width)_minmax(0,1fr)]">
+        <div className="min-w-0 lg:col-start-1 lg:pr-4">{toolbar}</div>
+        <aside className="min-w-0 lg:col-start-2 lg:row-[var(--sidebar-rows)] lg:pl-4"
+          style={{ "--sidebar-rows": `1 / span ${showNotes ? 1 : numPages + 1}` } as React.CSSProperties}>
+          <div className={showNotes ? "" : "lg:sticky lg:top-12"}>{sidebar}</div>
+        </aside>
+        {pdfError ? (
+          <div className="space-y-2 p-4 text-sm"><p role="alert">{pdfError} Check the original report before grading.</p>
+            <Button variant="outline" size="sm" onClick={onRead}>I reviewed the original separately</Button></div>
+        ) : loading ? (
           <div className="flex items-center justify-center gap-2 py-20 text-sm text-gray-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading report PDF…
           </div>
-        ) : error ? (
-          <p className="p-4 text-sm text-amber-800 dark:text-amber-200">{error}</p>
         ) : doc && multiplyTransform ? (
-          Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
-            <ReportPdfPageSheet
-              key={pageNumber}
+          Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => {
+            const notes = commentsByPage.get(pageNumber) ?? EMPTY_NOTES;
+            return <React.Fragment key={pageNumber}>
+              <div className="min-w-0 lg:col-start-1 lg:pr-4"><ReportPdfPageSheet
               doc={doc}
               pageNumber={pageNumber}
               scale={scale}
               multiplyTransform={multiplyTransform}
-              pageComments={commentsByPage.get(pageNumber) ?? []}
+              pageComments={showNotes ? notes : EMPTY_NOTES}
               activeCommentIndex={activeCommentIndex}
-              onSelectComment={onSelectComment}
-              registerRef={registerRef}
-            />
-          ))
+              onSelectComment={selectFromPdf}
+              onReady={pageReady}
+              /></div>
+              {showNotes && <div className="min-w-0 lg:col-start-2 lg:pl-4">
+                <ReportNotes notes={notes} active={activeCommentIndex}
+                  onSelect={selectNote} title={`Page ${pageNumber} notes`} />
+              </div>}
+            </React.Fragment>;
+          })
         ) : null}
       </div>
+      {showNotes && (!loading || pdfError) && <ReportNotes notes={unplaced} active={activeCommentIndex} onSelect={selectNote} title="Notes without a matching page" />}
+      {numPages > 0 && readyPages.size === numPages && <ReportEnd onRead={onRead} />}
     </div>
   );
 }
+
+const EMPTY_NOTES: IndexedNote[] = [];

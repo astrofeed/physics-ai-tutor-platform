@@ -1,14 +1,10 @@
 import { del } from "@vercel/blob";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isUploadedBlobUrl } from "@/lib/chat-attachments";
-import { DEFAULT_REPORT_RUBRIC } from "@/lib/default-report-rubric";
 import {
-  REPORT_GRADING_MODEL,
   type ReportJobDetail,
   type ReportJobNavigation,
   type ReportJobSummary,
-  type ReportReasoningEffort,
 } from "@/lib/report-grading";
 import { logger } from "@/lib/logger";
 import { parseRosterSearch, type JobListFilter, type RosterSearch } from "@/lib/presentation-roster";
@@ -26,83 +22,8 @@ import {
   type RosterSchedule,
 } from "@/lib/services/presentation-roster-service";
 
-/** The current shared report rubric, or null before the first save. */
-export async function getCurrentReportRubric() {
-  return prisma.reportRubric.findFirst({
-    orderBy: { version: "desc" },
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-const RUBRIC_HISTORY_LIMIT = 30;
-
-/** Recent rubric versions, newest first, for the editor's history panel. */
-export async function listReportRubricVersions() {
-  return prisma.reportRubric.findMany({
-    orderBy: { version: "desc" },
-    take: RUBRIC_HISTORY_LIMIT,
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-export async function saveReportRubric(content: string, userId: string) {
-  const latest = await prisma.reportRubric.findFirst({
-    orderBy: { version: "desc" },
-    select: { version: true },
-  });
-  return prisma.reportRubric.create({
-    data: {
-      content,
-      version: (latest?.version ?? 0) + 1,
-      updatedById: userId,
-    },
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-/** The rubric a new job grades with, creating the seed version if needed. */
-async function rubricForNewJob(userId: string) {
-  const current = await getCurrentReportRubric();
-  if (current) return current;
-  return saveReportRubric(DEFAULT_REPORT_RUBRIC, userId);
-}
-
-export interface CreateReportJobInput {
-  title: string;
-  authors?: string;
-  studentId?: string;
-  assignedQuestion?: string;
-  reportBlobUrl?: string;
-  reportFilename?: string;
-  /** A report the grader pasted directly instead of uploading a PDF. */
-  reportText?: string;
-  reasoningEffort: ReportReasoningEffort;
-}
-
-export async function createReportJob(userId: string, input: CreateReportJobInput) {
-  if (!input.reportBlobUrl && !input.reportText) {
-    throw new Error("A report PDF or pasted report text is required");
-  }
-  if (input.reportBlobUrl && !isUploadedBlobUrl(input.reportBlobUrl)) {
-    throw new Error("Report URL is not an uploaded file");
-  }
-  const rubric = await rubricForNewJob(userId);
-  return prisma.reportGradingJob.create({
-    data: {
-      title: input.title,
-      authors: input.authors,
-      studentId: input.studentId,
-      assignedQuestion: input.assignedQuestion,
-      reportBlobUrl: input.reportBlobUrl,
-      reportFilename: input.reportFilename,
-      reportText: input.reportText,
-      reasoningEffort: input.reasoningEffort,
-      model: REPORT_GRADING_MODEL,
-      rubricId: rubric.id,
-      createdById: userId,
-    },
-  });
-}
+export { createReportJob, getCurrentReportRubric, listReportRubricVersions, saveReportRubric,
+  type CreateReportJobInput } from "./report-job-creation";
 
 export type JobRecord = NonNullable<
   Awaited<ReturnType<typeof prisma.reportGradingJob.findUnique>>
@@ -321,6 +242,7 @@ export async function getReportJob(
   const job = await prisma.reportGradingJob.findUnique({
     where: { id },
     include: {
+      rubric: { select: { version: true, content: true } },
       createdBy: { select: { name: true } },
       humanReviews: {
         orderBy: { createdAt: "asc" },
@@ -332,8 +254,7 @@ export async function getReportJob(
     },
   });
   if (!job) return null;
-  const [version, [schedule], navigation] = await Promise.all([
-    rubricVersionOf(job.rubricId),
+  const [[schedule], navigation] = await Promise.all([
     scheduleForJobs([job]),
     computeReportNavigation(job.id, viewerUserId),
   ]);
@@ -342,7 +263,8 @@ export async function getReportJob(
   );
   const mine = reviews.find((r) => r.isMine);
   return {
-    ...toSummary(job, version, schedule, viewerUserId),
+    ...toSummary(job, job.rubric.version, schedule, viewerUserId),
+    rubricContent: job.rubric.content,
     ...toFeedbackEmailStatus(job, schedule?.email ?? null),
     reportText: job.reportText,
     reportFilename: job.reportFilename,

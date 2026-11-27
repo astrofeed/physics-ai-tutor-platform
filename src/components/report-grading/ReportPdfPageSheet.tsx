@@ -67,19 +67,10 @@ function findQuoteHighlights(
     ranges.push({ start, end: joined.length, item });
   }
 
-  let matchIndex = joined.indexOf(target);
-  let matchLen = target.length;
-  if (matchIndex === -1) {
-    const words = target.split(" ").filter((w) => w.length > 0);
-    if (words.length >= 4) {
-      const shorter = words.slice(0, Math.min(6, words.length)).join(" ");
-      matchIndex = joined.indexOf(shorter);
-      matchLen = shorter.length;
-    }
-  }
-  if (matchIndex === -1) return [];
+  const matchIndex = joined.indexOf(target);
+  if (matchIndex === -1 || joined.indexOf(target, matchIndex + 1) !== -1) return [];
 
-  const matchEnd = matchIndex + matchLen;
+  const matchEnd = matchIndex + target.length;
   const boxes: HighlightBox[] = [];
   for (const r of ranges) {
     if (r.end <= matchIndex || r.start >= matchEnd) continue;
@@ -109,7 +100,7 @@ interface ReportPdfPageSheetProps {
   pageComments: { index: number; comment: ReportComment }[];
   activeCommentIndex: number | null;
   onSelectComment: (index: number) => void;
-  registerRef: (pageNumber: number, el: HTMLDivElement | null) => void;
+  onReady: (pageNumber: number) => void;
 }
 
 export function ReportPdfPageSheet({
@@ -120,7 +111,7 @@ export function ReportPdfPageSheet({
   pageComments,
   activeCommentIndex,
   onSelectComment,
-  registerRef,
+  onReady,
 }: ReportPdfPageSheetProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [highlights, setHighlights] = useState<HighlightBox[]>([]);
@@ -138,8 +129,6 @@ export function ReportPdfPageSheet({
       const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
       canvas.width = Math.floor(viewport.width * dpr);
       canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -147,10 +136,12 @@ export function ReportPdfPageSheet({
       renderTask = page.render({ canvasContext: ctx, viewport });
       try {
         await renderTask.promise;
-      } catch {
-        // Ignore expected cancellation when scale or page changes.
+      } catch (error) {
+        if (cancelled) return;
+        throw error;
       }
       if (cancelled) return;
+      onReady(pageNumber);
 
       const withQuotes = pageComments.filter((entry) => Boolean(entry.comment.quote));
       if (withQuotes.length > 0) {
@@ -176,15 +167,15 @@ export function ReportPdfPageSheet({
       }
     }
 
-    void renderPage();
+    void renderPage().catch((error) => console.error("Report page render failed", pageNumber, error));
     return () => {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [doc, pageNumber, scale, multiplyTransform, pageComments]);
+  }, [doc, pageNumber, scale, multiplyTransform, pageComments, onReady]);
 
   return (
-    <div ref={(el) => registerRef(pageNumber, el)} data-pdf-page={pageNumber} className="space-y-1.5">
+    <div id={`report-page-${pageNumber}`} tabIndex={-1} data-pdf-page={pageNumber} className="space-y-1.5 rounded bg-muted/60 p-2">
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-gray-500">
         <span className="tabular-nums">Page {pageNumber}</span>
         {pageComments.length > 0 ? (
@@ -211,9 +202,9 @@ export function ReportPdfPageSheet({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto flex justify-center">
-        <div className="relative inline-block bg-white shadow-sm">
-          <canvas ref={canvasRef} className="block max-w-full" />
+      <div className="overflow-x-auto">
+        <div className="relative mx-auto bg-white shadow-sm" style={{ width: `${scale / 1.05 * 100}%` }}>
+          <canvas ref={canvasRef} className="block h-auto w-full" />
           {highlights.length > 0 ? (
             <div className="pointer-events-none absolute inset-0">
               {highlights.map((box, i) => {

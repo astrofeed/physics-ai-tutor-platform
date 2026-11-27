@@ -108,7 +108,7 @@ test.beforeAll(async () => {
   const rubric = await prisma.reportRubric.create({
     data: {
       version: (maxVer._max.version ?? 0) + 1,
-      content: "Split-pane QA rubric",
+      content: "### Physics correctness (60%)\n### Sanity checks (40%)",
       updatedById: ta1.id,
     },
   });
@@ -188,11 +188,11 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   expect(row[headers.indexOf("Human average total (0-10)")]).toBe("7.75");
 
   // 2. Open as Professor (who has not graded yet) to verify blind-by-default, PDF viewer, and nav.
-  const ctxProf = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+  const ctxProf = await browser.newContext({ baseURL, permissions: ["clipboard-read", "clipboard-write"], viewport: { width: 1440, height: 900 } });
   await ctxProf.addCookies([{ name: "e2e-test-user-email", value: profEmail, url: baseURL }]);
   const page = await ctxProf.newPage();
 
-  await page.route(`**/api/report-grading/jobs/${jobAId}/pdf`, (route) =>
+  await page.route(`**/api/report-grading/jobs/*/pdf`, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/pdf",
@@ -214,7 +214,16 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.getByText("2 graders")).toBeVisible();
 
   // AI scores & other graders are hidden by default.
-  await expect(page.getByText("Hidden by default so AI scores do not anchor your grading.")).toBeVisible();
+  await expect(page.getByText(/Weighted total:/)).toHaveCount(0);
+  await expect(page.locator("#human-total")).toHaveCount(0);
+  const divider = page.getByRole("separator", { name: "Report width" });
+  await divider.focus();
+  await divider.press("ArrowRight");
+  await expect(divider).toHaveAttribute("aria-valuenow", "52");
+  await page.getByRole("button", { name: "Copy visible" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("Clear physical setup");
+  expect(copied).not.toMatch(/Uniform textbook|coil geometries|8\.5\/10/);
   await expect(page.getByText("TA Alpha: solid work")).toHaveCount(0);
   await expect(page.getByText("TA Beta: missing time constant")).toHaveCount(0);
 
@@ -234,16 +243,22 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.getByText("Uniform textbook phrasing")).toBeVisible();
 
   // Clicking AI Note #2 highlights text on page 2.
-  await page.getByText("Check the time constant definition").click();
+  const noteTwo = page.locator("#report-note-1");
+  await noteTwo.focus();
+  await noteTwo.press("Enter");
   await expect(page.locator('[aria-label="Jump to note #2"]').first()).toBeVisible();
+  await page.locator('[aria-label="Jump to note #2"]').first().click();
+  await expect(noteTwo).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("desktop-split-blind.png") });
 
   // Unfold other graders and AI scores.
+  await page.getByText("End of report").scrollIntoViewIfNeeded();
   await page.getByRole("button", { name: "Show other scores" }).click();
   await expect(page.getByText("TA Alpha: solid work")).toBeVisible();
   await expect(page.getByText("TA Beta: missing time constant")).toBeVisible();
   await expect(page.getByText("Human average (2)")).toBeVisible();
 
+  await page.getByRole("button", { name: "Rubric & scoring" }).click();
   await page.getByRole("button", { name: "Show AI scores" }).click();
   await expect(page.getByText("Weighted total: 8.10 / 10")).toBeVisible();
 
@@ -251,7 +266,7 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await page.getByRole("button", { name: "Add another grader score" }).click();
   const extraForm = page.getByTestId("extra-grader-card");
   await extraForm.locator("#extra-grader-label").fill("Guest Grader");
-  await extraForm.locator("#human-total").fill("9");
+  await extraForm.locator("#extra-human-total").fill("9");
   await extraForm.getByRole("button", { name: "Save scores and comments" }).click();
   await expect(page.getByRole("table").getByText("Guest Grader")).toBeVisible();
 
@@ -259,17 +274,36 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
 
   // Mobile viewport: no horizontal overflow.
   await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole("button", { name: "Page notes", exact: true }).click();
+  await page.getByRole("heading", { name: `Faraday Report A ${runId}` }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("mobile-stacked.png") });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
   ).toBe(true);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(divider).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("tablet-stacked.png") });
 
   // Bottom navigation jumps straight to next ungraded report (job B) without going back to list.
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator("#human-total").fill("7.3");
+  await page.locator("#human-comments").fill("Independent draft");
+  const modes = page.getByRole("group", { name: "Review mode" });
+  await expect(modes).toBeInViewport();
+  await modes.getByRole("button", { name: "Rubric & scoring" }).click();
+  await page.getByText("Consult rubric while scoring").click();
+  await expect(page.locator("#human-comments")).toHaveValue("Independent draft");
   await page.getByRole("link", { name: "Next ungraded" }).click();
+  await page.getByRole("button", { name: "Keep grading" }).click();
+  await expect(page.locator("#human-comments")).toHaveValue("Independent draft");
+  await page.getByRole("button", { name: "Save and go to next ungraded" }).click();
   await expect(page).toHaveURL(new RegExp(`/report-grading/${jobBId}$`));
   await expect(page.getByRole("heading", { name: `Faraday Report B ${runId}` })).toBeVisible();
   await expect(page.getByText("No scores yet")).toBeVisible();
+  await expect(divider).toHaveAttribute("aria-valuenow", "52");
+  await page.reload();
+  await expect(divider).toHaveAttribute("aria-valuenow", "52");
 
   // List page shows grading badges and filters.
   await page.goto("/report-grading");

@@ -53,7 +53,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
           : "mx-auto max-w-4xl space-y-6 p-4 sm:p-6"
       }
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
             <Link href="/report-grading">
@@ -62,7 +62,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
             </Link>
           </Button>
           <h1 className="text-2xl font-bold break-words">{job.title}</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 break-words text-sm text-gray-500">
             {[
               job.authors,
               job.studentId ? `ID ${job.studentId}` : null,
@@ -90,7 +90,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-2 sm:mt-8">
+        <div className="flex flex-wrap items-start gap-2 lg:mt-8 lg:shrink-0 lg:flex-col lg:items-end">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {job.status === "DONE" ? (
               <>
@@ -135,7 +135,7 @@ function ReportJobDetailContent({ id }: { id: string }) {
       ) : null}
 
       {job.status === "DONE" ? (
-        <ReportGradedView job={job} onChanged={() => void refresh()} />
+        <ReportGradedView key={job.id} job={job} onChanged={() => void refresh()} />
       ) : null}
     </div>
   );

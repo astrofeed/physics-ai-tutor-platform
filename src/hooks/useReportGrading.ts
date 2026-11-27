@@ -129,7 +129,8 @@ export function useReportJob(id: string) {
     queryKey: ["report-grading", "job", id],
     queryFn: async () => (await api.get<{ data: ReportJobDetail }>(`/api/report-grading/jobs/${id}`)).data,
     refetchInterval: (current) =>
-      current.state.data && ACTIVE_STATUSES.has(current.state.data.status) ? ACTIVE_POLL_MS : false,
+      current.state.data?.status === "DONE" ? 10_000 :
+        current.state.data && ACTIVE_STATUSES.has(current.state.data.status) ? ACTIVE_POLL_MS : false,
   });
   const notFound = query.error !== null && "status" in query.error && query.error.status === 404;
   useQueryErrorToast(notFound ? null : query.error, "Failed to load the job");

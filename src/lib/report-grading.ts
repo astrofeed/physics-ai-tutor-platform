@@ -71,6 +71,7 @@ export interface ReportJobNavigation {
 }
 
 export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
+  rubricContent?: string;
   reportText: string | null;
   reportFilename: string | null;
   /** True when the uploaded PDF is retained and can be streamed via `/pdf`. */
@@ -164,7 +165,7 @@ const OPTIONAL_EVALUATION_FIELDS = ["criterionScores", "suggestionChecks"] as co
 
 /** Parses a stored evaluation; null for bad JSON. Tolerates older jobs
  * graded before per-criterion scores, suggestion checks, or comment anchors existed. */
-export function parseReportEvaluation(json: string | null): ReportEvaluation | null {
+export function parseReportEvaluation(json: string | null, rubric?: string): ReportEvaluation | null {
   if (!json) return null;
   try {
     const parsed: unknown = JSON.parse(json);
@@ -187,8 +188,37 @@ export function parseReportEvaluation(json: string | null): ReportEvaluation | n
       }
     }
     const result = ReportEvaluationSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    if (!result.success) return null;
+    if (result.data.criterionScores && !validReportScores(result.data.criterionScores, rubric)) {
+      return { ...result.data, criterionScores: null };
+    }
+    return result.data;
   } catch {
     return null;
   }
+}
+
+/** Weighted Markdown headings in the rubric version bound to this report. */
+export function reportRubricCriteria(rubric: string) {
+  return Array.from(rubric.matchAll(/^#{1,6}[ \t]+(?:\d+[.)][ \t]+)?(.+?)[ \t]+\((\d+(?:\.\d+)?)%\)[ \t]*\r?$/gm),
+    ([, name, weight]) => ({ name: name.trim(), weight: Number(weight) }));
+}
+
+export const RUBRIC_WEIGHT_HINT = "Use unique Markdown criterion headings such as '### Physics (25%)' with weights totaling 100%.";
+
+export function hasWeightedReportCriteria(rubric: string) {
+  const criteria = reportRubricCriteria(rubric);
+  return criteria.length > 0 && new Set(criteria.map((c) => c.name)).size === criteria.length &&
+    Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) < 0.000001;
+}
+
+export function validReportScores(scores: ReportCriterionScore[], rubric?: string) {
+  const weights = new Map(scores.map((s) => [s.criterion, s.weightPercent]));
+  if (weights.size !== scores.length || scores.some((s) => !s.criterion.trim()) ||
+      Math.abs(scores.reduce((sum, s) => sum + s.weightPercent, 0) - 100) > 0.000001) return false;
+  if (rubric === undefined) return true;
+  const expected = reportRubricCriteria(rubric);
+  return expected.length > 0 && (expected.length === scores.length &&
+    new Set(expected.map((c) => c.name)).size === expected.length &&
+    expected.every((c) => weights.get(c.name) === c.weight));
 }
