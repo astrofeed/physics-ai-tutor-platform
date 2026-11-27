@@ -149,9 +149,10 @@ export function NewReportJobForm({ onCreated }: { onCreated: () => void }) {
             />
             <p className="text-xs text-gray-500">
               {`PDF only, up to ${formatBytes(REPORT_FILE_MAX_BYTES)} each and ${REPORT_BATCH_MAX_FILES} per batch; `}
-              files are deleted after grading. The student ID is read from the eeClass folder name
-              or the filename (e.g. 王小明_113012345_期末報告.pdf) and can be corrected in each
-              row — the name, presentation topic and report question refill from the sign-up sheet.
+              PDFs are kept for side-by-side grading and deleted when the job is removed. The
+              student ID is read from the eeClass folder name or the filename (e.g.
+              王小明_113012345_期末報告.pdf) and can be corrected in each row — the name,
+              presentation topic and report question refill from the sign-up sheet.
             </p>
           </div>
         ) : (

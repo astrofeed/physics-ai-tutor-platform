@@ -79,10 +79,15 @@ export function ReportGradingNavBar({ navigation }: Props) {
                 Next ungraded
               </Link>
             </Button>
-          ) : (
+          ) : navigation.myGradedDone >= navigation.totalDone ? (
             <Button size="sm" variant="secondary" disabled>
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
               All graded by you
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" disabled>
+              <SkipForward className="mr-1.5 h-3.5 w-3.5" />
+              No other ungraded
             </Button>
           )}
         </div>
