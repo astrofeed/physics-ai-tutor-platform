@@ -6,6 +6,9 @@ Whenever you make changes to the codebase, update this file to reflect the chang
 
 ### Report Grading Split-Pane & Multi-Grader Workflow
 
+Lead each page note with the observation in body text. Keep source, quotation and rubric metadata behind a keyboard-accessible disclosure; page-only and staff-review notices remain visible. The numbered control navigates independently of the disclosure. Copy visible includes supporting evidence only for expanded notes in visible layers.
+PDF and pasted-text reviews show the opt-in AI-style layer even when its note count is zero. Turning it on explains that writing style is neither evidence of AI use nor a scoring factor. The count is never a likelihood.
+
 Report totals (score entry, detail API, weighted totals, peer averages and exports) use 0–100; individual rubric items and historical database total columns remain 0–10. Convert only at the service boundary. Total entry accepts tenths of a point and incomplete item sets cannot yield a total.
 
 PDF page navigation is separate from the report queue. Align desktop notes to uniquely matched text, stack overlapping notes and show them below each page on mobile. Visual/handwriting notes may cite nearby text; when no text matches, show “Page only”, not a guessed location. New notes can identify evidence type, bound rubric criterion and a need for staff review without adding more highlight layers.

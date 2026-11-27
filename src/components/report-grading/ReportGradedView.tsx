@@ -10,6 +10,7 @@ import { FeedbackEmailCard } from "@/components/grading/FeedbackEmailCard";
 import { ReportDocumentPane } from "@/components/report-grading/ReportDocumentPane";
 import { ReportGradingNavBar } from "@/components/report-grading/ReportGradingNavBar";
 import { ReportJobResult } from "@/components/report-grading/ReportJobResult";
+import { ReportNoteEvidenceProvider } from "./ReportNoteEvidence";
 import { ReportMultiGraderPanel } from "@/components/report-grading/ReportMultiGraderPanel";
 import { DEFAULT_VISIBLE_CATEGORIES } from "@/components/report-grading/report-comment-categories";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
@@ -79,9 +80,9 @@ export function ReportGradedView({ job, onChanged }: Props) {
         <Button variant={rubricMode ? "secondary" : "ghost"} size="sm" aria-pressed={rubricMode}
           onClick={() => setRubricMode(true)}>Rubric &amp; scoring</Button>
       </div>
-      <ReportSplit>
+      <ReportNoteEvidenceProvider><ReportSplit>
         <ReportDocumentPane
-          onRead={onRead} showNotes={!rubricMode}
+          onRead={onRead} showNotes={!rubricMode && !!evaluation}
           sidebar={evaluation ? <ReportJobResult key={rubricMode ? "rubric" : "notes"} job={job} evaluation={evaluation} rubricMode={rubricMode}
             aiScoresVisible={aiScoresVisible} onToggleAiScores={toggleAiScores}
             visibleCategories={visibleCategories} /> : <p>The AI review could not be read.</p>}
@@ -92,7 +93,7 @@ export function ReportGradedView({ job, onChanged }: Props) {
           visibleCategories={visibleCategories}
           onToggleCategory={toggleCategory}
         />
-      </ReportSplit>
+      </ReportSplit></ReportNoteEvidenceProvider>
 
       <div className="mx-auto max-w-4xl space-y-6">
         {evaluation && <details><summary className="cursor-pointer text-sm font-medium">Feedback email</summary>

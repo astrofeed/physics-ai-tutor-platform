@@ -252,7 +252,7 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await page.getByRole("button", { name: "Copy visible" }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain("Clear physical setup");
-  expect(copied).not.toMatch(/Uniform textbook|coil geometries|8\.5\/10/);
+  expect(copied).not.toMatch(/Uniform textbook|coil geometries|8\.5\/10|Section 2, p\. 2|magnetic flux decays exponentially/);
   await expect(page.getByText("TA Alpha: solid work")).toHaveCount(0);
   await expect(page.getByText("TA Beta: missing time constant")).toHaveCount(0);
 
@@ -267,9 +267,14 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await directions.locator("summary").click();
 
   // AI-style notes are toggled off by default and can be toggled on.
+  const aiLayer = page.getByRole("button", { name: "AI-style (1)", exact: true });
+  await expect(aiLayer).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByText("Uniform textbook phrasing")).toHaveCount(0);
-  await page.getByRole("button", { name: "AI-style (1)" }).first().click();
+  await aiLayer.click();
   await expect(page.getByText("Uniform textbook phrasing")).toBeVisible();
+  await expect(page.getByText("Writing-style notes are not evidence", { exact: false })).toBeVisible();
+  await aiLayer.click();
+  await expect(page.getByText("Uniform textbook phrasing")).toHaveCount(0);
 
   // Clicking AI Note #2 highlights text on page 2.
   const pageTwo = page.locator("#report-page-2");
@@ -283,13 +288,31 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.locator('[aria-label="Jump to note #2"]').first()).toBeVisible();
   await page.locator('[aria-label="Jump to note #2"]').first().click();
   await expect(noteTwo).toBeFocused();
-  await expect(page.getByRole("region", { name: "Page 2 notes" })).toContainText("Equation · Sanity checks · Page only · Needs staff review");
+  const pageNotes = page.getByRole("region", { name: "Page 2 notes" });
+  await expect(pageNotes.getByText("Page only · Needs staff review")).toBeVisible();
+  const evidence = pageNotes.getByRole("button", { name: "Issue details for note 2" });
+  const quote = pageNotes.getByText("“magnetic flux decays exponentially”");
+  await expect(quote).toBeHidden();
+  await evidence.focus();
+  await evidence.press("Space");
+  await expect(evidence).toBeFocused();
+  await expect(quote).toBeVisible();
+  await expect(pageNotes.getByText("Text · Sanity checks")).toBeVisible();
+  await expect(pageNotes.getByText("Equation · Sanity checks")).toBeHidden();
+  await page.getByRole("button", { name: "Copy visible" }).click();
+  const expandedCopy = await page.evaluate(() => navigator.clipboard.readText());
+  expect(expandedCopy).toContain("magnetic flux decays exponentially");
+  expect(expandedCopy).not.toContain("hand-written limiting case");
+  await evidence.click();
+  await expect(evidence).toHaveAttribute("aria-expanded", "false");
+  await expect(quote).toBeHidden();
   await expect(pageTwo.getByRole("button", { name: "Jump to note #4" })).toHaveCount(0);
   await expect.poll(async () => {
     const mark = await pageTwo.getByRole("button", { name: "Jump to note #2" }).first().boundingBox();
     const note = await noteTwo.boundingBox();
     return mark && note ? Math.abs(mark.y - note.y) : Infinity;
   }).toBeLessThan(12);
+  await pageNotes.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("desktop-split-blind.png") });
 
   // Unfold other graders and AI scores.
@@ -316,13 +339,14 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   // Mobile viewport: no horizontal overflow.
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole("button", { name: "Page notes", exact: true }).click();
-  await page.getByRole("heading", { name: `Faraday Report A ${runId}` }).scrollIntoViewIfNeeded();
+  await pageNotes.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("mobile-stacked.png") });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
   ).toBe(true);
   await page.setViewportSize({ width: 768, height: 900 });
   await expect(divider).toBeHidden();
+  await pageNotes.scrollIntoViewIfNeeded();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("tablet-stacked.png") });
 
@@ -357,3 +381,27 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await ctx2.close();
   await ctxProf.close();
 });
+
+for (const hasPdf of [true, false]) {
+  test(`the opt-in AI-style layer explains zero notes for ${hasPdf ? "PDF" : "pasted text"}`, async ({ page }) => {
+    await page.context().addCookies([{ name: "e2e-test-user-email", value: profEmail, url: baseURL }]);
+    await page.route(`**/api/report-grading/jobs/${jobBId}`, async route => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      await route.fulfill({ json: { ...payload, data: { ...payload.data,
+        hasReportPdf: hasPdf, reportText: hasPdf ? null : "A text-only report.",
+        resultJson: JSON.stringify({ ...sampleEvaluation, comments: [] }),
+      } } });
+    });
+    await page.route("**/api/report-grading/jobs/*/pdf", route =>
+      route.fulfill({ contentType: "application/pdf", body: buildSamplePdf() }));
+    await page.goto(`/report-grading/${jobBId}`);
+    const toggle = page.getByRole("button", { name: "AI-style (0)", exact: true });
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.press("Enter");
+    await expect(page.getByRole("status").filter({ hasText: "No AI-style passages were annotated" })).toBeVisible();
+    await expect(page.locator('[id^="report-note-"]')).toHaveCount(0);
+    await toggle.press("Enter");
+    await expect(page.getByText("No AI-style passages", { exact: false })).toHaveCount(0);
+  });
+}

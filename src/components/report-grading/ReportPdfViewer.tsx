@@ -6,13 +6,12 @@ import { ReportEnd } from "./ReportEnd";
 import { ReportNotes, type IndexedNote } from "./ReportNotes";
 import { Download, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
-  COMMENT_CATEGORIES,
   type ReportComment,
   type ReportCommentCategory,
 } from "@/lib/report-grading";
-import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categories";
+import { effectiveCategory } from "./report-comment-categories";
+import { ReportNoteLayers } from "./ReportNoteLayers";
 import type { PdfDocLike } from "./ReportPdfPageSheet";
 import { ReportPdfRow } from "./ReportPdfRow";
 
@@ -100,15 +99,6 @@ export function ReportPdfViewer({
     };
   }, [bytes.data]);
 
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<ReportCommentCategory, number>();
-    for (const c of comments) {
-      const cat = effectiveCategory(c.category);
-      counts.set(cat, (counts.get(cat) ?? 0) + 1);
-    }
-    return counts;
-  }, [comments]);
-
   const commentsByPage = useMemo(() => {
     const map = new Map<number, { index: number; comment: ReportComment }[]>();
     comments.forEach((comment, index) => {
@@ -180,33 +170,7 @@ export function ReportPdfViewer({
           </div>
         </div>
 
-        {showNotes && comments.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1 text-xs">
-            <span className="text-[11px] text-gray-500 mr-1">Highlights:</span>
-            {COMMENT_CATEGORIES.map((cat) => {
-              const count = categoryCounts.get(cat) ?? 0;
-              if (count === 0) return null;
-              const active = visibleCategories.has(cat);
-              const meta = COMMENT_CATEGORY_META[cat];
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onToggleCategory(cat)}
-                  className={cn(
-                    "rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors",
-                    active
-                      ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                      : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-                  )}
-                >
-                  {meta.label} ({count})
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        {showNotes && <ReportNoteLayers comments={comments} visible={visibleCategories} onToggle={onToggleCategory} />}
       </div>
 
   );

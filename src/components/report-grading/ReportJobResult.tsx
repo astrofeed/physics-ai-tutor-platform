@@ -8,6 +8,7 @@ import { reportWeightedTotal, REPORT_TOTAL_MAX_SCORE } from "@/lib/report-score-
 import type { ReportEvaluation, ReportJobDetail, ReportCommentCategory } from "@/lib/report-grading";
 import { reportEvaluationToText } from "./report-job-format";
 import { ReportSuggestionChecks } from "./ReportSuggestionChecks";
+import { useReportNoteEvidence } from "./ReportNoteEvidence";
 
 interface Props {
   job: ReportJobDetail;
@@ -21,6 +22,7 @@ interface Props {
 export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
   onToggleAiScores, visibleCategories }: Props) {
   const [directionsOpen, setDirectionsOpen] = useState(false);
+  const { open } = useReportNoteEvidence();
   const scores = evaluation.criterionScores;
   const aiTotal = scores && reportWeightedTotal(scores.map((c) => ({ name: c.criterion, score: c.score })),
     (name) => scores.find((c) => c.criterion === name)?.weightPercent);
@@ -30,6 +32,7 @@ export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
       includeScores: rubricMode && aiScoresVisible,
       includeDirections: !rubricMode && directionsOpen,
       includeSummary: !rubricMode,
+      openEvidence: open,
     });
     try {
       await navigator.clipboard.writeText(rubricMode ? [job.rubricContent, text].filter(Boolean).join("\n\n") : text);
@@ -67,7 +70,7 @@ export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
         <p className="text-sm text-muted-foreground">{scores ? "Enter your own score below the last page." :
           "No verified AI scores are available for this rubric version."}</p>
       </> : <>
-        <MarkdownContent content={evaluation.summary} className="text-sm" />
+        <MarkdownContent content={evaluation.summary} className="max-w-prose text-base leading-6" />
         {!!evaluation.suggestionChecks?.length && <ReportSuggestionChecks checks={evaluation.suggestionChecks}
           presentationJobId={job.presentationJobId} onToggle={setDirectionsOpen} />}
       </>}

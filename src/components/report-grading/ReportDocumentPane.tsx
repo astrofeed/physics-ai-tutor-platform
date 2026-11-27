@@ -11,8 +11,8 @@ import { ReportPdfViewer } from "./ReportPdfViewer";
 import { ReportPair } from "./ReportSplit";
 import { ReportEnd } from "./ReportEnd";
 import { ReportNotes } from "./ReportNotes";
-import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categories";
-import { COMMENT_CATEGORIES } from "@/lib/report-grading";
+import { effectiveCategory } from "./report-comment-categories";
+import { ReportNoteLayers } from "./ReportNoteLayers";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -104,10 +104,7 @@ export function ReportDocumentPane({
   return <>
     <ReportPair left={left} right={<div className="space-y-4">{sidebar}
       {showNotes && <>
-        <div className="flex flex-wrap gap-1">{COMMENT_CATEGORIES.filter(cat =>
-          comments.some(c => effectiveCategory(c.category) === cat)).map(cat =>
-          <Button key={cat} variant="ghost" size="sm" aria-pressed={visibleCategories.has(cat)}
-            onClick={() => onToggleCategory(cat)}>{COMMENT_CATEGORY_META[cat].label}</Button>)}</div>
+        <ReportNoteLayers comments={comments} visible={visibleCategories} onToggle={onToggleCategory} />
         <ReportNotes notes={notes} active={activeCommentIndex} onSelect={onSelectComment} title="Report notes" />
       </>}
     </div>} />

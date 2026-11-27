@@ -3,7 +3,7 @@
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { CSSProperties } from "react";
 import type { ReportComment } from "@/lib/report-grading";
-import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categories";
+import { ReportNoteEvidence } from "./ReportNoteEvidence";
 
 export type IndexedNote = { index: number; comment: ReportComment };
 
@@ -25,20 +25,15 @@ export function ReportNotes({ notes, active, onSelect, title, anchors }: {
           const gap = next ? offset(next) - offset(ordered[i]) : 0;
           return <li key={index} className="lg:min-h-[var(--note-gap)]"
             style={{ "--note-gap": `${Number.isFinite(gap) ? gap : 0}px` } as CSSProperties}>
-            <div className={`relative space-y-1 border-l-2 px-3 pb-3 text-sm focus-within:ring-2 ${active === index ? "border-foreground bg-muted" : "border-transparent"}`}>
-            <button id={`report-note-${index}`} type="button" onClick={() => onSelect(index)}
-              aria-pressed={active === index}
-              className="text-left text-xs font-medium after:absolute after:inset-0">
-              #{index + 1} · {COMMENT_CATEGORY_META[effectiveCategory(comment.category)].label}
-              {comment.page ? ` · p. ${comment.page}` : ""} · {comment.reference}
-            </button>
-            {(comment.evidenceKind || comment.criterion || anchors || comment.needsStaffCheck) &&
-              <p className="text-xs text-muted-foreground">
-                {[comment.evidenceKind, comment.criterion, anchors && !anchors.has(index) ? "Page only" : null,
-                  comment.needsStaffCheck ? "Needs staff review" : null].filter(Boolean).join(" · ")}
-              </p>}
-            {comment.quote && <p className="italic text-muted-foreground">“{comment.quote}”</p>}
-            <MarkdownContent content={comment.comment} className="text-sm" />
+            <div className={`border-l-2 px-2 pb-4 ${active === index ? "border-foreground" : "border-transparent"}`}>
+              <div className="relative grid grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-x-1">
+                <button id={`report-note-${index}`} type="button" onClick={() => onSelect(index)}
+                  aria-label={`Locate note ${index + 1} in the report`} aria-pressed={active === index}
+                  className="text-left text-sm leading-6 text-muted-foreground after:absolute after:inset-0 after:z-10 hover:underline">#{index + 1}</button>
+                <MarkdownContent content={comment.comment}
+                  className="max-w-prose text-base leading-6 [&_:is(h1,h2,h3,h4,h5,h6)]:text-base [&_:is(h1,h2,h3,h4,h5,h6,strong)]:font-medium [&_em]:not-italic [&_:is(a,button,.katex)]:relative [&_:is(a,button,.katex)]:z-[11]" />
+              </div>
+              <div className="pl-8"><ReportNoteEvidence index={index} comment={comment} pageOnly={!!anchors && !anchors.has(index)} /></div>
             </div>
           </li>;
         })}

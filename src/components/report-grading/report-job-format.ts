@@ -5,7 +5,7 @@ import {
   type ReportJobStatusValue,
 } from "@/lib/report-grading";
 import type { BadgeVariant } from "@/components/presentation-grading/job-format";
-import { effectiveCategory } from "./report-comment-categories";
+import { COMMENT_CATEGORY_META, effectiveCategory } from "./report-comment-categories";
 
 export {
   formatDuration,
@@ -28,10 +28,17 @@ export const REPORT_STATUS_BADGE_VARIANTS: Record<ReportJobStatusValue, BadgeVar
 
 export function reportEvaluationToText(e: ReportEvaluation, options: {
   categories: Set<ReportCommentCategory>; includeSummary: boolean; includeDirections: boolean; includeScores: boolean;
+  openEvidence: ReadonlySet<number>;
 }): string {
   const comments = e.comments
-    .flatMap((c, i) => options.categories.has(effectiveCategory(c.category))
-      ? [`#${i + 1}${c.page ? ` · p. ${c.page}` : ""} [${c.reference}] ${c.comment}`] : [])
+    .flatMap((c, i) => {
+      const category = effectiveCategory(c.category);
+      if (!options.categories.has(category)) return [];
+      const header = `#${i + 1}${c.page ? ` · p. ${c.page}` : ""} · ${COMMENT_CATEGORY_META[category].label}`;
+      return [[`${header}: ${c.comment}`, c.needsStaffCheck && "Needs staff review",
+        ...(options.openEvidence.has(i) ? [c.evidenceKind, c.criterion, c.reference, c.quote] : []),
+      ].filter(Boolean).join("\n")];
+    })
     .join("\n");
   const sections = options.includeSummary ? [`## Summary\n${e.summary}`] : [];
   if (options.includeDirections && e.suggestionChecks?.length) {
