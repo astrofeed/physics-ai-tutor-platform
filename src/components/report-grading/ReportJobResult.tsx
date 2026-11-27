@@ -126,8 +126,8 @@ export function ReportJobResult({
               : ""}
             )
           </h3>
-          {evaluation.comments.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5">
+          {!job.hasReportPdf && evaluation.comments.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1">
               {COMMENT_CATEGORIES.map((cat) => {
                 const count = categoryCounts.get(cat) ?? 0;
                 if (count === 0) return null;
@@ -140,18 +140,12 @@ export function ReportJobResult({
                     aria-pressed={active}
                     onClick={() => onToggleCategory(cat)}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
+                      "rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors",
                       active
-                        ? meta.badgeClass
-                        : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400"
+                        ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                        : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                     )}
                   >
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        active ? meta.dotClass : "bg-gray-400"
-                      )}
-                    />
                     {meta.label} ({count})
                   </button>
                 );
@@ -183,29 +177,24 @@ export function ReportJobResult({
                   className={cn(
                     "border-l-2 py-3 pl-3 pr-2 text-sm space-y-1.5 transition-colors cursor-pointer",
                     isActive
-                      ? meta.activeRowClass
-                      : "border-l-transparent hover:bg-gray-50/80 dark:hover:bg-gray-900/50"
+                      ? "border-l-gray-900 bg-gray-50 dark:border-l-gray-100 dark:bg-gray-900/60"
+                      : "border-l-transparent hover:bg-gray-50/70 dark:hover:bg-gray-900/40"
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-semibold text-gray-500 tabular-nums">
+                      <span className="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">
                         #{index + 1}
                       </span>
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          meta.badgeClass
-                        )}
-                      >
+                      <span>·</span>
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
                         {meta.label}
                       </span>
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                        {comment.reference}
-                      </span>
+                      <span>·</span>
+                      <span>{comment.reference}</span>
                     </div>
                     {comment.page ? (
-                      <span className="text-xs text-gray-500 tabular-nums">p. {comment.page}</span>
+                      <span className="tabular-nums">p. {comment.page}</span>
                     ) : null}
                   </div>
                   {comment.quote ? (
