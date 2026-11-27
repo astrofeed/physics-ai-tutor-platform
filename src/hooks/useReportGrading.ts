@@ -63,11 +63,14 @@ export function useReportRubricHistory(enabled: boolean) {
   return { versions: query.data ?? null, loading: query.isFetching };
 }
 
+export type ReportReviewFilterValue = "all" | "my_ungraded" | "none_graded";
+
 export function useReportJobs() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [group, setGroupState] = useState<number | null>(null);
+  const [reviewFilter, setReviewFilterState] = useState<ReportReviewFilterValue>("all");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -78,11 +81,12 @@ export function useReportJobs() {
   }, [search]);
 
   const query = useQuery({
-    queryKey: ["report-grading", "jobs", page, debouncedSearch, group],
+    queryKey: ["report-grading", "jobs", page, debouncedSearch, group, reviewFilter],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(JOBS_PAGE_SIZE) });
       if (debouncedSearch) params.set("q", debouncedSearch);
       if (group !== null) params.set("group", String(group));
+      if (reviewFilter !== "all") params.set("review", reviewFilter);
       return (await api.get<{ data: { jobs: ReportJobSummary[]; totalCount: number } }>(
         `/api/report-grading/jobs?${params}`
       )).data;
@@ -97,6 +101,11 @@ export function useReportJobs() {
     setPage(1);
   }, []);
 
+  const setReviewFilter = useCallback((value: ReportReviewFilterValue) => {
+    setReviewFilterState(value);
+    setPage(1);
+  }, []);
+
   const totalCount = query.data?.totalCount ?? 0;
   return {
     jobs: query.data?.jobs ?? [],
@@ -106,6 +115,8 @@ export function useReportJobs() {
     setSearch,
     group,
     setGroup,
+    reviewFilter,
+    setReviewFilter,
     totalPages: Math.max(1, Math.ceil(totalCount / JOBS_PAGE_SIZE)),
     totalCount,
     loading: query.isPending,
@@ -118,7 +129,8 @@ export function useReportJob(id: string) {
     queryKey: ["report-grading", "job", id],
     queryFn: async () => (await api.get<{ data: ReportJobDetail }>(`/api/report-grading/jobs/${id}`)).data,
     refetchInterval: (current) =>
-      current.state.data && ACTIVE_STATUSES.has(current.state.data.status) ? ACTIVE_POLL_MS : false,
+      current.state.data?.status === "DONE" ? 10_000 :
+        current.state.data && ACTIVE_STATUSES.has(current.state.data.status) ? ACTIVE_POLL_MS : false,
   });
   const notFound = query.error !== null && "status" in query.error && query.error.status === 404;
   useQueryErrorToast(notFound ? null : query.error, "Failed to load the job");

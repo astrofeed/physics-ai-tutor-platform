@@ -7,7 +7,7 @@
  */
 export const DEFAULT_REPORT_RUBRIC = `# Written Report Grading Instructions — General Physics II
 
-You are reviewing a student-written physics report for an introductory university physics course (Halliday-level General Physics II). The report belongs to the student's presentation topic, and the REPORT INFORMATION block may also give an **additional report question** the student was asked to answer in writing. It may also list **PRESENTATION SUGGESTIONS**: report directions the AI recommended after reviewing the student's talk, which the report was expected to act on. Evaluate the report against the seven criteria below and produce: a summary, evidence-referenced comments, a 0–10 score with its reason for each criterion, and — when suggestions are listed — one completion check per suggestion.
+You are reviewing a student-written physics report for an introductory university physics course (Halliday-level General Physics II). The report belongs to the student's presentation topic, and the REPORT INFORMATION block may also give an **additional report question** the student was asked to answer in writing. **PRESENTATION SUGGESTIONS** are optional directions from the review of the student's talk, not assigned questions. Give a summary, evidence-referenced comments, a 0–10 score with its reason for each of the seven criteria below, and descriptive observations on any listed directions.
 
 Ground every remark in the report itself — cite the section, equation, figure, page, or quoted phrase. Never invent content that is not in the report. If something cannot be verified from the text alone (e.g. suspected copying), phrase it as a concern for the grader to check, never as an accusation.
 
@@ -40,12 +40,12 @@ Does the report actually treat the presentation topic named in REPORT INFORMATIO
 - **0–3:** Wrong topic, or the assigned question is ignored.
 - **If REPORT INFORMATION says no additional question was set,** grade this criterion on topic coverage alone (does the report cover what its title promises, at a depth appropriate for the course?). Never deduct for the absence of a question that was not asked.
 
-#### Presentation suggestions (completion checks, not a separate score)
-For every suggestion listed under PRESENTATION SUGGESTIONS, decide whether the report **did the work it asked for** — not whether it merely mentions the idea:
-- **completed:** the substance of the suggestion is carried out (the correction is made, the extension is derived/analysed, the missing element is present).
-- **partially_addressed:** a real attempt that stops short — e.g. the idea is set up but not worked through, or only one of two requested parts is done. Say what is missing.
-- **not_addressed:** nothing in the report does it.
-Cite where in the report the evidence is. These checks inform criterion 1 (a report that acts on none of the suggestions is weaker on topic coverage), but apply the same evidence rule: one ignored suggestion is one concrete gap, not grounds for a low score across the board. If no suggestions are listed, there are no checks to make and nothing to deduct.
+#### Optional evidence of breadth or depth (within criterion 1, not extra points)
+Judge how well the report explains its topic and answers the assigned question, if any. A relevant comparison, a worked limiting case, or a well-justified extension can demonstrate breadth or depth. Give a student's own direction the same consideration as a suggested one. One careful investigation can show more understanding than several ideas mentioned in passing.
+
+The report can earn 10/10 without pursuing any suggested direction. Do not count directions, add a bonus per suggestion, deduct for omissions, or cap the score. Extensions do not replace an assigned question. If a suggestion identified a physics error and that error is present in the written report, assess the error once under the appropriate criterion, not again for ignoring the suggestion.
+
+For each listed direction, describe what appears in the report: **completed** means developed with evidence, **partially_addressed** means explored in part, and **not_addressed** means not pursued. Cite a section, page or equation for work you find. An unused direction is not a shortcoming. If there are no suggestions, return no observations.
 
 ### 2. Physics correctness and first-principles grounding (25%)
 Are the physical laws, definitions, assumptions, and boundary conditions stated correctly, and does the argument start from fundamental principles (Newton's laws, Maxwell's equations, conservation laws, …) rather than quoting formulas dogmatically? Every simplification of the governing equations should have a stated physical reason. Deduct for physical errors (wrong law, sign, unit, or limit of validity), not for stylistic choices.

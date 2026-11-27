@@ -1,17 +1,18 @@
 import { del } from "@vercel/blob";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isUploadedBlobUrl } from "@/lib/chat-attachments";
-import { DEFAULT_REPORT_RUBRIC } from "@/lib/default-report-rubric";
 import {
-  REPORT_GRADING_MODEL,
   type ReportJobDetail,
+  type ReportJobNavigation,
   type ReportJobSummary,
-  type ReportReasoningEffort,
 } from "@/lib/report-grading";
 import { logger } from "@/lib/logger";
 import { parseRosterSearch, type JobListFilter, type RosterSearch } from "@/lib/presentation-roster";
-import { toHumanGrading } from "@/lib/services/human-grading-service";
+import {
+  emptyHumanGrading,
+  personalSlotKey,
+  toReportHumanReviewDetail,
+} from "@/lib/services/human-grading-service";
 import { toFeedbackEmailStatus } from "@/lib/services/feedback-email-service";
 import { gradeReport, loadReport } from "@/lib/services/report-grading-ai";
 import { latestTopicSuggestionsForStudent } from "@/lib/services/presentation-suggestions-service";
@@ -21,83 +22,8 @@ import {
   type RosterSchedule,
 } from "@/lib/services/presentation-roster-service";
 
-/** The current shared report rubric, or null before the first save. */
-export async function getCurrentReportRubric() {
-  return prisma.reportRubric.findFirst({
-    orderBy: { version: "desc" },
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-const RUBRIC_HISTORY_LIMIT = 30;
-
-/** Recent rubric versions, newest first, for the editor's history panel. */
-export async function listReportRubricVersions() {
-  return prisma.reportRubric.findMany({
-    orderBy: { version: "desc" },
-    take: RUBRIC_HISTORY_LIMIT,
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-export async function saveReportRubric(content: string, userId: string) {
-  const latest = await prisma.reportRubric.findFirst({
-    orderBy: { version: "desc" },
-    select: { version: true },
-  });
-  return prisma.reportRubric.create({
-    data: {
-      content,
-      version: (latest?.version ?? 0) + 1,
-      updatedById: userId,
-    },
-    include: { updatedBy: { select: { name: true } } },
-  });
-}
-
-/** The rubric a new job grades with, creating the seed version if needed. */
-async function rubricForNewJob(userId: string) {
-  const current = await getCurrentReportRubric();
-  if (current) return current;
-  return saveReportRubric(DEFAULT_REPORT_RUBRIC, userId);
-}
-
-export interface CreateReportJobInput {
-  title: string;
-  authors?: string;
-  studentId?: string;
-  assignedQuestion?: string;
-  reportBlobUrl?: string;
-  reportFilename?: string;
-  /** A report the grader pasted directly instead of uploading a PDF. */
-  reportText?: string;
-  reasoningEffort: ReportReasoningEffort;
-}
-
-export async function createReportJob(userId: string, input: CreateReportJobInput) {
-  if (!input.reportBlobUrl && !input.reportText) {
-    throw new Error("A report PDF or pasted report text is required");
-  }
-  if (input.reportBlobUrl && !isUploadedBlobUrl(input.reportBlobUrl)) {
-    throw new Error("Report URL is not an uploaded file");
-  }
-  const rubric = await rubricForNewJob(userId);
-  return prisma.reportGradingJob.create({
-    data: {
-      title: input.title,
-      authors: input.authors,
-      studentId: input.studentId,
-      assignedQuestion: input.assignedQuestion,
-      reportBlobUrl: input.reportBlobUrl,
-      reportFilename: input.reportFilename,
-      reportText: input.reportText,
-      reasoningEffort: input.reasoningEffort,
-      model: REPORT_GRADING_MODEL,
-      rubricId: rubric.id,
-      createdById: userId,
-    },
-  });
-}
+export { createReportJob, getCurrentReportRubric, listReportRubricVersions, saveReportRubric,
+  type CreateReportJobInput } from "./report-job-creation";
 
 export type JobRecord = NonNullable<
   Awaited<ReturnType<typeof prisma.reportGradingJob.findUnique>>
@@ -120,11 +46,46 @@ async function scheduleForJobs(
   return jobs.map((job) => (job.studentId ? schedule.get(job.studentId) ?? null : null));
 }
 
+export type ReportReviewFilter = "all" | "my_ungraded" | "none_graded";
+
+export interface ReportJobListFilter extends JobListFilter {
+  reviewFilter?: ReportReviewFilter;
+}
+
+interface ReviewCounts {
+  humanReviewCount: number;
+  myGradedAt: string | null;
+}
+
+function summarizeReviews(
+  reviews: { slotKey: string; gradedAt: Date | null }[] | undefined,
+  viewerUserId?: string
+): ReviewCounts {
+  if (!reviews) return { humanReviewCount: 0, myGradedAt: null };
+  let humanReviewCount = 0;
+  let myGradedAt: string | null = null;
+  const myKey = viewerUserId ? personalSlotKey(viewerUserId) : null;
+  for (const r of reviews) {
+    if (r.gradedAt) {
+      humanReviewCount++;
+      if (myKey && r.slotKey === myKey) {
+        myGradedAt = r.gradedAt.toISOString();
+      }
+    }
+  }
+  return { humanReviewCount, myGradedAt };
+}
+
 function toSummary(
-  job: JobRecord & { createdBy?: { name: string | null } },
+  job: JobRecord & {
+    createdBy?: { name: string | null };
+    humanReviews?: { slotKey: string; gradedAt: Date | null }[];
+  },
   rubricVersion: number | null,
-  schedule: RosterSchedule | null
+  schedule: RosterSchedule | null,
+  viewerUserId?: string
 ): ReportJobSummary {
+  const { humanReviewCount, myGradedAt } = summarizeReviews(job.humanReviews, viewerUserId);
   return {
     id: job.id,
     title: job.title,
@@ -143,6 +104,8 @@ function toSummary(
     createdByName: job.createdBy?.name ?? null,
     createdAt: job.createdAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null,
+    humanReviewCount,
+    myGradedAt,
   };
 }
 
@@ -169,21 +132,45 @@ async function jobSearchFilter(query: string): Promise<Prisma.ReportGradingJobWh
   };
 }
 
-export async function listReportJobs(page: number, pageSize: number, filter: JobListFilter = {}) {
+export async function listReportJobs(
+  page: number,
+  pageSize: number,
+  filter: ReportJobListFilter = {},
+  viewerUserId?: string
+) {
+  const reviewConditions: Prisma.ReportGradingJobWhereInput[] = [];
+  if (filter.reviewFilter === "my_ungraded" && viewerUserId) {
+    reviewConditions.push({
+      status: "DONE",
+      humanReviews: {
+        none: { slotKey: personalSlotKey(viewerUserId), gradedAt: { not: null } },
+      },
+    });
+  } else if (filter.reviewFilter === "none_graded") {
+    reviewConditions.push({
+      status: "DONE",
+      humanReviews: { none: { gradedAt: { not: null } } },
+    });
+  }
+
   const conditions = await Promise.all([
     ...(filter.query ? [jobSearchFilter(filter.query)] : []),
     ...(filter.group !== undefined
       ? [rosterJobFilter({ kind: "group", number: filter.group })]
       : []),
   ]);
-  const where = conditions.length > 0 ? { AND: conditions } : undefined;
+  const allConditions = [...conditions, ...reviewConditions];
+  const where = allConditions.length > 0 ? { AND: allConditions } : undefined;
   const [jobs, totalCount] = await Promise.all([
     prisma.reportGradingJob.findMany({
       where,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { createdBy: { select: { name: true } } },
+      include: {
+        createdBy: { select: { name: true } },
+        humanReviews: { select: { slotKey: true, gradedAt: true } },
+      },
     }),
     prisma.reportGradingJob.count({ where }),
   ]);
@@ -192,36 +179,110 @@ export async function listReportJobs(page: number, pageSize: number, filter: Job
     scheduleForJobs(jobs),
   ]);
   return {
-    jobs: jobs.map((job, i) => toSummary(job, versions[i], schedules[i])),
+    jobs: jobs.map((job, i) => toSummary(job, versions[i], schedules[i], viewerUserId)),
     totalCount,
   };
 }
 
-export async function getReportJob(id: string): Promise<ReportJobDetail | null> {
+async function computeReportNavigation(
+  currentId: string,
+  viewerUserId?: string
+): Promise<ReportJobNavigation> {
+  const doneJobs = await prisma.reportGradingJob.findMany({
+    where: { status: "DONE" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      humanReviews: {
+        where: { gradedAt: { not: null } },
+        select: { slotKey: true },
+      },
+    },
+  });
+  const totalDone = doneJobs.length;
+  const myKey = viewerUserId ? personalSlotKey(viewerUserId) : null;
+  let myGradedDone = 0;
+  for (const j of doneJobs) {
+    if (myKey && j.humanReviews.some((r) => r.slotKey === myKey)) {
+      myGradedDone++;
+    }
+  }
+  const idx = doneJobs.findIndex((j) => j.id === currentId);
+  const prevId = idx > 0 ? doneJobs[idx - 1].id : null;
+  const nextId = idx >= 0 && idx < totalDone - 1 ? doneJobs[idx + 1].id : null;
+
+  const orderedAfterCurrent =
+    idx >= 0
+      ? [...doneJobs.slice(idx + 1), ...doneJobs.slice(0, idx)]
+      : doneJobs;
+
+  const nextUngradedId =
+    orderedAfterCurrent.find(
+      (j) => !myKey || !j.humanReviews.some((r) => r.slotKey === myKey)
+    )?.id ?? null;
+
+  const nextCompletelyUngradedId =
+    orderedAfterCurrent.find((j) => j.humanReviews.length === 0)?.id ?? null;
+
+  return {
+    prevId,
+    nextId,
+    nextUngradedId,
+    nextCompletelyUngradedId,
+    position: idx >= 0 ? idx + 1 : null,
+    totalDone,
+    myGradedDone,
+  };
+}
+
+export async function getReportJob(
+  id: string,
+  viewerUserId?: string
+): Promise<ReportJobDetail | null> {
   const job = await prisma.reportGradingJob.findUnique({
     where: { id },
     include: {
+      rubric: { select: { version: true, content: true } },
       createdBy: { select: { name: true } },
-      humanGradedBy: { select: { name: true } },
-      humanScores: { select: { criterion: true, score: true } },
+      humanReviews: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          grader: { select: { name: true, role: true } },
+          scores: { select: { criterion: true, score: true } },
+        },
+      },
     },
   });
   if (!job) return null;
-  const [version, [schedule]] = await Promise.all([
-    rubricVersionOf(job.rubricId),
+  const [[schedule], navigation] = await Promise.all([
     scheduleForJobs([job]),
+    computeReportNavigation(job.id, viewerUserId),
   ]);
+  const reviews = job.humanReviews.map((row) =>
+    toReportHumanReviewDetail(row, viewerUserId)
+  );
+  const mine = reviews.find((r) => r.isMine);
   return {
-    ...toSummary(job, version, schedule),
+    ...toSummary(job, job.rubric.version, schedule, viewerUserId),
+    rubricContent: job.rubric.content,
     ...toFeedbackEmailStatus(job, schedule?.email ?? null),
     reportText: job.reportText,
     reportFilename: job.reportFilename,
+    hasReportPdf: Boolean(job.reportBlobUrl),
     resultJson: job.resultJson,
     presentationJobId: job.presentationJobId,
-    human: toHumanGrading(
-      job,
-      job.humanScores.map((row) => ({ name: row.criterion, score: row.score }))
-    ),
+    human: mine
+      ? {
+          scores: mine.scores,
+          total: mine.total,
+          comments: mine.comments,
+          gradedAt: mine.gradedAt,
+          gradedByName: mine.gradedByName,
+          aiRevealedAt: mine.aiRevealedAt,
+        }
+      : emptyHumanGrading(),
+    humanReviews: reviews,
+    navigation,
   };
 }
 
@@ -237,8 +298,9 @@ async function deleteBlobQuietly(url: string | null) {
 }
 
 /**
- * Runs the whole pipeline for one job: load the report, grade it, store the
- * result, then delete the uploaded file so nothing heavy is retained.
+ * Runs the whole pipeline for one job: load the report, grade it, and store the
+ * result. Keeps `reportBlobUrl` so staff can read the PDF side by side during
+ * grading; the blob is deleted when the job itself is deleted.
  * Safe to call again on a FAILED job (retry).
  */
 export async function processReportJob(id: string): Promise<void> {
@@ -274,10 +336,8 @@ export async function processReportJob(id: string): Promise<void> {
         presentationJobId: suggestions?.presentationJobId ?? null,
         completedAt: new Date(),
         gradingDurationMs: Date.now() - startedAt.getTime(),
-        reportBlobUrl: null,
       },
     });
-    await deleteBlobQuietly(job.reportBlobUrl);
   } catch (error) {
     const message = (error as Error).message;
     logger.error("Report grading job failed", { jobId: id, error: message });

@@ -7,6 +7,7 @@ import { consumeActionRateLimit } from "@/lib/services/action-rate-limit";
 import {
   createReportJob,
   listReportJobs,
+  type ReportReviewFilter,
 } from "@/lib/services/report-grading-service";
 import {
   REASONING_EFFORT_OPTIONS,
@@ -37,8 +38,16 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(searchParams.get("pageSize")) || 20));
+  const rawReview = searchParams.get("review");
+  const reviewFilter: ReportReviewFilter =
+    rawReview === "my_ungraded" || rawReview === "none_graded" ? rawReview : "all";
 
-  const result = await listReportJobs(page, pageSize, parseJobListFilter(searchParams));
+  const result = await listReportJobs(
+    page,
+    pageSize,
+    { ...parseJobListFilter(searchParams), reviewFilter },
+    auth.user.id
+  );
   return NextResponse.json({ data: result });
 }
 

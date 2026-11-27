@@ -70,6 +70,8 @@ function ReportGradingContent() {
             groupNumbers={rosterState.roster?.groupNumbers ?? []}
             group={jobsState.group}
             onGroupChange={jobsState.setGroup}
+            reviewFilter={jobsState.reviewFilter}
+            onReviewFilterChange={jobsState.setReviewFilter}
             onPageChange={jobsState.setPage}
             onRefresh={() => void jobsState.refresh(true)}
           />

@@ -24,7 +24,7 @@ const STEPS: HowToStep[] = [
   {
     title: "Open a job to read the AI result; optionally add your scores and comments.",
     detail:
-      "The summary, evidence-referenced comments and per-criterion scores show right away. Use “Your scores and comments” to note problems or improvements alongside your grade. Comments are optional, and both can be edited later.",
+      "Read the summary and comments beside the report. AI scores stay hidden unless you choose to see them. Save your own score and comments before moving to the next report.",
   },
   {
     title: "Export a CSV when you are done.",
@@ -37,6 +37,10 @@ const FAQ: HowToFaq[] = [
   {
     q: "What is the report question?",
     a: "The sign-up sheet's “Report Topic” column: an extra question this student's report must answer on top of the presentation topic (column Topics). The AI's first criterion grades whether both were covered; when Report Topic is blank the report is graded against the presentation topic alone and is not penalised.",
+  },
+  {
+    q: "Are the presentation suggestions required?",
+    a: "No. A well-developed idea can show depth or breadth, whether the student chose it or the presentation review suggested it. Skipping suggestions does not cost points or prevent full marks. An assigned report question still has to be answered.",
   },
   {
     q: "The student ID was not found in the sign-up sheet.",

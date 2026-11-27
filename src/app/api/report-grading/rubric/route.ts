@@ -3,13 +3,14 @@ import { z } from "zod";
 import { requireApiRole, isErrorResponse } from "@/lib/api-auth";
 import { STAFF_ROLES } from "@/lib/constants";
 import { DEFAULT_REPORT_RUBRIC } from "@/lib/default-report-rubric";
+import { hasWeightedReportCriteria, RUBRIC_WEIGHT_HINT } from "@/lib/report-grading";
 import {
   getCurrentReportRubric,
   saveReportRubric,
 } from "@/lib/services/report-grading-service";
 
 const RubricInputSchema = z.object({
-  content: z.string().min(100).max(100_000),
+  content: z.string().min(100).max(100_000).refine(hasWeightedReportCriteria, RUBRIC_WEIGHT_HINT),
 });
 
 export async function GET() {
@@ -41,7 +42,7 @@ export async function PUT(request: Request) {
   const parsed = RubricInputSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Grading instructions must be between 100 and 100,000 characters" },
+      { error: parsed.error.issues[0].message },
       { status: 400 }
     );
   }

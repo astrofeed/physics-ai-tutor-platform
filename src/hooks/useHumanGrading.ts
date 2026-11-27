@@ -27,11 +27,13 @@ export function useHumanGrading(
   kind: HumanGradingKind,
   jobId: string,
   aiRevealedAt: string | null,
-  onChanged: () => void
+  onChanged: () => void,
+  options: { autoRevealOnMount?: boolean } = {}
 ) {
+  const { autoRevealOnMount = true } = options;
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const revealAi = useCallback(() => {
     if (aiRevealedAt !== null) return;
     fetch(`${API_BASE[kind]}/${jobId}/reveal-ai`, { method: "POST" })
       .then((res) => {
@@ -43,6 +45,11 @@ export function useHumanGrading(
         console.error(`[human-grading] recording AI view for ${kind} job ${jobId} failed:`, error);
       });
   }, [kind, jobId, aiRevealedAt]);
+
+  useEffect(() => {
+    if (!autoRevealOnMount) return;
+    revealAi();
+  }, [autoRevealOnMount, revealAi]);
 
   const saveScores = useCallback(
     async (input: HumanScoresInput): Promise<boolean> => {
@@ -71,5 +78,58 @@ export function useHumanGrading(
     [kind, jobId, onChanged]
   );
 
-  return { saveScores, saving };
+  const addExtraReview = useCallback(
+    async (input: HumanScoresInput & { graderLabel?: string }): Promise<boolean> => {
+      setSaving(true);
+      try {
+        const res = await fetch(`${API_BASE[kind]}/${jobId}/human-scores`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        if (!res.ok) {
+          toast.error(await errorMessage(res, HUMAN_GRADING_TEXT.saveFailed));
+          return false;
+        }
+        toast.success(HUMAN_GRADING_TEXT.saved);
+        onChanged();
+        return true;
+      } catch (error) {
+        console.error(`[human-grading] adding extra review for ${kind} job ${jobId} failed:`, error);
+        toast.error(HUMAN_GRADING_TEXT.saveFailed);
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [kind, jobId, onChanged]
+  );
+
+  const deleteReview = useCallback(
+    async (reviewId: string): Promise<boolean> => {
+      setSaving(true);
+      try {
+        const res = await fetch(
+          `${API_BASE[kind]}/${jobId}/human-scores?reviewId=${encodeURIComponent(reviewId)}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) {
+          toast.error(await errorMessage(res, "Failed to delete score"));
+          return false;
+        }
+        toast.success("Score removed");
+        onChanged();
+        return true;
+      } catch (error) {
+        console.error(`[human-grading] deleting review ${reviewId} failed:`, error);
+        toast.error("Failed to delete score");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [kind, jobId, onChanged]
+  );
+
+  return { saveScores, addExtraReview, deleteReview, revealAi, saving };
 }

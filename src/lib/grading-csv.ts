@@ -21,9 +21,9 @@ import {
   gradedBlind,
   humanTotalOf,
   sumScores,
-  weightedAverage,
   type HumanGrading,
 } from "@/lib/human-grading";
+import { reportWeightedTotal } from "@/lib/report-score-scale";
 
 type CsvValue = string | number | null | undefined;
 
@@ -81,7 +81,7 @@ export function downloadCsv(filename: string, content: string): void {
  * jobs get blank cells.
  */
 export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
-  const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson));
+  const evaluations = jobs.map((job) => parseReportEvaluation(job.resultJson, job.rubricContent));
   const suggestionCount = Math.max(
     0,
     ...evaluations.map((e) => e?.suggestionChecks?.length ?? 0)
@@ -98,6 +98,14 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     }
   }
 
+  const gradedReviewsPerJob = jobs.map((job) =>
+    (job.humanReviews ?? []).filter((r) => r.gradedAt !== null)
+  );
+  const maxMultiGraders = Math.max(
+    0,
+    ...gradedReviewsPerJob.map((list) => (list.length > 1 ? list.length : 0))
+  );
+
   const header: CsvValue[] = [
     "Student ID",
     "Title",
@@ -112,9 +120,21 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       `${criterion} (${weightPercent}%) human score`,
       `${criterion} AI reason`,
     ]),
-    "AI weighted total (0-10)",
-    "Human total (0-10)",
+    "AI weighted total (0-100)",
+    "Human total (0-100)",
     ...HUMAN_AUDIT_HEADER,
+    ...(maxMultiGraders > 0
+      ? [
+          "Human grader count",
+          "Human average total (0-100)",
+          ...Array.from({ length: maxMultiGraders }, (_, idx) => idx + 1).flatMap((n) => [
+            `Grader ${n} name`,
+            `Grader ${n} total (0-100)`,
+            `Grader ${n} blind`,
+            `Grader ${n} comments`,
+          ]),
+        ]
+      : []),
     "Summary",
     ...suggestionCheckHeader(suggestionCount),
   ];
@@ -125,12 +145,41 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     const humanByCriterion = humanScoresByName(job.human);
     const weightOf = (criterion: string) => byCriterion.get(criterion)?.weightPercent;
     const aiTotal = scores
-      ? weightedAverage(
+      ? reportWeightedTotal(
           scores.map((s) => ({ name: s.criterion, score: s.score })),
           weightOf
         )
       : null;
-    const humanTotal = humanTotalOf(job.human, (scores) => weightedAverage(scores, weightOf));
+    const fromItems = (entries: HumanGrading["scores"]) => reportWeightedTotal(entries, weightOf);
+    const humanTotal = humanTotalOf(job.human, fromItems);
+    const gradedReviews = gradedReviewsPerJob[i];
+    const reviewTotals = gradedReviews
+      .map((r) => humanTotalOf(r, fromItems))
+      .filter((v): v is number => v !== null);
+    const avgHumanTotal =
+      reviewTotals.length > 0
+        ? reviewTotals.reduce((sum, v) => sum + v, 0) / reviewTotals.length
+        : null;
+    const multiGraderCells: CsvValue[] =
+      maxMultiGraders > 0
+        ? [
+            gradedReviews.length,
+            avgHumanTotal === null ? "" : avgHumanTotal.toFixed(2),
+            ...Array.from({ length: maxMultiGraders }, (_, idx) => gradedReviews[idx]).flatMap(
+              (review) => {
+                if (!review) return ["", "", "", ""];
+                const t = humanTotalOf(review, fromItems);
+                const b = gradedBlind(review);
+                return [
+                  review.gradedByName ?? "",
+                  t === null ? "" : t.toFixed(2),
+                  b === null ? "" : b ? "yes" : "no",
+                  review.comments ?? "",
+                ];
+              }
+            ),
+          ]
+        : [];
     return [
       job.studentId,
       job.title,
@@ -147,6 +196,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       aiTotal === null ? "" : aiTotal.toFixed(2),
       humanTotal === null ? "" : humanTotal.toFixed(2),
       ...humanAuditCells(job.human),
+      ...multiGraderCells,
       evaluations[i]?.summary ?? "",
       ...suggestionCheckCells(evaluations[i]?.suggestionChecks, suggestionCount),
     ];

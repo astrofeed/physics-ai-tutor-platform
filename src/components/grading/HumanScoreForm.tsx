@@ -11,6 +11,7 @@ import { HUMAN_COMMENTS_MAX_CHARS } from "@/lib/human-grading";
 import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
 import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "./human-score-items";
+import { useScoreDraft } from "./use-score-draft";
 
 export type ScoreMode = "total" | "items";
 
@@ -23,6 +24,11 @@ interface Props {
   onCancel: (() => void) | null;
   /** Focus the total field on open; only when the grader opened the form, so page load never scrolls here. */
   focusOnOpen: boolean;
+  /** Hide AI reference numbers next to inputs so graders are not anchored before revealing AI scores. */
+  hideAiScores?: boolean;
+  draftKey?: string;
+  onNext?: () => void;
+  idPrefix?: string;
 }
 
 type Draft = Record<string, string>;
@@ -109,11 +115,18 @@ export function HumanScoreForm({
   onSave,
   onCancel,
   focusOnOpen,
+  hideAiScores = false,
+  draftKey,
+  onNext,
+  idPrefix = "human",
 }: Props) {
-  const [mode, setMode] = useState<ScoreMode>(human.scores.length > 0 ? "items" : "total");
-  const [itemDraft, setItemDraft] = useState<Draft>(() => itemDraftFrom(items, human.scores));
-  const [totalDraft, setTotalDraft] = useState(human.total === null ? "" : String(human.total));
-  const [comments, setComments] = useState(human.comments ?? "");
+  const { draft: { mode, itemDraft, totalDraft, comments }, change, dirty, clear } =
+    useScoreDraft({
+      mode: human.scores.length > 0 ? "items" : "total",
+      itemDraft: itemDraftFrom(items, human.scores),
+      totalDraft: human.total === null ? "" : String(human.total),
+      comments: human.comments ?? "",
+    }, draftKey);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: React.FormEvent) => {
@@ -124,38 +137,42 @@ export function HumanScoreForm({
       return;
     }
     setError(null);
-    await onSave({ ...parsed, comments });
+    const advance = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "next";
+    if (await onSave({ ...parsed, comments })) {
+      clear();
+      if (advance) onNext?.();
+    }
   };
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} data-unsaved-review={dirty || undefined} className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-gray-500">
           {mode === "total" ? HUMAN_GRADING_TEXT.totalHint : HUMAN_GRADING_TEXT.itemsHint}
         </p>
-        <ModeToggle mode={mode} onChange={setMode} disabled={saving} />
+        <ModeToggle mode={mode} onChange={(mode) => change({ mode })} disabled={saving} />
       </div>
 
       {mode === "total" ? (
         <div className="max-w-xs space-y-1">
-          <Label htmlFor="human-total" className="flex justify-between gap-2 text-sm">
+          <Label htmlFor={`${idPrefix}-total`} className="flex justify-between gap-2 text-sm">
             <span>
               {HUMAN_GRADING_TEXT.total} <span className="text-gray-500">/ {total.max}</span>
             </span>
-            {total.aiScore !== null ? (
+            {!hideAiScores && total.aiScore !== null ? (
               <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(total.aiScore)}</span>
             ) : null}
           </Label>
           <Input
-            id="human-total"
+            id={`${idPrefix}-total`}
             type="number"
             inputMode="decimal"
             min={0}
             max={total.max}
-            step="any"
+            step={total.step ?? "any"}
             autoFocus={focusOnOpen}
             value={totalDraft}
-            onChange={(e) => setTotalDraft(e.target.value)}
+            onChange={(e) => change({ totalDraft: e.target.value })}
             disabled={saving}
             className="text-lg"
           />
@@ -163,14 +180,16 @@ export function HumanScoreForm({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {items.map((item) => {
-            const id = `human-score-${item.name}`;
+            const id = `${idPrefix}-score-${item.name}`;
             return (
               <div key={item.name} className="space-y-1">
                 <Label htmlFor={id} className="flex justify-between gap-2 text-sm">
                   <span>
                     {item.name} <span className="text-gray-500">/ {item.max}</span>
                   </span>
-                  <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(item.aiScore)}</span>
+                  {!hideAiScores ? (
+                    <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(item.aiScore)}</span>
+                  ) : null}
                 </Label>
                 <Input
                   id={id}
@@ -180,7 +199,7 @@ export function HumanScoreForm({
                   max={item.max}
                   step="any"
                   value={itemDraft[item.name] ?? ""}
-                  onChange={(e) => setItemDraft({ ...itemDraft, [item.name]: e.target.value })}
+                  onChange={(e) => change({ itemDraft: { ...itemDraft, [item.name]: e.target.value } })}
                   disabled={saving}
                 />
               </div>
@@ -190,31 +209,36 @@ export function HumanScoreForm({
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="human-comments">{HUMAN_GRADING_TEXT.comments}</Label>
+        <Label htmlFor={`${idPrefix}-comments`}>{HUMAN_GRADING_TEXT.comments}</Label>
         <Textarea
-          id="human-comments"
+          id={`${idPrefix}-comments`}
           value={comments}
-          onChange={(event) => setComments(event.target.value)}
+          onChange={(event) => change({ comments: event.target.value })}
           rows={5}
           maxLength={HUMAN_COMMENTS_MAX_CHARS}
           disabled={saving}
-          aria-describedby="human-comments-hint human-comments-count"
+          aria-describedby={`${idPrefix}-comments-hint ${idPrefix}-comments-count`}
           placeholder={HUMAN_GRADING_TEXT.commentsPlaceholder}
           className="resize-y rounded-md shadow-none"
         />
         <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-          <p id="human-comments-hint" className="max-w-prose">{HUMAN_GRADING_TEXT.commentsHint}</p>
-          <span id="human-comments-count" className="tabular-nums">{comments.length} / {HUMAN_COMMENTS_MAX_CHARS}</span>
+          <p id={`${idPrefix}-comments-hint`} className="max-w-prose">{HUMAN_GRADING_TEXT.commentsHint}</p>
+          <span id={`${idPrefix}-comments-count`} className="tabular-nums">{comments.length} / {HUMAN_COMMENTS_MAX_CHARS}</span>
         </div>
       </div>
       {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={saving}>
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
           {HUMAN_GRADING_TEXT.save}
         </Button>
+        {onNext ? (
+          <Button type="submit" value="next" variant="outline" size="sm" disabled={saving}>
+            Save and go to next ungraded
+          </Button>
+        ) : null}
         {onCancel ? (
-          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
+          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => { clear(); onCancel(); }}>
             {HUMAN_GRADING_TEXT.cancel}
           </Button>
         ) : null}

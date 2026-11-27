@@ -13,7 +13,7 @@ export async function POST(
   const auth = await requireApiRole([...STAFF_ROLES]);
   if (isErrorResponse(auth)) return auth;
 
-  const found = await revealReportAi(params.id);
+  const found = await revealReportAi(params.id, auth.user.id);
   if (!found) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }

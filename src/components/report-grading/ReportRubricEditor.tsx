@@ -45,6 +45,7 @@ export function ReportRubricEditor() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">Use a heading like <code>### Physics (25%)</code> for each scoring criterion. Names must be unique and weights must total 100%.</p>
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

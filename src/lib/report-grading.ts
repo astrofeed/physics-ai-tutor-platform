@@ -5,7 +5,8 @@
  */
 
 import { z } from "zod";
-import type { HumanGrading } from "@/lib/human-grading";
+import { REPORT_CRITERION_MAX_SCORE } from "./report-score-scale";
+import type { HumanGrading, ReportHumanReviewDetail } from "@/types/human-grading";
 import type { FeedbackEmailStatus } from "@/lib/feedback-email";
 
 export const REASONING_EFFORT_OPTIONS = ["high", "xhigh"] as const;
@@ -51,15 +52,40 @@ export interface ReportJobSummary {
   createdByName: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** Number of staff reviews with a saved score on this report. */
+  humanReviewCount?: number;
+  /** Timestamp when the current logged-in staff member scored this report, or null. */
+  myGradedAt?: string | null;
+}
+
+export interface ReportJobNavigation {
+  prevId: string | null;
+  nextId: string | null;
+  /** Next DONE report the current staff member has not yet scored. */
+  nextUngradedId: string | null;
+  /** Next DONE report nobody has scored yet. */
+  nextCompletelyUngradedId: string | null;
+  /** 1-based position in the DONE grading queue (newest first), or null if not DONE. */
+  position: number | null;
+  totalDone: number;
+  myGradedDone: number;
 }
 
 export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
+  rubricContent?: string;
   reportText: string | null;
   reportFilename: string | null;
+  /** True when the uploaded PDF is retained and can be streamed via `/pdf`. */
+  hasReportPdf?: boolean;
   resultJson: string | null;
   /** The graded presentation whose suggested report topics were checked; null when none. */
   presentationJobId: string | null;
+  /** The current staff member's personal review (also keeps legacy callers working). */
   human: HumanGrading;
+  /** All staff reviews (personal + extra slots) on this report. */
+  humanReviews?: ReportHumanReviewDetail[];
+  /** Adjacent jobs for in-page prev / next / next-ungraded navigation. */
+  navigation?: ReportJobNavigation | null;
 }
 
 /**
@@ -67,7 +93,7 @@ export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
  * structured outputs): a summary, evidence-referenced comments, and a score
  * with its reason for each rubric criterion.
  */
-export const REPORT_CRITERION_MAX_SCORE = 10;
+export { REPORT_CRITERION_MAX_SCORE };
 
 export const ReportCriterionScoreSchema = z.object({
   criterion: z.string(),
@@ -85,14 +111,25 @@ export const ReportSuggestionCheckSchema = z.object({
   evidence: z.string(),
 });
 
+export const COMMENT_CATEGORIES = ["strength", "issue", "note", "ai_style"] as const;
+
+export const ReportCommentSchema = z.object({
+  reference: z.string(),
+  comment: z.string(),
+  /** 1-based PDF page number where this remark applies; null for general remarks or pasted text. */
+  page: z.number().int().min(1).nullable(),
+  /** Short verbatim excerpt (5-15 words) from that page for in-PDF highlighting; null for figures/equations. */
+  quote: z.string().nullable(),
+  /** Quick visual category for graders: strength, issue, note, or ai_style. */
+  category: z.enum(COMMENT_CATEGORIES).nullable(),
+  evidenceKind: z.enum(["Text", "Equation", "Figure", "Table", "Source"]).nullable(),
+  criterion: z.string().nullable(),
+  needsStaffCheck: z.boolean().nullable(),
+});
+
 export const ReportEvaluationSchema = z.object({
   summary: z.string(),
-  comments: z.array(
-    z.object({
-      reference: z.string(),
-      comment: z.string(),
-    })
-  ),
+  comments: z.array(ReportCommentSchema),
   /** Null on jobs graded before per-criterion scores existed. */
   criterionScores: z.array(ReportCriterionScoreSchema).nullable(),
   /** One entry per presentation suggestion; null when the student had no graded presentation. */
@@ -116,32 +153,85 @@ export function filenameStem(name: string): string {
 }
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;
+export type ReportComment = z.infer<typeof ReportCommentSchema>;
+export type ReportCommentCategory = (typeof COMMENT_CATEGORIES)[number];
 export type ReportCriterionScore = z.infer<typeof ReportCriterionScoreSchema>;
 export type ReportSuggestionCheck = z.infer<typeof ReportSuggestionCheckSchema>;
 export type SuggestionStatus = ReportSuggestionCheck["status"];
 
 export const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
-  not_addressed: "Not done",
-  partially_addressed: "Partly done",
-  completed: "Done",
+  not_addressed: "Not pursued",
+  partially_addressed: "Explored in part",
+  completed: "Developed",
 };
 
 const OPTIONAL_EVALUATION_FIELDS = ["criterionScores", "suggestionChecks"] as const;
 
 /** Parses a stored evaluation; null for bad JSON. Tolerates older jobs
- * graded before per-criterion scores or suggestion checks existed. */
-export function parseReportEvaluation(json: string | null): ReportEvaluation | null {
+ * graded before per-criterion scores, suggestion checks, or comment anchors existed. */
+export function parseReportEvaluation(json: string | null, rubric?: string): ReportEvaluation | null {
   if (!json) return null;
   try {
     const parsed: unknown = JSON.parse(json);
     if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
       for (const field of OPTIONAL_EVALUATION_FIELDS) {
-        if (!(field in parsed)) (parsed as Record<string, unknown>)[field] = null;
+        if (!(field in record)) record[field] = null;
+      }
+      if (Array.isArray(record.comments)) {
+        record.comments = record.comments.map((entry) => {
+          if (!entry || typeof entry !== "object") return entry;
+          const item = entry as Record<string, unknown>;
+          return {
+            ...item,
+            page: "page" in item ? item.page : null,
+            quote: "quote" in item ? item.quote : null,
+            category: "category" in item ? item.category : null,
+            evidenceKind: item.evidenceKind ?? null,
+            criterion: item.criterion ?? null,
+            needsStaffCheck: item.needsStaffCheck ?? null,
+          };
+        });
       }
     }
     const result = ReportEvaluationSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    if (!result.success) return null;
+    if (rubric !== undefined) {
+      const names = new Set(reportRubricCriteria(rubric).map((item) => item.name));
+      for (const comment of result.data.comments) {
+        if (comment.criterion && !names.has(comment.criterion)) comment.criterion = null;
+      }
+    }
+    if (result.data.criterionScores && !validReportScores(result.data.criterionScores, rubric)) {
+      return { ...result.data, criterionScores: null };
+    }
+    return result.data;
   } catch {
     return null;
   }
+}
+
+/** Weighted Markdown headings in the rubric version bound to this report. */
+export function reportRubricCriteria(rubric: string) {
+  return Array.from(rubric.matchAll(/^#{1,6}[ \t]+(?:\d+[.)][ \t]+)?(.+?)[ \t]+\((\d+(?:\.\d+)?)%\)[ \t]*\r?$/gm),
+    ([, name, weight]) => ({ name: name.trim(), weight: Number(weight) }));
+}
+
+export const RUBRIC_WEIGHT_HINT = "Use unique Markdown criterion headings such as '### Physics (25%)' with weights totaling 100%.";
+
+export function hasWeightedReportCriteria(rubric: string) {
+  const criteria = reportRubricCriteria(rubric);
+  return criteria.length > 0 && new Set(criteria.map((c) => c.name)).size === criteria.length &&
+    Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) < 0.000001;
+}
+
+export function validReportScores(scores: ReportCriterionScore[], rubric?: string) {
+  const weights = new Map(scores.map((s) => [s.criterion, s.weightPercent]));
+  if (weights.size !== scores.length || scores.some((s) => !s.criterion.trim()) ||
+      Math.abs(scores.reduce((sum, s) => sum + s.weightPercent, 0) - 100) > 0.000001) return false;
+  if (rubric === undefined) return true;
+  const expected = reportRubricCriteria(rubric);
+  return expected.length > 0 && (expected.length === scores.length &&
+    new Set(expected.map((c) => c.name)).size === expected.length &&
+    expected.every((c) => weights.get(c.name) === c.weight));
 }

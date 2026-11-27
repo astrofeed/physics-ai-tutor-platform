@@ -8,6 +8,7 @@ import { HUMAN_GRADING_TEXT } from "@/lib/human-grading-strings";
 import type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/human-grading";
 import { formatTimestamp } from "@/components/presentation-grading/job-format";
 import { HumanScoreForm } from "./HumanScoreForm";
+import { useScoreDraftCache } from "./use-score-draft";
 import { formatScore, type HumanScoreItem, type HumanTotalItem } from "./human-score-items";
 
 interface Props {
@@ -18,6 +19,14 @@ interface Props {
   human: HumanGrading;
   saving: boolean;
   onSave: (input: HumanScoresInput) => Promise<boolean>;
+  /** Hide AI score columns/hints until the grader reveals AI scores. */
+  hideAiScores?: boolean;
+  /** Optional custom card title (defaults to "Your score"). */
+  title?: string;
+  /** Render without an outer Card border/box for flat split-pane layouts. */
+  borderless?: boolean;
+  draftKey?: string;
+  onNext?: () => void;
 }
 
 interface Row {
@@ -32,7 +41,7 @@ function ScoreCell({ value }: { value: number | null }) {
   return <>{value === null ? "—" : formatScore(value)}</>;
 }
 
-function ComparisonTable({ rows }: { rows: Row[] }) {
+function ComparisonTable({ rows, hideAiScores }: { rows: Row[]; hideAiScores: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -40,8 +49,12 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
           <tr>
             <th className="py-1 pr-3 font-medium">{HUMAN_GRADING_TEXT.item}</th>
             <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.you}</th>
-            <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.ai}</th>
-            <th className="py-1 text-right font-medium">{HUMAN_GRADING_TEXT.difference}</th>
+            {!hideAiScores ? (
+              <>
+                <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.ai}</th>
+                <th className="py-1 text-right font-medium">{HUMAN_GRADING_TEXT.difference}</th>
+              </>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -60,12 +73,16 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
               <td className="py-1.5 pr-3 text-right font-semibold tabular-nums">
                 <ScoreCell value={row.mine} />
               </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums">
-                <ScoreCell value={row.ai} />
-              </td>
-              <td className="py-1.5 text-right tabular-nums text-gray-500">
-                <ScoreCell value={row.mine !== null && row.ai !== null ? row.mine - row.ai : null} />
-              </td>
+              {!hideAiScores ? (
+                <>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                    <ScoreCell value={row.ai} />
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums text-gray-500">
+                    <ScoreCell value={row.mine !== null && row.ai !== null ? row.mine - row.ai : null} />
+                  </td>
+                </>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -78,9 +95,22 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
  * Optional staff score — one overall total or one score per rubric item —
  * shown beside the AI's once saved so the two can be compared.
  */
-export function HumanScoreCard({ items, total, totalFromItems, human, saving, onSave }: Props) {
+export function HumanScoreCard({
+  items,
+  total,
+  totalFromItems,
+  human,
+  saving,
+  onSave,
+  hideAiScores = false,
+  title,
+  borderless = false,
+  draftKey,
+  onNext,
+}: Props) {
   const graded = human.scores.length > 0 || human.total !== null;
-  const [editing, setEditing] = useState(!graded);
+  const cache = useScoreDraftCache();
+  const [editing, setEditing] = useState(!graded || (!!draftKey && cache.has(draftKey)));
   const [openedByGrader, setOpenedByGrader] = useState(false);
 
   const savedByName = new Map(human.scores.map((entry) => [entry.name, entry.score]));
@@ -103,55 +133,75 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
     },
   ];
 
+  const body = editing ? (
+    <HumanScoreForm
+      draftKey={draftKey}
+      onNext={onNext}
+      items={items}
+      total={total}
+      human={human}
+      saving={saving}
+      onSave={async (input) => {
+        const ok = await onSave(input);
+        if (ok) setEditing(false);
+        return ok;
+      }}
+      onCancel={graded ? () => setEditing(false) : null}
+      focusOnOpen={openedByGrader}
+      hideAiScores={hideAiScores}
+    />
+  ) : (
+    <>
+      <ComparisonTable rows={rows} hideAiScores={hideAiScores} />
+      {human.comments ? (
+        <section
+          aria-label={HUMAN_GRADING_TEXT.savedComments}
+          className="space-y-2 border-t border-border pt-4"
+        >
+          <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>
+          <p className="whitespace-pre-wrap break-words text-sm">{human.comments}</p>
+        </section>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+        <span>
+          {human.gradedAt ? HUMAN_GRADING_TEXT.savedAt(formatTimestamp(human.gradedAt)) : null}
+          {human.gradedByName ? HUMAN_GRADING_TEXT.savedBy(human.gradedByName) : null}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setOpenedByGrader(true);
+            setEditing(true);
+          }}
+        >
+          {HUMAN_GRADING_TEXT.edit}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (borderless) {
+    return (
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            {title ?? HUMAN_GRADING_TEXT.title}
+          </h2>
+          <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
+        </div>
+        {body}
+      </section>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-base">{HUMAN_GRADING_TEXT.title}</CardTitle>
+        <CardTitle className="text-base">{title ?? HUMAN_GRADING_TEXT.title}</CardTitle>
         <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {editing ? (
-          <HumanScoreForm
-            items={items}
-            total={total}
-            human={human}
-            saving={saving}
-            onSave={async (input) => {
-              const ok = await onSave(input);
-              if (ok) setEditing(false);
-              return ok;
-            }}
-            onCancel={graded ? () => setEditing(false) : null}
-            focusOnOpen={openedByGrader}
-          />
-        ) : (
-          <>
-            <ComparisonTable rows={rows} />
-            {human.comments ? (
-              <section aria-label={HUMAN_GRADING_TEXT.savedComments} className="space-y-2 border-t border-border pt-4">
-                <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>
-                <p className="whitespace-pre-wrap break-words text-sm">{human.comments}</p>
-              </section>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-              <span>
-                {human.gradedAt ? HUMAN_GRADING_TEXT.savedAt(formatTimestamp(human.gradedAt)) : null}
-                {human.gradedByName ? HUMAN_GRADING_TEXT.savedBy(human.gradedByName) : null}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setOpenedByGrader(true);
-                  setEditing(true);
-                }}
-              >
-                {HUMAN_GRADING_TEXT.edit}
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
+      <CardContent className="space-y-4">{body}</CardContent>
     </Card>
   );
 }

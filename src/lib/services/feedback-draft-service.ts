@@ -150,7 +150,7 @@ export async function draftReportFeedback(
 ): Promise<FeedbackDraftResult> {
   const job = await getReportJob(jobId);
   if (!job) return NOT_FOUND;
-  const evaluation = parseReportEvaluation(job.resultJson);
+  const evaluation = parseReportEvaluation(job.resultJson, job.rubricContent);
   if (!evaluation) return NOT_GRADED;
 
   const student = { name: job.englishName ?? job.authors, senderName };

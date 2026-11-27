@@ -76,6 +76,7 @@ model User {
   reportRubrics    ReportRubric[]     @relation("ReportRubricUpdatedBy")
   reportGradingJobs ReportGradingJob[] @relation("ReportJobCreatedBy")
   humanGradedReportJobs       ReportGradingJob[]       @relation("ReportJobHumanGradedBy")
+  reportHumanReviews          ReportHumanReview[]      @relation("ReportHumanReviewGrader")
   humanGradedPresentationJobs PresentationGradingJob[] @relation("PresentationJobHumanGradedBy")
 }
 
@@ -113,7 +114,7 @@ model ReportGradingJob {
   status  ReportJobStatus @default(QUEUED)
   error   String?         @db.Text
 
-  /// Blob URL is temporary: cleared after grading so no report file is retained.
+  /// Blob URL of the uploaded report PDF; kept for side-by-side grading and deleted when the job is deleted.
   reportBlobUrl  String?
   reportFilename String?
   /// A report the grader pasted directly instead of uploading a PDF.
@@ -153,6 +154,7 @@ model ReportGradingJob {
   rubric          ReportRubric            @relation(fields: [rubricId], references: [id])
   presentationJob PresentationGradingJob? @relation(fields: [presentationJobId], references: [id], onDelete: SetNull)
   humanScores     ReportHumanScore[]
+  humanReviews    ReportHumanReview[]
 
   @@index([rubricId])
   @@index([status, createdAt])
@@ -160,17 +162,47 @@ model ReportGradingJob {
   @@index([presentationJobId])
 }
 
-/// A TA's/professor's own score for one rubric criterion of a report, kept
-/// beside the AI's so the two can be compared at the end of the term.
+/// One staff member's independent review of a report (total or per-criterion
+/// scores, comments, and per-grader AI-reveal timestamp). Multiple graders can
+/// review the same report concurrently without overwriting each other.
+model ReportHumanReview {
+  id           String    @id @default(cuid())
+  jobId        String
+  graderId     String
+  /// "user:<graderId>" for a grader's own review, or "extra:<id>" for an added slot.
+  slotKey      String
+  /// Optional custom label for an added slot; null displays the grader's account name.
+  graderLabel  String?
+  /// Staff total entered directly (0-10) when they skip per-criterion scores.
+  total        Decimal?  @db.Decimal(10, 2)
+  comments     String?   @db.Text
+  gradedAt     DateTime?
+  aiRevealedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  job    ReportGradingJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  grader User               @relation("ReportHumanReviewGrader", fields: [graderId], references: [id])
+  scores ReportHumanScore[]
+
+  @@unique([jobId, slotKey])
+  @@index([jobId])
+  @@index([graderId])
+}
+
+/// A TA's/professor's own score for one rubric criterion inside a ReportHumanReview.
 model ReportHumanScore {
   id        String  @id @default(cuid())
   jobId     String
+  reviewId  String
   criterion String
   score     Decimal @db.Decimal(10, 2)
 
-  job ReportGradingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job    ReportGradingJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  review ReportHumanReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
-  @@unique([jobId, criterion])
+  @@unique([reviewId, criterion])
+  @@index([jobId])
 }
 
 enum PresentationJobStatus {

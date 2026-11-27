@@ -1,120 +1,79 @@
 "use client";
 
-import React, { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { parseReportEvaluation, type ReportJobDetail } from "@/lib/report-grading";
+import { reportWeightedTotal, REPORT_TOTAL_MAX_SCORE } from "@/lib/report-score-scale";
+import type { ReportEvaluation, ReportJobDetail, ReportCommentCategory } from "@/lib/report-grading";
 import { reportEvaluationToText } from "./report-job-format";
 import { ReportSuggestionChecks } from "./ReportSuggestionChecks";
+import { useReportNoteEvidence } from "./ReportNoteEvidence";
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          toast.error("Could not copy to the clipboard");
-        }
-      }}
-    >
-      {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-      Copy
-    </Button>
-  );
+interface Props {
+  job: ReportJobDetail;
+  evaluation: ReportEvaluation;
+  rubricMode: boolean;
+  aiScoresVisible: boolean;
+  onToggleAiScores: () => void;
+  visibleCategories: Set<ReportCommentCategory>;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-export function ReportJobResult({ job }: { job: ReportJobDetail }) {
-  const evaluation = parseReportEvaluation(job.resultJson);
-  if (!evaluation) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-sm text-gray-500">
-          The result could not be parsed. Retry the job to regrade the report.
-        </CardContent>
-      </Card>
-    );
+export function ReportJobResult({ job, evaluation, rubricMode, aiScoresVisible,
+  onToggleAiScores, visibleCategories }: Props) {
+  const [directionsOpen, setDirectionsOpen] = useState(false);
+  const { open } = useReportNoteEvidence();
+  const scores = evaluation.criterionScores;
+  const aiTotal = scores && reportWeightedTotal(scores.map((c) => ({ name: c.criterion, score: c.score })),
+    (name) => scores.find((c) => c.criterion === name)?.weightPercent);
+  async function copy() {
+    const text = reportEvaluationToText(evaluation, {
+      categories: rubricMode ? new Set() : visibleCategories,
+      includeScores: rubricMode && aiScoresVisible,
+      includeDirections: !rubricMode && directionsOpen,
+      includeSummary: !rubricMode,
+      openEvidence: open,
+    });
+    try {
+      await navigator.clipboard.writeText(rubricMode ? [job.rubricContent, text].filter(Boolean).join("\n\n") : text);
+      toast.success("Visible review copied");
+    } catch { toast.error("Could not copy to the clipboard"); }
   }
-
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Review</CardTitle>
-        <CopyButton text={reportEvaluationToText(evaluation)} />
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <Section title="Summary">
-          <MarkdownContent content={evaluation.summary} className="text-sm" />
-        </Section>
-
-        {evaluation.suggestionChecks && evaluation.suggestionChecks.length > 0 ? (
-          <ReportSuggestionChecks
-            checks={evaluation.suggestionChecks}
-            presentationJobId={job.presentationJobId}
-          />
-        ) : null}
-
-        <Section title="Comments">
-          {evaluation.comments.length === 0 ? (
-            <p className="text-sm text-gray-500">No comments.</p>
-          ) : (
-            <ol className="space-y-3">
-              {evaluation.comments.map((comment, i) => (
-                <li
-                  key={i}
-                  className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-sm space-y-1"
-                >
-                  <p className="text-xs font-medium text-gray-500">{comment.reference}</p>
-                  <MarkdownContent content={comment.comment} className="text-sm" />
-                </li>
-              ))}
-            </ol>
-          )}
-        </Section>
-
-        {evaluation.criterionScores ? (
-          <Section title="Criterion scores">
-            <ol className="space-y-3">
-              {evaluation.criterionScores.map((entry, i) => (
-                <li
-                  key={i}
-                  className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-sm space-y-1"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {entry.criterion}
-                      <span className="ml-1.5 text-xs font-normal text-gray-500">
-                        ({entry.weightPercent}%)
-                      </span>
-                    </p>
-                    <span className="shrink-0 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {entry.score}/10
-                    </span>
-                  </div>
-                  <MarkdownContent content={entry.reason} className="text-sm" />
-                </li>
-              ))}
-            </ol>
-          </Section>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-semibold">{rubricMode
+          ? `Grading rubric${job.rubricVersion ? ` · v${job.rubricVersion}` : ""}` : "AI Notes & Review"}</h2>
+        <Button variant="ghost" size="sm" onClick={copy}>Copy visible</Button>
+      </div>
+      {rubricMode ? <>
+        <p className="text-xs text-muted-foreground">Rubric items are scored out of 10. The weighted report total is out of 100.</p>
+        {job.rubricContent && (
+          <div tabIndex={0} aria-label="Grading instructions" className="max-h-72 overflow-y-auto py-2">
+            <MarkdownContent content={job.rubricContent} className="text-sm" />
+          </div>
+        )}
+        {scores && <>
+          <Button variant="outline" size="sm" onClick={onToggleAiScores} aria-expanded={aiScoresVisible}>
+            {aiScoresVisible ? "Hide AI scores" : "Show AI scores"}
+          </Button>
+          {aiScoresVisible ? <>
+            {aiTotal !== null && <p className="text-sm font-medium">Weighted total: {aiTotal.toFixed(2)} / {REPORT_TOTAL_MAX_SCORE}</p>}
+            <ol className="divide-y">{scores.map((s) => (
+              <li key={s.criterion} className="space-y-1 py-2 text-sm">
+                <strong>{s.criterion} ({s.weightPercent}%) · {s.score}/10</strong>
+                <MarkdownContent content={s.reason} />
+              </li>
+            ))}</ol>
+          </> : <p className="text-xs text-muted-foreground">Hidden by default so AI scores do not anchor your grading.</p>}
+        </>}
+        <p className="text-sm text-muted-foreground">{scores ? "Enter your own score below the last page." :
+          "No verified AI scores are available for this rubric version."}</p>
+      </> : <>
+        <MarkdownContent content={evaluation.summary} className="max-w-prose text-base leading-6" />
+        {!!evaluation.suggestionChecks?.length && <ReportSuggestionChecks checks={evaluation.suggestionChecks}
+          presentationJobId={job.presentationJobId} onToggle={setDirectionsOpen} />}
+      </>}
+    </div>
   );
 }
