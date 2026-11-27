@@ -19,7 +19,7 @@ export function ReportGradingNavBar({ navigation }: Props) {
   if (!navigation || navigation.totalDone === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-800 dark:bg-gray-900/70 space-y-2.5">
+    <div className="border-t border-gray-200 pt-4 dark:border-gray-800 space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
         <span>
           {navigation.position !== null

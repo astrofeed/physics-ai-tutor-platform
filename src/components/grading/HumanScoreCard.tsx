@@ -22,6 +22,8 @@ interface Props {
   hideAiScores?: boolean;
   /** Optional custom card title (defaults to "Your score"). */
   title?: string;
+  /** Render without an outer Card border/box for flat split-pane layouts. */
+  borderless?: boolean;
 }
 
 interface Row {
@@ -99,6 +101,7 @@ export function HumanScoreCard({
   onSave,
   hideAiScores = false,
   title,
+  borderless = false,
 }: Props) {
   const graded = human.scores.length > 0 || human.total !== null;
   const [editing, setEditing] = useState(!graded);
@@ -124,56 +127,73 @@ export function HumanScoreCard({
     },
   ];
 
+  const body = editing ? (
+    <HumanScoreForm
+      items={items}
+      total={total}
+      human={human}
+      saving={saving}
+      onSave={async (input) => {
+        const ok = await onSave(input);
+        if (ok) setEditing(false);
+        return ok;
+      }}
+      onCancel={graded ? () => setEditing(false) : null}
+      focusOnOpen={openedByGrader}
+      hideAiScores={hideAiScores}
+    />
+  ) : (
+    <>
+      <ComparisonTable rows={rows} hideAiScores={hideAiScores} />
+      {human.comments ? (
+        <section
+          aria-label={HUMAN_GRADING_TEXT.savedComments}
+          className="space-y-2 border-t border-border pt-4"
+        >
+          <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>
+          <p className="whitespace-pre-wrap break-words text-sm">{human.comments}</p>
+        </section>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+        <span>
+          {human.gradedAt ? HUMAN_GRADING_TEXT.savedAt(formatTimestamp(human.gradedAt)) : null}
+          {human.gradedByName ? HUMAN_GRADING_TEXT.savedBy(human.gradedByName) : null}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setOpenedByGrader(true);
+            setEditing(true);
+          }}
+        >
+          {HUMAN_GRADING_TEXT.edit}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (borderless) {
+    return (
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            {title ?? HUMAN_GRADING_TEXT.title}
+          </h2>
+          <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
+        </div>
+        {body}
+      </section>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base">{title ?? HUMAN_GRADING_TEXT.title}</CardTitle>
         <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {editing ? (
-          <HumanScoreForm
-            items={items}
-            total={total}
-            human={human}
-            saving={saving}
-            onSave={async (input) => {
-              const ok = await onSave(input);
-              if (ok) setEditing(false);
-              return ok;
-            }}
-            onCancel={graded ? () => setEditing(false) : null}
-            focusOnOpen={openedByGrader}
-            hideAiScores={hideAiScores}
-          />
-        ) : (
-          <>
-            <ComparisonTable rows={rows} hideAiScores={hideAiScores} />
-            {human.comments ? (
-              <section aria-label={HUMAN_GRADING_TEXT.savedComments} className="space-y-2 border-t border-border pt-4">
-                <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>
-                <p className="whitespace-pre-wrap break-words text-sm">{human.comments}</p>
-              </section>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-              <span>
-                {human.gradedAt ? HUMAN_GRADING_TEXT.savedAt(formatTimestamp(human.gradedAt)) : null}
-                {human.gradedByName ? HUMAN_GRADING_TEXT.savedBy(human.gradedByName) : null}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setOpenedByGrader(true);
-                  setEditing(true);
-                }}
-              >
-                {HUMAN_GRADING_TEXT.edit}
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
+      <CardContent className="space-y-4">{body}</CardContent>
     </Card>
   );
 }

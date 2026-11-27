@@ -56,9 +56,14 @@ const REPORT_GRADING_GUARD =
   "or null for overall/non-PDF remarks, a short verbatim `quote` of 5-15 words " +
   "copied directly from that page so the grading viewer can highlight it — or " +
   "null when pointing at a figure or display equation — and a `category` of " +
-  "`strength`, `issue`, or `note`), and criterionScores (one entry per rubric " +
-  "criterion, with the criterion name, its weight in percent from the rubric, " +
-  "a score from 0 to 10, and the evidence-based reason for that score). " +
+  "`strength`, `issue`, `note`, or `ai_style` — use `ai_style` only on specific " +
+  "passages that show notable AI-generated writing cues such as uniform " +
+  "boilerplate phrasing, abrupt tone shifts, or overly polished prose paired " +
+  "with skipped derivation steps; AI use is permitted in this course so keep " +
+  "`ai_style` remarks neutral and informational for TAs), and criterionScores " +
+  "(one entry per rubric criterion, with the criterion name, its weight in " +
+  "percent from the rubric, a score from 0 to 10, and the evidence-based " +
+  "reason for that score). " +
   "REPORT INFORMATION gives the presentation topic the report belongs to " +
   "and, when one was set, an additional question the report was asked to " +
   "answer. Judge whether the report covers the topic AND actually answers " +

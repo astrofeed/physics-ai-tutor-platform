@@ -109,7 +109,7 @@ export const ReportSuggestionCheckSchema = z.object({
   evidence: z.string(),
 });
 
-export const COMMENT_CATEGORIES = ["strength", "issue", "note"] as const;
+export const COMMENT_CATEGORIES = ["strength", "issue", "note", "ai_style"] as const;
 
 export const ReportCommentSchema = z.object({
   reference: z.string(),
@@ -118,7 +118,7 @@ export const ReportCommentSchema = z.object({
   page: z.number().int().min(1).nullable(),
   /** Short verbatim excerpt (5-15 words) from that page for in-PDF highlighting; null for figures/equations. */
   quote: z.string().nullable(),
-  /** Quick visual category for graders: strength, issue, or note. */
+  /** Quick visual category for graders: strength, issue, note, or ai_style. */
   category: z.enum(COMMENT_CATEGORIES).nullable(),
 });
 

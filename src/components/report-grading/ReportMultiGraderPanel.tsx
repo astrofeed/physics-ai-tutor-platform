@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HumanScoreCard } from "@/components/grading/HumanScoreCard";
@@ -75,7 +74,7 @@ export function ReportMultiGraderPanel({
       : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <HumanScoreCard
         items={items}
         total={total}
@@ -84,31 +83,34 @@ export function ReportMultiGraderPanel({
         saving={saving}
         onSave={onSaveMine}
         hideAiScores={!aiScoresVisible}
+        borderless
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={saving}
-          onClick={() => setAddingSlot((open) => !open)}
-        >
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          {addingSlot ? "Close extra grader slot" : "Add another grader score"}
-        </Button>
-        <span className="text-xs text-gray-500">
-          Each TA/professor logging in gets their own score slot automatically; use this to record
-          an extra grader slot on the same screen.
-        </span>
-      </div>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={() => setAddingSlot((open) => !open)}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            {addingSlot ? "Close extra grader slot" : "Add another grader score"}
+          </Button>
+          <span className="text-xs text-gray-500">
+            Signed-in graders automatically get their own slot.
+          </span>
+        </div>
 
-      {addingSlot ? (
-        <Card data-testid="extra-grader-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Additional Grader Score</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {addingSlot ? (
+          <div
+            data-testid="extra-grader-card"
+            className="border-l-2 border-gray-300 pl-4 space-y-4 dark:border-gray-700"
+          >
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Additional Grader Score
+            </p>
             <div className="max-w-xs space-y-1">
               <Label htmlFor="extra-grader-label" className="text-sm">
                 Grader name / label (optional)
@@ -145,31 +147,25 @@ export function ReportMultiGraderPanel({
                 setAddingSlot(false);
               }}
             />
-          </CardContent>
-        </Card>
-      ) : null}
+          </div>
+        ) : null}
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 py-3">
+      <section className="space-y-3 border-t border-gray-200 pt-5 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-gray-500" />
-            <CardTitle className="text-sm font-semibold">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Other graders ({otherGradedReviews.length})
-            </CardTitle>
-            {otherGradedReviews.length === 0 ? (
-              <Badge variant="outline" className="text-[11px] font-normal text-gray-500">
-                None yet
-              </Badge>
-            ) : !showOthers ? (
-              <Badge variant="secondary" className="text-[11px] font-normal">
-                Hidden by default
-              </Badge>
+            </h3>
+            {otherGradedReviews.length > 0 && !showOthers ? (
+              <span className="text-xs text-gray-500">Hidden by default</span>
             ) : null}
           </div>
           {otherGradedReviews.length > 0 ? (
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               aria-expanded={showOthers}
               onClick={() => setShowOthers((prev) => !prev)}
@@ -187,10 +183,10 @@ export function ReportMultiGraderPanel({
               )}
             </Button>
           ) : null}
-        </CardHeader>
+        </div>
 
         {otherGradedReviews.length > 0 && showOthers ? (
-          <CardContent className="space-y-4 pt-0">
+          <div className="space-y-4">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-gray-500">
@@ -270,12 +266,9 @@ export function ReportMultiGraderPanel({
             </div>
 
             {otherGradedReviews.some((r) => r.comments || r.scores.length > 0) ? (
-              <div className="space-y-2.5 border-t border-gray-200 pt-3 dark:border-gray-800">
+              <div className="divide-y divide-gray-200/80 dark:divide-gray-800">
                 {otherGradedReviews.map((review, index) => (
-                  <div
-                    key={review.id}
-                    className="rounded-lg border border-gray-200 p-3 text-xs space-y-1.5 dark:border-gray-800"
-                  >
+                  <div key={review.id} className="py-2.5 text-xs space-y-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-semibold text-gray-900 dark:text-gray-100">
                         {graderDisplayName(review, index)}
@@ -287,12 +280,9 @@ export function ReportMultiGraderPanel({
                       ) : null}
                     </div>
                     {review.scores.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-2 text-gray-600 dark:text-gray-400">
                         {review.scores.map((s) => (
-                          <span
-                            key={s.name}
-                            className="rounded bg-gray-100 px-1.5 py-0.5 tabular-nums dark:bg-gray-800"
-                          >
+                          <span key={s.name} className="tabular-nums">
                             {s.name}: <strong>{formatScore(s.score)}</strong>
                           </span>
                         ))}
@@ -307,15 +297,13 @@ export function ReportMultiGraderPanel({
                 ))}
               </div>
             ) : null}
-          </CardContent>
+          </div>
         ) : otherGradedReviews.length === 0 ? (
-          <CardContent className="pt-0">
-            <p className="text-xs text-gray-500">
-              No other TA or professor has scored this report yet.
-            </p>
-          </CardContent>
+          <p className="text-xs text-gray-500">
+            No other TA or professor has scored this report yet.
+          </p>
         ) : null}
-      </Card>
+      </section>
     </div>
   );
 }

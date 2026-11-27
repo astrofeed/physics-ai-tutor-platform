@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useMemo } from "react";
 import { FileText } from "lucide-react";
-import type { ReportComment, ReportJobDetail } from "@/lib/report-grading";
+import type {
+  ReportComment,
+  ReportCommentCategory,
+  ReportJobDetail,
+} from "@/lib/report-grading";
 import { ReportPdfViewer } from "./ReportPdfViewer";
 
 interface Props {
@@ -10,68 +14,43 @@ interface Props {
   comments: ReportComment[];
   activeCommentIndex: number | null;
   onSelectComment: (index: number) => void;
+  visibleCategories: Set<ReportCommentCategory>;
+  onToggleCategory: (category: ReportCommentCategory) => void;
 }
 
-function PastedReportPane({
-  text,
-  activeQuote,
-}: {
-  text: string;
-  activeQuote: string | null;
-}) {
-  const markRef = useRef<HTMLElement | null>(null);
-
-  const parts = useMemo(() => {
-    if (!activeQuote || activeQuote.trim().length < 4) return null;
-    const needle = activeQuote.trim();
-    const idx = text.toLowerCase().indexOf(needle.toLowerCase());
-    if (idx === -1) return null;
-    return {
-      before: text.slice(0, idx),
-      match: text.slice(idx, idx + needle.length),
-      after: text.slice(idx + needle.length),
-    };
-  }, [text, activeQuote]);
-
-  useEffect(() => {
-    if (parts && markRef.current) {
-      markRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [parts]);
-
+function renderHighlightedText(text: string, quote: string | null) {
+  if (!quote || quote.trim().length < 4) return text;
+  const trimmed = quote.trim();
+  const idx = text.toLowerCase().indexOf(trimmed.toLowerCase());
+  if (idx === -1) return text;
   return (
-    <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2.5 text-sm font-medium dark:border-gray-800">
-        <FileText className="h-4 w-4 text-gray-500" />
-        Student report (pasted text)
-      </div>
-      <div className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed whitespace-pre-wrap break-words font-serif">
-        {parts ? (
-          <>
-            {parts.before}
-            <mark
-              ref={markRef}
-              className="rounded bg-amber-200/80 px-0.5 text-gray-950 dark:bg-amber-500/40 dark:text-amber-50"
-            >
-              {parts.match}
-            </mark>
-            {parts.after}
-          </>
-        ) : (
-          text
-        )}
-      </div>
-    </div>
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded bg-amber-200 px-0.5 text-gray-900 dark:bg-amber-500/40 dark:text-gray-50">
+        {text.slice(idx, idx + trimmed.length)}
+      </mark>
+      {text.slice(idx + trimmed.length)}
+    </>
   );
 }
 
-/** Left column of the report grading workspace: PDF viewer, pasted text, or legacy notice. */
+/**
+ * Left pane of the report grading workspace: displays the retained student PDF
+ * with clickable page/quote highlights, or the pasted text for text-only jobs.
+ */
 export function ReportDocumentPane({
   job,
   comments,
   activeCommentIndex,
   onSelectComment,
+  visibleCategories,
+  onToggleCategory,
 }: Props) {
+  const activeQuote = useMemo(() => {
+    if (activeCommentIndex === null) return null;
+    return comments[activeCommentIndex]?.quote ?? null;
+  }, [activeCommentIndex, comments]);
+
   if (job.hasReportPdf) {
     return (
       <ReportPdfViewer
@@ -80,25 +59,33 @@ export function ReportDocumentPane({
         comments={comments}
         activeCommentIndex={activeCommentIndex}
         onSelectComment={onSelectComment}
+        visibleCategories={visibleCategories}
+        onToggleCategory={onToggleCategory}
       />
     );
   }
 
   if (job.reportText) {
-    const activeQuote =
-      activeCommentIndex !== null ? comments[activeCommentIndex]?.quote ?? null : null;
-    return <PastedReportPane text={job.reportText} activeQuote={activeQuote} />;
+    return (
+      <div className="flex h-full flex-col bg-gray-50/70 dark:bg-gray-900/50">
+        <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-2.5 text-sm font-medium dark:border-gray-800">
+          <FileText className="h-4 w-4 text-gray-500" />
+          Pasted student report
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+          {renderHighlightedText(job.reportText, activeQuote)}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50/70 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/40">
-      <FileText className="mb-2 h-8 w-8 text-gray-400" />
-      <p className="font-medium text-gray-700 dark:text-gray-300">
-        Report file not retained for this job
-      </p>
+    <div className="flex h-full flex-col items-center justify-center bg-gray-50/70 p-8 text-center text-sm text-gray-500 dark:bg-gray-900/50">
+      <FileText className="mb-3 h-8 w-8 text-gray-400" />
+      <p className="font-medium text-gray-700 dark:text-gray-300">Report PDF not available</p>
       <p className="mt-1 max-w-sm text-xs">
-        This report was graded before side-by-side PDF retention was enabled. Re-upload and
-        regrade the PDF to view it beside the AI notes.
+        This report was graded before PDF retention was enabled. Newly uploaded reports keep
+        their PDF here for side-by-side grading.
       </p>
     </div>
   );

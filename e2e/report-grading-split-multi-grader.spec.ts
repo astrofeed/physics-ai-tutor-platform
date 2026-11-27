@@ -67,6 +67,13 @@ const sampleEvaluation: ReportEvaluation = {
       quote: "magnetic flux decays exponentially",
       category: "issue",
     },
+    {
+      reference: "Section 1, p. 1",
+      comment: "Uniform textbook phrasing; verify student understanding during Q&A.",
+      page: 1,
+      quote: "General Physics II: Faraday Induction Report",
+      category: "ai_style",
+    },
   ],
   criterionScores: [
     {
@@ -204,13 +211,18 @@ test("concurrent multi-TA grading, blind-by-default UI, PDF highlight, and botto
   await expect(page.getByText("2 graders")).toBeVisible();
 
   // AI scores & other graders are hidden by default.
-  await expect(page.getByText("AI scores are collapsed by default")).toBeVisible();
+  await expect(page.getByText("Hidden by default so AI scores do not anchor your grading.")).toBeVisible();
   await expect(page.getByText("TA Alpha: solid work")).toHaveCount(0);
   await expect(page.getByText("TA Beta: missing time constant")).toHaveCount(0);
 
-  // Clicking AI Note #2 activates it and highlights text on page 2.
+  // AI-style notes are toggled off by default and can be toggled on.
+  await expect(page.getByText("Uniform textbook phrasing")).toHaveCount(0);
+  await page.getByRole("button", { name: "AI-style (1)" }).first().click();
+  await expect(page.getByText("Uniform textbook phrasing")).toBeVisible();
+
+  // Clicking AI Note #2 highlights text on page 2.
   await page.getByText("Check the time constant definition").click();
-  await expect(page.getByText("AI Note #2:")).toBeVisible();
+  await expect(page.locator('[aria-label="Jump to note #2"]').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("desktop-split-blind.png") });
 
   // Unfold other graders and AI scores.

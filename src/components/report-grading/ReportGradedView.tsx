@@ -6,11 +6,13 @@ import { ReportDocumentPane } from "@/components/report-grading/ReportDocumentPa
 import { ReportGradingNavBar } from "@/components/report-grading/ReportGradingNavBar";
 import { ReportJobResult } from "@/components/report-grading/ReportJobResult";
 import { ReportMultiGraderPanel } from "@/components/report-grading/ReportMultiGraderPanel";
+import { DEFAULT_VISIBLE_CATEGORIES } from "@/components/report-grading/report-comment-categories";
 import { useHumanGrading } from "@/hooks/useHumanGrading";
 import { weightedAverage } from "@/lib/human-grading";
 import {
   parseReportEvaluation,
   REPORT_CRITERION_MAX_SCORE,
+  type ReportCommentCategory,
   type ReportJobDetail,
 } from "@/lib/report-grading";
 
@@ -34,6 +36,9 @@ export function ReportGradedView({ job, onChanged }: Props) {
   );
   const [activeCommentIndex, setActiveCommentIndex] = useState<number | null>(null);
   const [aiScoresVisible, setAiScoresVisible] = useState(false);
+  const [visibleCategories, setVisibleCategories] = useState<Set<ReportCommentCategory>>(
+    () => new Set(DEFAULT_VISIBLE_CATEGORIES)
+  );
 
   const evaluation = parseReportEvaluation(job.resultJson);
   const criterionScores = evaluation?.criterionScores ?? null;
@@ -48,49 +53,64 @@ export function ReportGradedView({ job, onChanged }: Props) {
     });
   };
 
+  const toggleCategory = (category: ReportCommentCategory) => {
+    setVisibleCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
+    <div className="grid grid-cols-1 gap-8 border-t border-gray-200 pt-5 dark:border-gray-800 lg:grid-cols-12 lg:items-start">
       <div className="lg:col-span-6 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] min-h-[420px]">
         <ReportDocumentPane
           job={job}
           comments={evaluation?.comments ?? []}
           activeCommentIndex={activeCommentIndex}
           onSelectComment={(idx) => setActiveCommentIndex(idx)}
+          visibleCategories={visibleCategories}
+          onToggleCategory={toggleCategory}
         />
       </div>
 
-      <div className="lg:col-span-6 space-y-6 min-w-0">
+      <div className="lg:col-span-6 space-y-7 min-w-0 pb-8">
         <ReportJobResult
           job={job}
           activeCommentIndex={activeCommentIndex}
           onSelectComment={setActiveCommentIndex}
           aiScoresVisible={aiScoresVisible}
           onToggleAiScores={toggleAiScores}
+          visibleCategories={visibleCategories}
+          onToggleCategory={toggleCategory}
         />
 
         {criterionScores ? (
-          <ReportMultiGraderPanel
-            items={criterionScores.map((entry) => ({
-              name: entry.criterion,
-              max: REPORT_CRITERION_MAX_SCORE,
-              aiScore: entry.score,
-            }))}
-            total={{
-              max: REPORT_CRITERION_MAX_SCORE,
-              aiScore: weightedAverage(
-                criterionScores.map((c) => ({ name: c.criterion, score: c.score })),
-                weightOf
-              ),
-            }}
-            totalFromItems={(scores) => weightedAverage(scores, weightOf)}
-            myReview={job.human}
-            allReviews={job.humanReviews ?? []}
-            aiScoresVisible={aiScoresVisible}
-            saving={saving}
-            onSaveMine={saveScores}
-            onAddExtra={addExtraReview}
-            onDeleteReview={deleteReview}
-          />
+          <div className="border-t border-gray-200 pt-6 dark:border-gray-800">
+            <ReportMultiGraderPanel
+              items={criterionScores.map((entry) => ({
+                name: entry.criterion,
+                max: REPORT_CRITERION_MAX_SCORE,
+                aiScore: entry.score,
+              }))}
+              total={{
+                max: REPORT_CRITERION_MAX_SCORE,
+                aiScore: weightedAverage(
+                  criterionScores.map((c) => ({ name: c.criterion, score: c.score })),
+                  weightOf
+                ),
+              }}
+              totalFromItems={(scores) => weightedAverage(scores, weightOf)}
+              myReview={job.human}
+              allReviews={job.humanReviews ?? []}
+              aiScoresVisible={aiScoresVisible}
+              saving={saving}
+              onSaveMine={saveScores}
+              onAddExtra={addExtraReview}
+              onDeleteReview={deleteReview}
+            />
+          </div>
         ) : null}
 
         <ReportGradingNavBar navigation={job.navigation} />
