@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import type { HumanGrading } from "@/lib/human-grading";
+import type { HumanGrading, ReportHumanReviewDetail } from "@/types/human-grading";
 import type { FeedbackEmailStatus } from "@/lib/feedback-email";
 
 export const REASONING_EFFORT_OPTIONS = ["high", "xhigh"] as const;
@@ -51,15 +51,39 @@ export interface ReportJobSummary {
   createdByName: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** Number of staff reviews with a saved score on this report. */
+  humanReviewCount?: number;
+  /** Timestamp when the current logged-in staff member scored this report, or null. */
+  myGradedAt?: string | null;
+}
+
+export interface ReportJobNavigation {
+  prevId: string | null;
+  nextId: string | null;
+  /** Next DONE report the current staff member has not yet scored. */
+  nextUngradedId: string | null;
+  /** Next DONE report nobody has scored yet. */
+  nextCompletelyUngradedId: string | null;
+  /** 1-based position in the DONE grading queue (newest first), or null if not DONE. */
+  position: number | null;
+  totalDone: number;
+  myGradedDone: number;
 }
 
 export interface ReportJobDetail extends ReportJobSummary, FeedbackEmailStatus {
   reportText: string | null;
   reportFilename: string | null;
+  /** True when the uploaded PDF is retained and can be streamed via `/pdf`. */
+  hasReportPdf?: boolean;
   resultJson: string | null;
   /** The graded presentation whose suggested report topics were checked; null when none. */
   presentationJobId: string | null;
+  /** The current staff member's personal review (also keeps legacy callers working). */
   human: HumanGrading;
+  /** All staff reviews (personal + extra slots) on this report. */
+  humanReviews?: ReportHumanReviewDetail[];
+  /** Adjacent jobs for in-page prev / next / next-ungraded navigation. */
+  navigation?: ReportJobNavigation | null;
 }
 
 /**
@@ -85,14 +109,22 @@ export const ReportSuggestionCheckSchema = z.object({
   evidence: z.string(),
 });
 
+export const COMMENT_CATEGORIES = ["strength", "issue", "note"] as const;
+
+export const ReportCommentSchema = z.object({
+  reference: z.string(),
+  comment: z.string(),
+  /** 1-based PDF page number where this remark applies; null for general remarks or pasted text. */
+  page: z.number().int().min(1).nullable(),
+  /** Short verbatim excerpt (5-15 words) from that page for in-PDF highlighting; null for figures/equations. */
+  quote: z.string().nullable(),
+  /** Quick visual category for graders: strength, issue, or note. */
+  category: z.enum(COMMENT_CATEGORIES).nullable(),
+});
+
 export const ReportEvaluationSchema = z.object({
   summary: z.string(),
-  comments: z.array(
-    z.object({
-      reference: z.string(),
-      comment: z.string(),
-    })
-  ),
+  comments: z.array(ReportCommentSchema),
   /** Null on jobs graded before per-criterion scores existed. */
   criterionScores: z.array(ReportCriterionScoreSchema).nullable(),
   /** One entry per presentation suggestion; null when the student had no graded presentation. */
@@ -116,6 +148,8 @@ export function filenameStem(name: string): string {
 }
 
 export type ReportEvaluation = z.infer<typeof ReportEvaluationSchema>;
+export type ReportComment = z.infer<typeof ReportCommentSchema>;
+export type ReportCommentCategory = (typeof COMMENT_CATEGORIES)[number];
 export type ReportCriterionScore = z.infer<typeof ReportCriterionScoreSchema>;
 export type ReportSuggestionCheck = z.infer<typeof ReportSuggestionCheckSchema>;
 export type SuggestionStatus = ReportSuggestionCheck["status"];
@@ -129,14 +163,27 @@ export const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
 const OPTIONAL_EVALUATION_FIELDS = ["criterionScores", "suggestionChecks"] as const;
 
 /** Parses a stored evaluation; null for bad JSON. Tolerates older jobs
- * graded before per-criterion scores or suggestion checks existed. */
+ * graded before per-criterion scores, suggestion checks, or comment anchors existed. */
 export function parseReportEvaluation(json: string | null): ReportEvaluation | null {
   if (!json) return null;
   try {
     const parsed: unknown = JSON.parse(json);
     if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
       for (const field of OPTIONAL_EVALUATION_FIELDS) {
-        if (!(field in parsed)) (parsed as Record<string, unknown>)[field] = null;
+        if (!(field in record)) record[field] = null;
+      }
+      if (Array.isArray(record.comments)) {
+        record.comments = record.comments.map((entry) => {
+          if (!entry || typeof entry !== "object") return entry;
+          const item = entry as Record<string, unknown>;
+          return {
+            ...item,
+            page: "page" in item ? item.page : null,
+            quote: "quote" in item ? item.quote : null,
+            category: "category" in item ? item.category : null,
+          };
+        });
       }
     }
     const result = ReportEvaluationSchema.safeParse(parsed);

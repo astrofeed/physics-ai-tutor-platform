@@ -21,6 +21,17 @@ export interface HumanGrading {
   aiRevealedAt: string | null;
 }
 
+export interface ReportHumanReviewDetail extends HumanGrading {
+  id: string;
+  slotKey: string;
+  graderId: string;
+  graderName: string | null;
+  graderRole: string | null;
+  graderLabel: string | null;
+  isMine: boolean;
+  isExtraSlot: boolean;
+}
+
 export type HumanScoresInput = z.infer<typeof HumanScoresInputSchema>;
 
 export type HumanGradingRow = Pick<

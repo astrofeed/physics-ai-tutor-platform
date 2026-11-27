@@ -42,18 +42,26 @@ function ReportJobDetailContent({ id }: { id: string }) {
   }
 
   const inProgress = job.status === "QUEUED" || job.status === "GRADING";
+  const myGraded = Boolean(job.myGradedAt || job.human.gradedAt);
+  const reviewCount = job.humanReviewCount ?? 0;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div
+      className={
+        job.status === "DONE"
+          ? "mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6"
+          : "mx-auto max-w-4xl space-y-6 p-4 sm:p-6"
+      }
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
             <Link href="/report-grading">
               <ArrowLeft className="mr-1 h-4 w-4" />
               All jobs
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{job.title}</h1>
+          <h1 className="text-2xl font-bold break-words">{job.title}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {[
               job.authors,
@@ -82,11 +90,25 @@ function ReportJobDetailContent({ id }: { id: string }) {
             </p>
           ) : null}
         </div>
-        <div className="mt-8 flex shrink-0 flex-col items-end gap-2">
-          <Badge variant={REPORT_STATUS_BADGE_VARIANTS[job.status]}>
-            {REPORT_STATUS_LABELS[job.status]}
-            {inProgress ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : null}
-          </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-2 sm:mt-8">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {job.status === "DONE" ? (
+              <>
+                <Badge variant={myGraded ? "success" : "outline"}>
+                  {myGraded ? "You graded" : "Not graded by you"}
+                </Badge>
+                <Badge variant={reviewCount === 0 ? "warning" : "secondary"}>
+                  {reviewCount === 0
+                    ? "No scores yet"
+                    : `${reviewCount} ${reviewCount === 1 ? "grader" : "graders"}`}
+                </Badge>
+              </>
+            ) : null}
+            <Badge variant={REPORT_STATUS_BADGE_VARIANTS[job.status]}>
+              {REPORT_STATUS_LABELS[job.status]}
+              {inProgress ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : null}
+            </Badge>
+          </div>
           <ReportJobActions
             jobId={job.id}
             title={job.title}

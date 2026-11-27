@@ -10,8 +10,11 @@ export type { HumanGrading, HumanScoreEntry, HumanScoresInput } from "@/types/hu
 
 export const HUMAN_SCORE_MAX_ENTRIES = 50;
 export const HUMAN_COMMENTS_MAX_CHARS = 10_000;
+export const GRADER_LABEL_MAX_CHARS = 80;
 
 const HumanCommentsSchema = z.string().max(HUMAN_COMMENTS_MAX_CHARS).optional();
+const GraderLabelSchema = z.string().trim().max(GRADER_LABEL_MAX_CHARS).optional();
+const ReviewIdSchema = z.string().min(1).max(100).optional();
 
 const HumanScoreEntrySchema = z.object({
   name: z.string().min(1).max(200),
@@ -29,6 +32,24 @@ export const HumanScoresInputSchema = z.union([
   }),
   z.object({ total: z.number().finite().min(0), comments: HumanCommentsSchema }),
 ]);
+
+/** Extended input for report multi-grader endpoints (optional target reviewId / custom slot label). */
+export const ReportHumanReviewInputSchema = z.union([
+  z.object({
+    scores: z.array(HumanScoreEntrySchema).min(1).max(HUMAN_SCORE_MAX_ENTRIES),
+    comments: HumanCommentsSchema,
+    reviewId: ReviewIdSchema,
+    graderLabel: GraderLabelSchema,
+  }),
+  z.object({
+    total: z.number().finite().min(0),
+    comments: HumanCommentsSchema,
+    reviewId: ReviewIdSchema,
+    graderLabel: GraderLabelSchema,
+  }),
+]);
+
+export type ReportHumanReviewInput = z.infer<typeof ReportHumanReviewInputSchema>;
 
 /**
  * The staff total to compare with the AI's: the directly entered one, else

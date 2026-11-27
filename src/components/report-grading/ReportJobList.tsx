@@ -11,7 +11,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Pagination } from "@/components/ui/pagination";
 import type { ReportJobDetail, ReportJobSummary } from "@/lib/report-grading";
-import { retryReportJob } from "@/hooks/useReportGrading";
+import { retryReportJob, type ReportReviewFilterValue } from "@/hooks/useReportGrading";
+import { cn } from "@/lib/utils";
 import { useCsvExport, useRowSelection } from "@/hooks/useGradingCsvExport";
 import { reportJobsToCsv } from "@/lib/grading-csv";
 import { JobListFilters, type JobListFilterProps } from "@/components/presentation-grading/JobListFilters";
@@ -54,6 +55,8 @@ export function ReportJobList({
   page,
   totalPages,
   totalCount,
+  reviewFilter = "all",
+  onReviewFilterChange,
   onPageChange,
   onRefresh,
   ...filterProps
@@ -63,6 +66,8 @@ export function ReportJobList({
   page: number;
   totalPages: number;
   totalCount: number;
+  reviewFilter?: ReportReviewFilterValue;
+  onReviewFilterChange?: (filter: ReportReviewFilterValue) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {
@@ -74,13 +79,46 @@ export function ReportJobList({
   );
   const allSelected = jobs.length > 0 && jobs.every((job) => selected.has(job.id));
 
-  const filtered = filterProps.search !== "" || filterProps.group !== null;
+  const filtered =
+    filterProps.search !== "" || filterProps.group !== null || reviewFilter !== "all";
+  const reviewFilterPills = onReviewFilterChange ? (
+    <div
+      role="group"
+      aria-label="Filter by grading status"
+      className="inline-flex rounded-md border border-gray-200 p-0.5 text-xs dark:border-gray-800"
+    >
+      {(
+        [
+          ["all", "All"],
+          ["my_ungraded", "Not graded by me"],
+          ["none_graded", "No scores yet"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onReviewFilterChange(value)}
+          className={cn(
+            "rounded px-2.5 py-1 font-medium transition-colors",
+            reviewFilter === value
+              ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+              : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : null;
   const filters = (
-    <JobListFilters
-      {...filterProps}
-      searchPlaceholder="Search title, author, student ID, group, or date…"
-      searchLabel="Search by report title, author name, student ID, group, or presentation date"
-    />
+    <div className="flex flex-wrap items-center gap-2">
+      {reviewFilterPills}
+      <JobListFilters
+        {...filterProps}
+        searchPlaceholder="Search title, author, student ID, group, or date…"
+        searchLabel="Search by report title, author name, student ID, group, or presentation date"
+      />
+    </div>
   );
 
   if (loading) {
@@ -183,6 +221,22 @@ export function ReportJobList({
                   <span className="text-xs text-gray-500 tabular-nums">
                     {formatDuration(job.gradingDurationMs)}
                   </span>
+                ) : null}
+                {job.status === "DONE" ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant={job.myGradedAt ? "success" : "outline"}>
+                      {job.myGradedAt ? "You graded" : "Unscored by you"}
+                    </Badge>
+                    <Badge
+                      variant={
+                        (job.humanReviewCount ?? 0) === 0 ? "warning" : "secondary"
+                      }
+                    >
+                      {(job.humanReviewCount ?? 0) === 0
+                        ? "No scores yet"
+                        : `${job.humanReviewCount} graded`}
+                    </Badge>
+                  </div>
                 ) : null}
                 <Badge variant={REPORT_STATUS_BADGE_VARIANTS[job.status]}>
                   {REPORT_STATUS_LABELS[job.status]}

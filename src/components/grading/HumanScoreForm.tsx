@@ -23,6 +23,8 @@ interface Props {
   onCancel: (() => void) | null;
   /** Focus the total field on open; only when the grader opened the form, so page load never scrolls here. */
   focusOnOpen: boolean;
+  /** Hide AI reference numbers next to inputs so graders are not anchored before revealing AI scores. */
+  hideAiScores?: boolean;
 }
 
 type Draft = Record<string, string>;
@@ -109,6 +111,7 @@ export function HumanScoreForm({
   onSave,
   onCancel,
   focusOnOpen,
+  hideAiScores = false,
 }: Props) {
   const [mode, setMode] = useState<ScoreMode>(human.scores.length > 0 ? "items" : "total");
   const [itemDraft, setItemDraft] = useState<Draft>(() => itemDraftFrom(items, human.scores));
@@ -142,7 +145,7 @@ export function HumanScoreForm({
             <span>
               {HUMAN_GRADING_TEXT.total} <span className="text-gray-500">/ {total.max}</span>
             </span>
-            {total.aiScore !== null ? (
+            {!hideAiScores && total.aiScore !== null ? (
               <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(total.aiScore)}</span>
             ) : null}
           </Label>
@@ -170,7 +173,9 @@ export function HumanScoreForm({
                   <span>
                     {item.name} <span className="text-gray-500">/ {item.max}</span>
                   </span>
-                  <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(item.aiScore)}</span>
+                  {!hideAiScores ? (
+                    <span className="text-gray-500">{HUMAN_GRADING_TEXT.ai} {formatScore(item.aiScore)}</span>
+                  ) : null}
                 </Label>
                 <Input
                   id={id}

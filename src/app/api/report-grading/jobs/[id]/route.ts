@@ -20,7 +20,7 @@ export async function GET(
   if (isErrorResponse(auth)) return auth;
 
   await refreshRosterIfStale(auth.user.id);
-  const job = await getReportJob(params.id);
+  const job = await getReportJob(params.id, auth.user.id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }

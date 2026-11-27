@@ -18,6 +18,10 @@ interface Props {
   human: HumanGrading;
   saving: boolean;
   onSave: (input: HumanScoresInput) => Promise<boolean>;
+  /** Hide AI score columns/hints until the grader reveals AI scores. */
+  hideAiScores?: boolean;
+  /** Optional custom card title (defaults to "Your score"). */
+  title?: string;
 }
 
 interface Row {
@@ -32,7 +36,7 @@ function ScoreCell({ value }: { value: number | null }) {
   return <>{value === null ? "—" : formatScore(value)}</>;
 }
 
-function ComparisonTable({ rows }: { rows: Row[] }) {
+function ComparisonTable({ rows, hideAiScores }: { rows: Row[]; hideAiScores: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -40,8 +44,12 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
           <tr>
             <th className="py-1 pr-3 font-medium">{HUMAN_GRADING_TEXT.item}</th>
             <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.you}</th>
-            <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.ai}</th>
-            <th className="py-1 text-right font-medium">{HUMAN_GRADING_TEXT.difference}</th>
+            {!hideAiScores ? (
+              <>
+                <th className="py-1 pr-3 text-right font-medium">{HUMAN_GRADING_TEXT.ai}</th>
+                <th className="py-1 text-right font-medium">{HUMAN_GRADING_TEXT.difference}</th>
+              </>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -60,12 +68,16 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
               <td className="py-1.5 pr-3 text-right font-semibold tabular-nums">
                 <ScoreCell value={row.mine} />
               </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums">
-                <ScoreCell value={row.ai} />
-              </td>
-              <td className="py-1.5 text-right tabular-nums text-gray-500">
-                <ScoreCell value={row.mine !== null && row.ai !== null ? row.mine - row.ai : null} />
-              </td>
+              {!hideAiScores ? (
+                <>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                    <ScoreCell value={row.ai} />
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums text-gray-500">
+                    <ScoreCell value={row.mine !== null && row.ai !== null ? row.mine - row.ai : null} />
+                  </td>
+                </>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -78,7 +90,16 @@ function ComparisonTable({ rows }: { rows: Row[] }) {
  * Optional staff score — one overall total or one score per rubric item —
  * shown beside the AI's once saved so the two can be compared.
  */
-export function HumanScoreCard({ items, total, totalFromItems, human, saving, onSave }: Props) {
+export function HumanScoreCard({
+  items,
+  total,
+  totalFromItems,
+  human,
+  saving,
+  onSave,
+  hideAiScores = false,
+  title,
+}: Props) {
   const graded = human.scores.length > 0 || human.total !== null;
   const [editing, setEditing] = useState(!graded);
   const [openedByGrader, setOpenedByGrader] = useState(false);
@@ -106,7 +127,7 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-base">{HUMAN_GRADING_TEXT.title}</CardTitle>
+        <CardTitle className="text-base">{title ?? HUMAN_GRADING_TEXT.title}</CardTitle>
         <span className="text-xs text-gray-500">{HUMAN_GRADING_TEXT.optional}</span>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -123,10 +144,11 @@ export function HumanScoreCard({ items, total, totalFromItems, human, saving, on
             }}
             onCancel={graded ? () => setEditing(false) : null}
             focusOnOpen={openedByGrader}
+            hideAiScores={hideAiScores}
           />
         ) : (
           <>
-            <ComparisonTable rows={rows} />
+            <ComparisonTable rows={rows} hideAiScores={hideAiScores} />
             {human.comments ? (
               <section aria-label={HUMAN_GRADING_TEXT.savedComments} className="space-y-2 border-t border-border pt-4">
                 <h3 className="text-sm font-medium">{HUMAN_GRADING_TEXT.savedComments}</h3>

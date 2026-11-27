@@ -98,6 +98,14 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     }
   }
 
+  const gradedReviewsPerJob = jobs.map((job) =>
+    (job.humanReviews ?? []).filter((r) => r.gradedAt !== null)
+  );
+  const maxMultiGraders = Math.max(
+    0,
+    ...gradedReviewsPerJob.map((list) => (list.length > 1 ? list.length : 0))
+  );
+
   const header: CsvValue[] = [
     "Student ID",
     "Title",
@@ -115,6 +123,18 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
     "AI weighted total (0-10)",
     "Human total (0-10)",
     ...HUMAN_AUDIT_HEADER,
+    ...(maxMultiGraders > 0
+      ? [
+          "Human grader count",
+          "Human average total (0-10)",
+          ...Array.from({ length: maxMultiGraders }, (_, idx) => idx + 1).flatMap((n) => [
+            `Grader ${n} name`,
+            `Grader ${n} total (0-10)`,
+            `Grader ${n} blind`,
+            `Grader ${n} comments`,
+          ]),
+        ]
+      : []),
     "Summary",
     ...suggestionCheckHeader(suggestionCount),
   ];
@@ -131,6 +151,34 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
         )
       : null;
     const humanTotal = humanTotalOf(job.human, (scores) => weightedAverage(scores, weightOf));
+    const gradedReviews = gradedReviewsPerJob[i];
+    const reviewTotals = gradedReviews
+      .map((r) => humanTotalOf(r, (s) => weightedAverage(s, weightOf)))
+      .filter((v): v is number => v !== null);
+    const avgHumanTotal =
+      reviewTotals.length > 0
+        ? reviewTotals.reduce((sum, v) => sum + v, 0) / reviewTotals.length
+        : null;
+    const multiGraderCells: CsvValue[] =
+      maxMultiGraders > 0
+        ? [
+            gradedReviews.length,
+            avgHumanTotal === null ? "" : avgHumanTotal.toFixed(2),
+            ...Array.from({ length: maxMultiGraders }, (_, idx) => gradedReviews[idx]).flatMap(
+              (review) => {
+                if (!review) return ["", "", "", ""];
+                const t = humanTotalOf(review, (s) => weightedAverage(s, weightOf));
+                const b = gradedBlind(review);
+                return [
+                  review.gradedByName ?? "",
+                  t === null ? "" : t.toFixed(2),
+                  b === null ? "" : b ? "yes" : "no",
+                  review.comments ?? "",
+                ];
+              }
+            ),
+          ]
+        : [];
     return [
       job.studentId,
       job.title,
@@ -147,6 +195,7 @@ export function reportJobsToCsv(jobs: ReportJobDetail[]): string {
       aiTotal === null ? "" : aiTotal.toFixed(2),
       humanTotal === null ? "" : humanTotal.toFixed(2),
       ...humanAuditCells(job.human),
+      ...multiGraderCells,
       evaluations[i]?.summary ?? "",
       ...suggestionCheckCells(evaluations[i]?.suggestionChecks, suggestionCount),
     ];
